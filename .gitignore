@@ -1,0 +1,19 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IDE
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# Native Image
+*.iprof
+
+# OS
+.DS_Store
+Thumbs.db
+.ace-tool/

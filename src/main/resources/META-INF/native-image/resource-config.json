@@ -1,0 +1,16 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": ".*\\.json$"
+      },
+      {
+        "pattern": ".*\\.aster$"
+      },
+      {
+        "pattern": "META-INF/.*"
+      }
+    ]
+  },
+  "bundles": []
+}

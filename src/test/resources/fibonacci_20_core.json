@@ -1,0 +1,160 @@
+{
+  "name": "bench.fibonacci20",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "fib",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        }
+      ],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "lte"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "n"
+                },
+                {
+                  "kind": "Int",
+                  "value": 1
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Name",
+                    "name": "n"
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "add"
+                    },
+                    "args": [
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "fib"
+                        },
+                        "args": [
+                          {
+                            "kind": "Call",
+                            "target": {
+                              "kind": "Name",
+                              "name": "sub"
+                            },
+                            "args": [
+                              {
+                                "kind": "Name",
+                                "name": "n"
+                              },
+                              {
+                                "kind": "Int",
+                                "value": 1
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "fib"
+                        },
+                        "args": [
+                          {
+                            "kind": "Call",
+                            "target": {
+                              "kind": "Name",
+                              "name": "sub"
+                            },
+                            "args": [
+                              {
+                                "kind": "Name",
+                                "name": "n"
+                              },
+                              {
+                                "kind": "Int",
+                                "value": 2
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "main",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "fib"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 20
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

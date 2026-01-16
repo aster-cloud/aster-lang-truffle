@@ -1,0 +1,27 @@
+{
+  "name": "test.simple.literal",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "main",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Int",
+              "value": 42
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,304 @@
+{
+  "name": "bench.list_map_1000",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "buildList",
+      "params": [
+        {
+          "name": "limit",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "index",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "acc",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Int"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "lte"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "limit"
+                },
+                {
+                  "kind": "Name",
+                  "name": "index"
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Name",
+                    "name": "acc"
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Let",
+                  "name": "value",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "add"
+                    },
+                    "args": [
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "mul"
+                        },
+                        "args": [
+                          {
+                            "kind": "Name",
+                            "name": "index"
+                          },
+                          {
+                            "kind": "Int",
+                            "value": 3
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "nextAcc",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.append"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "acc"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "value"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "buildList"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "limit"
+                      },
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "add"
+                        },
+                        "args": [
+                          {
+                            "kind": "Name",
+                            "name": "index"
+                          },
+                          {
+                            "kind": "Int",
+                            "value": 1
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "nextAcc"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "main",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "double",
+            "expr": {
+              "kind": "Lambda",
+              "params": [
+                {
+                  "name": "x",
+                  "type": {
+                    "kind": "TypeName",
+                    "name": "Int"
+                  }
+                }
+              ],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int"
+              },
+              "captures": [],
+              "body": {
+                "kind": "Block",
+                "statements": [
+                  {
+                    "kind": "Return",
+                    "expr": {
+                      "kind": "Call",
+                      "target": {
+                        "kind": "Name",
+                        "name": "mul"
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "x"
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 2
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "source",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "buildList"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 1000
+                },
+                {
+                  "kind": "Int",
+                  "value": 0
+                },
+                {
+                  "kind": "Call",
+                  "target": {
+                    "kind": "Name",
+                    "name": "List.empty"
+                  },
+                  "args": []
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "mapped",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.map"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "source"
+                },
+                {
+                  "kind": "Name",
+                  "name": "double"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.length"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "mapped"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "name": "bench.factorial20",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "factorial",
+      "params": [
+        {
+          "name": "n",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        }
+      ],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "lte"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "n"
+                },
+                {
+                  "kind": "Int",
+                  "value": 1
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Int",
+                    "value": 1
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "mul"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "n"
+                      },
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "factorial"
+                        },
+                        "args": [
+                          {
+                            "kind": "Call",
+                            "target": {
+                              "kind": "Name",
+                              "name": "sub"
+                            },
+                            "args": [
+                              {
+                                "kind": "Name",
+                                "name": "n"
+                              },
+                              {
+                                "kind": "Int",
+                                "value": 1
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "main",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "factorial"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 20
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

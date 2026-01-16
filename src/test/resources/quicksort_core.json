@@ -1,0 +1,1408 @@
+{
+  "name": "bench.quicksort",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "concatLists",
+      "params": [
+        {
+          "name": "left",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        },
+        {
+          "name": "right",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Int"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.reduce"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "right"
+                },
+                {
+                  "kind": "Name",
+                  "name": "left"
+                },
+                {
+                  "kind": "Lambda",
+                  "params": [
+                    {
+                      "name": "acc",
+                      "type": {
+                        "kind": "List",
+                        "type": {
+                          "kind": "TypeName",
+                          "name": "Int"
+                        }
+                      }
+                    },
+                    {
+                      "name": "value",
+                      "type": {
+                        "kind": "TypeName",
+                        "name": "Int"
+                      }
+                    }
+                  ],
+                  "ret": {
+                    "kind": "List",
+                    "type": {
+                      "kind": "TypeName",
+                      "name": "Int"
+                    }
+                  },
+                  "captures": [],
+                  "body": {
+                    "kind": "Block",
+                    "statements": [
+                      {
+                        "kind": "Return",
+                        "expr": {
+                          "kind": "Call",
+                          "target": {
+                            "kind": "Name",
+                            "name": "List.append"
+                          },
+                          "args": [
+                            {
+                              "kind": "Name",
+                              "name": "acc"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "value"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "singleton",
+      "params": [
+        {
+          "name": "value",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Int"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "empty",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.empty"
+              },
+              "args": []
+            }
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.append"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "empty"
+                },
+                {
+                  "kind": "Name",
+                  "name": "value"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "makePair",
+      "params": [
+        {
+          "name": "first",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        },
+        {
+          "name": "second",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "List",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "base",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.append"
+              },
+              "args": [
+                {
+                  "kind": "Call",
+                  "target": {
+                    "kind": "Name",
+                    "name": "List.empty"
+                  },
+                  "args": []
+                },
+                {
+                  "kind": "Name",
+                  "name": "first"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.append"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "base"
+                },
+                {
+                  "kind": "Name",
+                  "name": "second"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "partition",
+      "params": [
+        {
+          "name": "values",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        },
+        {
+          "name": "pivot",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "index",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "size",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "lessAcc",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        },
+        {
+          "name": "greaterAcc",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "List",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "lte"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "size"
+                },
+                {
+                  "kind": "Name",
+                  "name": "index"
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "makePair"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "lessAcc"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "greaterAcc"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Let",
+                  "name": "elem",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.get"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "values"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "index"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "If",
+                  "cond": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "<"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "elem"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "pivot"
+                      }
+                    ]
+                  },
+                  "thenBlock": {
+                    "kind": "Block",
+                    "statements": [
+                      {
+                        "kind": "Let",
+                        "name": "nextLess",
+                        "expr": {
+                          "kind": "Call",
+                          "target": {
+                            "kind": "Name",
+                            "name": "List.append"
+                          },
+                          "args": [
+                            {
+                              "kind": "Name",
+                              "name": "lessAcc"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "elem"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "kind": "Return",
+                        "expr": {
+                          "kind": "Call",
+                          "target": {
+                            "kind": "Name",
+                            "name": "partition"
+                          },
+                          "args": [
+                            {
+                              "kind": "Name",
+                              "name": "values"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "pivot"
+                            },
+                            {
+                              "kind": "Call",
+                              "target": {
+                                "kind": "Name",
+                                "name": "add"
+                              },
+                              "args": [
+                                {
+                                  "kind": "Name",
+                                  "name": "index"
+                                },
+                                {
+                                  "kind": "Int",
+                                  "value": 1
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "size"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "nextLess"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "greaterAcc"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "elseBlock": {
+                    "kind": "Block",
+                    "statements": [
+                      {
+                        "kind": "Let",
+                        "name": "nextGreater",
+                        "expr": {
+                          "kind": "Call",
+                          "target": {
+                            "kind": "Name",
+                            "name": "List.append"
+                          },
+                          "args": [
+                            {
+                              "kind": "Name",
+                              "name": "greaterAcc"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "elem"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "kind": "Return",
+                        "expr": {
+                          "kind": "Call",
+                          "target": {
+                            "kind": "Name",
+                            "name": "partition"
+                          },
+                          "args": [
+                            {
+                              "kind": "Name",
+                              "name": "values"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "pivot"
+                            },
+                            {
+                              "kind": "Call",
+                              "target": {
+                                "kind": "Name",
+                                "name": "add"
+                              },
+                              "args": [
+                                {
+                                  "kind": "Name",
+                                  "name": "index"
+                                },
+                                {
+                                  "kind": "Int",
+                                  "value": 1
+                                }
+                              ]
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "size"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "lessAcc"
+                            },
+                            {
+                              "kind": "Name",
+                              "name": "nextGreater"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "dropFrom",
+      "params": [
+        {
+          "name": "values",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        },
+        {
+          "name": "index",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Int"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "total",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.length"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "values"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "lte"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "total"
+                },
+                {
+                  "kind": "Name",
+                  "name": "index"
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.empty"
+                    },
+                    "args": []
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Let",
+                  "name": "current",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.get"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "values"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "index"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "rest",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "dropFrom"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "values"
+                      },
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "add"
+                        },
+                        "args": [
+                          {
+                            "kind": "Name",
+                            "name": "index"
+                          },
+                          {
+                            "kind": "Int",
+                            "value": 1
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "withCurrent",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "singleton"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "current"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "concatLists"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "withCurrent"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "rest"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "dropFirst",
+      "params": [
+        {
+          "name": "values",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Int"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "dropFrom"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "values"
+                },
+                {
+                  "kind": "Int",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "quicksort",
+      "params": [
+        {
+          "name": "values",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Int"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "length",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.length"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "values"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "lte"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "length"
+                },
+                {
+                  "kind": "Int",
+                  "value": 1
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Name",
+                    "name": "values"
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Let",
+                  "name": "pivot",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.get"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "values"
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 0
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "rest",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "dropFirst"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "values"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "size",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.length"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "rest"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "parts",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "partition"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "rest"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "pivot"
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 0
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "size"
+                      },
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "List.empty"
+                        },
+                        "args": []
+                      },
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "List.empty"
+                        },
+                        "args": []
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "less",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.get"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "parts"
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 0
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "greater",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.get"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "parts"
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "sortedLess",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "quicksort"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "less"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "sortedGreater",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "quicksort"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "greater"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "pivotList",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "singleton"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "pivot"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "withPivot",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "concatLists"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "sortedLess"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "pivotList"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "concatLists"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "withPivot"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "sortedGreater"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "buildList",
+      "params": [
+        {
+          "name": "limit",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "index",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "acc",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Int"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Int"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "lte"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "limit"
+                },
+                {
+                  "kind": "Name",
+                  "name": "index"
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Name",
+                    "name": "acc"
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Let",
+                  "name": "squared",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "mul"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "index"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "index"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "scaled",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "mul"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "index"
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 73
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "value",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "sub"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "scaled"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "squared"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "nextAcc",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.append"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "acc"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "value"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "buildList"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "limit"
+                      },
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "add"
+                        },
+                        "args": [
+                          {
+                            "kind": "Name",
+                            "name": "index"
+                          },
+                          {
+                            "kind": "Int",
+                            "value": 1
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "nextAcc"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "main",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "input",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "buildList"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 100
+                },
+                {
+                  "kind": "Int",
+                  "value": 0
+                },
+                {
+                  "kind": "Call",
+                  "target": {
+                    "kind": "Name",
+                    "name": "List.empty"
+                  },
+                  "args": []
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "sorted",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "quicksort"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "input"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.length"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "sorted"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

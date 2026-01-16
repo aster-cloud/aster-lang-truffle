@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew build:*)",
+      "Bash(./gradlew test:*)",
+      "mcp__ace-tool__enhance_prompt",
+      "mcp__ace-tool__search_context",
+      "mcp__codex__codex",
+      "Bash(git add:*)"
+    ]
+  }
+}

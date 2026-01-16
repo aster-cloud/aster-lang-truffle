@@ -1,0 +1,72 @@
+{
+  "name": "bench.result_map_ok",
+  "decls": [{
+    "kind": "Func",
+    "name": "main",
+    "params": [],
+    "ret": {"kind": "TypeName", "name": "Int"},
+    "effects": [],
+    "body": {
+      "kind": "Block",
+      "statements": [
+        {
+          "kind": "Let",
+          "name": "inc",
+          "expr": {
+            "kind": "Lambda",
+            "params": [{"name": "x", "type": {"kind": "TypeName", "name": "Int"}}],
+            "ret": {"kind": "TypeName", "name": "Int"},
+            "captures": [],
+            "body": {
+              "kind": "Block",
+              "statements": [{
+                "kind": "Return",
+                "expr": {
+                  "kind": "Call",
+                  "target": {"kind": "Name", "name": "+"},
+                  "args": [
+                    {"kind": "Name", "name": "x"},
+                    {"kind": "Int", "value": 1}
+                  ]
+                }
+              }]
+            }
+          }
+        },
+        {
+          "kind": "Let",
+          "name": "okInput",
+          "expr": {
+            "kind": "Call",
+            "target": {"kind": "Name", "name": "aster.runtime.StdResult.okInt"},
+            "args": [
+              {"kind": "Int", "value": 5}
+            ]
+          }
+        },
+        {
+          "kind": "Let",
+          "name": "mapped",
+          "expr": {
+            "kind": "Call",
+            "target": {"kind": "Name", "name": "Result.mapOk"},
+            "args": [
+              {"kind": "Name", "name": "okInput"},
+              {"kind": "Name", "name": "inc"}
+            ]
+          }
+        },
+        {
+          "kind": "Return",
+          "expr": {
+            "kind": "Call",
+            "target": {"kind": "Name", "name": "Result.unwrap"},
+            "args": [
+              {"kind": "Name", "name": "mapped"}
+            ]
+          }
+        }
+      ]
+    }
+  }]
+}

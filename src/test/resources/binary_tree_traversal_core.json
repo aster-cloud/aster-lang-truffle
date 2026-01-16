@@ -1,0 +1,739 @@
+{
+  "name": "bench.binary_tree",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "makeNode",
+      "params": [
+        {
+          "name": "value",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "left",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Any"
+            }
+          }
+        },
+        {
+          "name": "right",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Any"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Any"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "base",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.append"
+              },
+              "args": [
+                {
+                  "kind": "Call",
+                  "target": {
+                    "kind": "Name",
+                    "name": "List.empty"
+                  },
+                  "args": []
+                },
+                {
+                  "kind": "Name",
+                  "name": "value"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "withLeft",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.append"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "base"
+                },
+                {
+                  "kind": "Name",
+                  "name": "left"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.append"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "withLeft"
+                },
+                {
+                  "kind": "Name",
+                  "name": "right"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "makeLeaf",
+      "params": [
+        {
+          "name": "value",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        }
+      ],
+      "ret": {
+        "kind": "List",
+        "type": {
+          "kind": "TypeName",
+          "name": "Any"
+        }
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "emptyChild",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.empty"
+              },
+              "args": []
+            }
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeNode"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "value"
+                },
+                {
+                  "kind": "Name",
+                  "name": "emptyChild"
+                },
+                {
+                  "kind": "Name",
+                  "name": "emptyChild"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "inorderSum",
+      "params": [
+        {
+          "name": "node",
+          "type": {
+            "kind": "List",
+            "type": {
+              "kind": "TypeName",
+              "name": "Any"
+            }
+          }
+        }
+      ],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "size",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "List.length"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "node"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "eq"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "size"
+                },
+                {
+                  "kind": "Int",
+                  "value": 0
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Int",
+                    "value": 0
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Let",
+                  "name": "left",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.get"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "node"
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "right",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.get"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "node"
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 2
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "leftSum",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "inorderSum"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "left"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "current",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "List.get"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "node"
+                      },
+                      {
+                        "kind": "Int",
+                        "value": 0
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "rightSum",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "inorderSum"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "right"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Let",
+                  "name": "leftPlusCurrent",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "add"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "leftSum"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "current"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "add"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "leftPlusCurrent"
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "rightSum"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "main",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "node1",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeLeaf"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 1
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node3",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeLeaf"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 3
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node2",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeNode"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 2
+                },
+                {
+                  "kind": "Name",
+                  "name": "node1"
+                },
+                {
+                  "kind": "Name",
+                  "name": "node3"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node5",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeLeaf"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 5
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node7",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeLeaf"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 7
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node6",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeNode"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 6
+                },
+                {
+                  "kind": "Name",
+                  "name": "node5"
+                },
+                {
+                  "kind": "Name",
+                  "name": "node7"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node4",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeNode"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 4
+                },
+                {
+                  "kind": "Name",
+                  "name": "node2"
+                },
+                {
+                  "kind": "Name",
+                  "name": "node6"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node9",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeLeaf"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 9
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node11",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeLeaf"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 11
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node10",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeNode"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 10
+                },
+                {
+                  "kind": "Name",
+                  "name": "node9"
+                },
+                {
+                  "kind": "Name",
+                  "name": "node11"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node13",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeLeaf"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 13
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node15",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeLeaf"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 15
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node14",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeNode"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 14
+                },
+                {
+                  "kind": "Name",
+                  "name": "node13"
+                },
+                {
+                  "kind": "Name",
+                  "name": "node15"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node12",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeNode"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 12
+                },
+                {
+                  "kind": "Name",
+                  "name": "node10"
+                },
+                {
+                  "kind": "Name",
+                  "name": "node14"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "node8",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "makeNode"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 8
+                },
+                {
+                  "kind": "Name",
+                  "name": "node4"
+                },
+                {
+                  "kind": "Name",
+                  "name": "node12"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "inorderSum"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "node8"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

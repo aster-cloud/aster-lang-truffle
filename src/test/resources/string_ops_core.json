@@ -1,0 +1,378 @@
+{
+  "name": "bench.string_ops",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "concatLoop",
+      "params": [
+        {
+          "name": "limit",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "index",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          }
+        },
+        {
+          "name": "acc",
+          "type": {
+            "kind": "TypeName",
+            "name": "Text"
+          }
+        }
+      ],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Text"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "If",
+            "cond": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "lte"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "limit"
+                },
+                {
+                  "kind": "Name",
+                  "name": "index"
+                }
+              ]
+            },
+            "thenBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Name",
+                    "name": "acc"
+                  }
+                }
+              ]
+            },
+            "elseBlock": {
+              "kind": "Block",
+              "statements": [
+                {
+                  "kind": "Let",
+                  "name": "next",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "Text.concat"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "acc"
+                      },
+                      {
+                        "kind": "String",
+                        "value": "alpha beta gamma delta "
+                      }
+                    ]
+                  }
+                },
+                {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": {
+                      "kind": "Name",
+                      "name": "concatLoop"
+                    },
+                    "args": [
+                      {
+                        "kind": "Name",
+                        "name": "limit"
+                      },
+                      {
+                        "kind": "Call",
+                        "target": {
+                          "kind": "Name",
+                          "name": "add"
+                        },
+                        "args": [
+                          {
+                            "kind": "Name",
+                            "name": "index"
+                          },
+                          {
+                            "kind": "Int",
+                            "value": 1
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "Name",
+                        "name": "next"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "main",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "base",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "concatLoop"
+              },
+              "args": [
+                {
+                  "kind": "Int",
+                  "value": 200
+                },
+                {
+                  "kind": "Int",
+                  "value": 0
+                },
+                {
+                  "kind": "String",
+                  "value": ""
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "slice1",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Text.substring"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "base"
+                },
+                {
+                  "kind": "Int",
+                  "value": 5
+                },
+                {
+                  "kind": "Int",
+                  "value": 45
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "length",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Text.length"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "base"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "mid",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "div"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "length"
+                },
+                {
+                  "kind": "Int",
+                  "value": 2
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "slice2",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Text.substring"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "base"
+                },
+                {
+                  "kind": "Name",
+                  "name": "mid"
+                },
+                {
+                  "kind": "Call",
+                  "target": {
+                    "kind": "Name",
+                    "name": "add"
+                  },
+                  "args": [
+                    {
+                      "kind": "Name",
+                      "name": "mid"
+                    },
+                    {
+                      "kind": "Int",
+                      "value": 60
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "combined",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Text.concat"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "slice1"
+                },
+                {
+                  "kind": "Name",
+                  "name": "slice2"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "replaced",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Text.replace"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "combined"
+                },
+                {
+                  "kind": "String",
+                  "value": "beta"
+                },
+                {
+                  "kind": "String",
+                  "value": "BETA"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "extended",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Text.concat"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "replaced"
+                },
+                {
+                  "kind": "Name",
+                  "name": "slice1"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Let",
+            "name": "trimmed",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Text.trim"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "extended"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Text.length"
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "trimmed"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

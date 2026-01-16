@@ -1,0 +1,69 @@
+{
+  "name": "bench.result_map_err",
+  "decls": [{
+    "kind": "Func",
+    "name": "main",
+    "params": [],
+    "ret": {"kind": "TypeName", "name": "Int"},
+    "effects": [],
+    "body": {
+      "kind": "Block",
+      "statements": [
+        {
+          "kind": "Let",
+          "name": "errLen",
+          "expr": {
+            "kind": "Lambda",
+            "params": [{"name": "msg", "type": {"kind": "TypeName", "name": "Text"}}],
+            "ret": {"kind": "TypeName", "name": "Int"},
+            "captures": [],
+            "body": {
+              "kind": "Block",
+              "statements": [{
+                "kind": "Return",
+                "expr": {
+                  "kind": "Call",
+                  "target": {"kind": "Name", "name": "Text.length"},
+                  "args": [{"kind": "Name", "name": "msg"}]
+                }
+              }]
+            }
+          }
+        },
+        {
+          "kind": "Let",
+          "name": "errInput",
+          "expr": {
+            "kind": "Call",
+            "target": {"kind": "Name", "name": "aster.runtime.StdResult.errText"},
+            "args": [
+              {"kind": "String", "value": "oops"}
+            ]
+          }
+        },
+        {
+          "kind": "Let",
+          "name": "mappedErr",
+          "expr": {
+            "kind": "Call",
+            "target": {"kind": "Name", "name": "Result.mapErr"},
+            "args": [
+              {"kind": "Name", "name": "errInput"},
+              {"kind": "Name", "name": "errLen"}
+            ]
+          }
+        },
+        {
+          "kind": "Return",
+          "expr": {
+            "kind": "Call",
+            "target": {"kind": "Name", "name": "Result.unwrapErr"},
+            "args": [
+              {"kind": "Name", "name": "mappedErr"}
+            ]
+          }
+        }
+      ]
+    }
+  }]
+}

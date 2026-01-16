@@ -1,0 +1,53 @@
+{
+  "name": "test.simple.function",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "helper",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Int",
+              "value": 100
+            }
+          }
+        ]
+      }
+    },
+    {
+      "kind": "Func",
+      "name": "main",
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "helper"
+              },
+              "args": []
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
