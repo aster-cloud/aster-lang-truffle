@@ -8,8 +8,8 @@ Aster Language 的 GraalVM Truffle 实现。
 
 ## 依赖
 
-- `io.aster:aster-core:0.1.0-SNAPSHOT` - 解析器和 Core IR
-- `io.aster:aster-runtime:0.1.0-SNAPSHOT` - 运行时支持
+- `cloud.aster-lang:aster-lang-core:0.0.1` - 解析器和 Core IR
+- `cloud.aster-lang:aster-lang-runtime:0.0.1` - 运行时支持
 
 ## 构建要求
 

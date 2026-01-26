@@ -9,8 +9,8 @@ version = "0.0.1"
 
 dependencies {
     // Maven 坐标依赖（从 mavenLocal 或 mavenCentral 解析）
-    implementation("io.aster:aster-core:0.1.0-SNAPSHOT")
-    implementation("io.aster:aster-runtime:0.1.0-SNAPSHOT")
+    implementation("cloud.aster-lang:aster-lang-core:0.0.1")
+    implementation("cloud.aster-lang:aster-lang-runtime:0.0.1")
 
     // GraalVM Truffle 框架
     implementation("org.graalvm.truffle:truffle-api:25.0.1")
