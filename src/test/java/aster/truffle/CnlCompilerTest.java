@@ -151,10 +151,11 @@ class CnlCompilerTest {
     void testCompile_SimpleChineseModule() throws CnlCompiler.CompilationException {
         // 使用 ASCII 标识符和英文标点 + 中文关键字
         // 注意：当前 Canonicalizer 不转换中文标点，需使用英文标点
+        // 与 TypeScript 前端保持一致：【函数】= FUNC_TO, 产出 = FUNC_PRODUCE
         String source = """
             【模块】test.simple.
 
-            入参 main, 产出 Int:
+            【函数】main, 产出 Int:
               返回 42.
             """;
 
@@ -167,13 +168,13 @@ class CnlCompilerTest {
     @Test
     void testCompile_ChineseWithCondition() throws CnlCompiler.CompilationException {
         // 使用 ASCII 标识符和英文标点 + 中文关键字
-        // 正确语法: 入参 funcName 包含 param: Type, 产出 ReturnType:
+        // 与 TypeScript 前端保持一致：【函数】= FUNC_TO, 如果 = IF, 否则 = OTHERWISE
         // 注意：比较运算使用符号 > < >= <= == != 而非单词
         String source = """
             【模块】test.condition.
 
-            入参 check 包含 value: Int, 产出 Bool:
-              若 value > 0:
+            【函数】check 包含 value: Int, 产出 Bool:
+              如果 value > 0:
                 返回 真.
               否则:
                 返回 假.
@@ -206,10 +207,11 @@ class CnlCompilerTest {
     @Test
     void testCompile_AutoDetectChinese() throws CnlCompiler.CompilationException {
         // 使用 ASCII 标识符和英文标点 + 中文关键字
+        // 与 TypeScript 前端保持一致：【函数】= FUNC_TO
         String source = """
             【模块】auto.detect.
 
-            入参 main, 产出 Int:
+            【函数】main, 产出 Int:
               返回 100.
             """;
 
