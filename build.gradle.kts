@@ -1,11 +1,21 @@
 plugins {
     application
-    java
+    `java-library`
+    `maven-publish`
     id("org.graalvm.buildtools.native") version "0.11.3"
 }
 
-group = "io.aster"
+group = "cloud.aster-lang"
 version = "0.0.1"
+
+publishing {
+    publications {
+        create<MavenPublication>("mavenJava") {
+            from(components["java"])
+            artifactId = "aster-lang-truffle"
+        }
+    }
+}
 
 dependencies {
     // Maven 坐标依赖（从 mavenLocal 或 mavenCentral 解析）
