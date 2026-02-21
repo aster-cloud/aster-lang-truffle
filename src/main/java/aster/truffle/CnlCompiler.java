@@ -3,10 +3,8 @@ package aster.truffle;
 import aster.core.ast.Module;
 import aster.core.canonicalizer.Canonicalizer;
 import aster.core.ir.CoreModel;
-import aster.core.lexicon.EnUsLexicon;
 import aster.core.lexicon.Lexicon;
 import aster.core.lexicon.LexiconRegistry;
-import aster.core.lexicon.ZhCnLexicon;
 import aster.core.lowering.CoreLowering;
 import aster.core.parser.AstBuilder;
 import aster.core.parser.AsterCustomLexer;
@@ -161,14 +159,14 @@ public final class CnlCompiler {
 
             // 如果解析结果是英文，但 langId 不是英文相关的 ID，
             // 则可能是未知 langId 回退到英文，需要重新检测源码
-            if (resolved == EnUsLexicon.INSTANCE
+            if ("en-US".equals(resolved.getId())
                 && !isEnglishLangId(normalizedId)
                 && source != null
                 && detectChineseCnl(source)) {
                 LOGGER.log(Level.INFO,
                         "语言标识 ''{0}'' 未知，但源码检测为中文，使用中文词法表",
                         langId);
-                return ZhCnLexicon.INSTANCE;
+                return LexiconRegistry.getInstance().getOrThrow("zh-CN");
             }
 
             return resolved;
@@ -176,11 +174,11 @@ public final class CnlCompiler {
 
         // 自动检测：检查源码中是否包含中文关键字
         if (source != null && detectChineseCnl(source)) {
-            return ZhCnLexicon.INSTANCE;
+            return LexiconRegistry.getInstance().getOrThrow("zh-CN");
         }
 
         // 默认英文
-        return EnUsLexicon.INSTANCE;
+        return LexiconRegistry.getInstance().getOrThrow("en-US");
     }
 
     /**
@@ -224,14 +222,14 @@ public final class CnlCompiler {
         // 首先尝试直接匹配常用标识
         Lexicon directMatch = switch (normalizedId) {
             // 中文 BCP47 变体（简体中文优先）
-            case "zh", "zh-cn", "zh-hans", "zh-sg", "chinese" -> ZhCnLexicon.INSTANCE;
+            case "zh", "zh-cn", "zh-hans", "zh-sg", "chinese" -> LexiconRegistry.getInstance().getOrThrow("zh-CN");
             // 繁体中文变体（暂时也使用简体词法表，将来可扩展）
-            case "zh-tw", "zh-hk", "zh-hant" -> ZhCnLexicon.INSTANCE;
+            case "zh-tw", "zh-hk", "zh-hant" -> LexiconRegistry.getInstance().getOrThrow("zh-CN");
             // 英文 BCP47 变体
-            case "en", "en-us", "en-gb", "en-au", "en-ca", "english" -> EnUsLexicon.INSTANCE;
+            case "en", "en-us", "en-gb", "en-au", "en-ca", "english" -> LexiconRegistry.getInstance().getOrThrow("en-US");
             // 中文别名（已归一化为小写）
-            case "\u4e2d\u6587" -> ZhCnLexicon.INSTANCE;  // 中文
-            case "\u82f1\u6587" -> EnUsLexicon.INSTANCE;  // 英文
+            case "\u4e2d\u6587" -> LexiconRegistry.getInstance().getOrThrow("zh-CN");  // 中文
+            case "\u82f1\u6587" -> LexiconRegistry.getInstance().getOrThrow("en-US");  // 英文
             default -> null;
         };
 
@@ -248,10 +246,10 @@ public final class CnlCompiler {
         if ("zh".equals(language)) {
             // 中文：简体脚本 (hans) 或繁体脚本 (hant)
             // 暂时都使用简体词法表
-            return ZhCnLexicon.INSTANCE;
+            return LexiconRegistry.getInstance().getOrThrow("zh-CN");
         }
         if ("en".equals(language)) {
-            return EnUsLexicon.INSTANCE;
+            return LexiconRegistry.getInstance().getOrThrow("en-US");
         }
 
         // 尝试从注册表查找
@@ -274,7 +272,7 @@ public final class CnlCompiler {
                 "未知的语言标识 ''{0}''，回退到英文词法表 (en-US)。" +
                 "可用的语言标识: {1}",
                 new Object[]{langId, registry.list()});
-        return EnUsLexicon.INSTANCE;
+        return LexiconRegistry.getInstance().getOrThrow("en-US");
     }
 
     /**

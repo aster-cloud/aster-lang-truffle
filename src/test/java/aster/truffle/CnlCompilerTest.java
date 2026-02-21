@@ -1,7 +1,5 @@
 package aster.truffle;
 
-import aster.core.lexicon.EnUsLexicon;
-import aster.core.lexicon.ZhCnLexicon;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,7 +20,7 @@ class CnlCompilerTest {
         // 新语法：使用"模块 "关键词（带尾部空格）
         String source = "模块 测试模块。";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId());
+        assertEquals("zh-CN", lexicon.getId());
     }
 
     @Test
@@ -30,7 +28,7 @@ class CnlCompilerTest {
         // 新语法：使用"定义 "关键词
         String source = "定义 User 包含 name。";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId());
+        assertEquals("zh-CN", lexicon.getId());
     }
 
     @Test
@@ -38,7 +36,7 @@ class CnlCompilerTest {
         // 新语法：使用"规则 "关键词
         String source = "规则 main:";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId());
+        assertEquals("zh-CN", lexicon.getId());
     }
 
     @Test
@@ -48,7 +46,7 @@ class CnlCompilerTest {
         // 这样设计是为了避免英文源码中的中文标识符被误判
         String source = "若 条件 返回 真。";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "无结构化标记时应回退到英文，需显式指定 langId");
     }
 
@@ -57,7 +55,7 @@ class CnlCompilerTest {
         // 英文模块使用中文标识符不应触发中文检测
         String source = "let 若干 = 10 and 返回值 = 20.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "中文标识符不应触发中文模式检测");
     }
 
@@ -65,33 +63,33 @@ class CnlCompilerTest {
     void testDetectEnglishCnl_Default() {
         String source = "Module test.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId());
+        assertEquals("en-US", lexicon.getId());
     }
 
     @Test
     void testResolveLexicon_ExplicitZhCN() {
         var lexicon = CnlCompiler.resolveLexicon("zh-CN", "any source");
-        assertEquals(ZhCnLexicon.ID, lexicon.getId());
+        assertEquals("zh-CN", lexicon.getId());
     }
 
     @Test
     void testResolveLexicon_ExplicitEnUS() {
         var lexicon = CnlCompiler.resolveLexicon("en-US", "any source");
-        assertEquals(EnUsLexicon.ID, lexicon.getId());
+        assertEquals("en-US", lexicon.getId());
     }
 
     @Test
     void testResolveLexicon_ChineseAliases() {
-        assertEquals(ZhCnLexicon.ID, CnlCompiler.resolveLexicon("zh_cn", null).getId());
-        assertEquals(ZhCnLexicon.ID, CnlCompiler.resolveLexicon("chinese", null).getId());
-        assertEquals(ZhCnLexicon.ID, CnlCompiler.resolveLexicon("中文", null).getId());
+        assertEquals("zh-CN", CnlCompiler.resolveLexicon("zh_cn", null).getId());
+        assertEquals("zh-CN", CnlCompiler.resolveLexicon("chinese", null).getId());
+        assertEquals("zh-CN", CnlCompiler.resolveLexicon("中文", null).getId());
     }
 
     @Test
     void testResolveLexicon_EnglishAliases() {
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("en_us", null).getId());
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("english", null).getId());
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("英文", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("en_us", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("english", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("英文", null).getId());
     }
 
     // ============================================================
@@ -249,33 +247,33 @@ class CnlCompilerTest {
     @Test
     void testResolveLexicon_CaseInsensitive() {
         // 大小写不敏感
-        assertEquals(ZhCnLexicon.ID, CnlCompiler.resolveLexicon("ZH-CN", null).getId());
-        assertEquals(ZhCnLexicon.ID, CnlCompiler.resolveLexicon("Zh-Cn", null).getId());
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("EN-US", null).getId());
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("En-Us", null).getId());
+        assertEquals("zh-CN", CnlCompiler.resolveLexicon("ZH-CN", null).getId());
+        assertEquals("zh-CN", CnlCompiler.resolveLexicon("Zh-Cn", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("EN-US", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("En-Us", null).getId());
     }
 
     @Test
     void testResolveLexicon_UnderscoreHyphenInterop() {
         // 下划线/连字符互通
-        assertEquals(ZhCnLexicon.ID, CnlCompiler.resolveLexicon("ZH_CN", null).getId());
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("EN_US", null).getId());
+        assertEquals("zh-CN", CnlCompiler.resolveLexicon("ZH_CN", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("EN_US", null).getId());
     }
 
     @Test
     void testResolveLexicon_CombinedCompatibility() {
         // 组合兼容：大小写 + 下划线
-        assertEquals(ZhCnLexicon.ID, CnlCompiler.resolveLexicon("ZH_cn", null).getId());
-        assertEquals(ZhCnLexicon.ID, CnlCompiler.resolveLexicon("zh_CN", null).getId());
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("EN_us", null).getId());
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("en_US", null).getId());
+        assertEquals("zh-CN", CnlCompiler.resolveLexicon("ZH_cn", null).getId());
+        assertEquals("zh-CN", CnlCompiler.resolveLexicon("zh_CN", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("EN_us", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("en_US", null).getId());
     }
 
     @Test
     void testResolveLexicon_UnknownFallsBackToEnglish() {
         // 未知 locale 回退到英文
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("xx-XX", null).getId());
-        assertEquals(EnUsLexicon.ID, CnlCompiler.resolveLexicon("unknown", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("xx-XX", null).getId());
+        assertEquals("en-US", CnlCompiler.resolveLexicon("unknown", null).getId());
     }
 
     // ============================================================
@@ -290,7 +288,7 @@ class CnlCompilerTest {
             模块 test.module.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId(),
+        assertEquals("zh-CN", lexicon.getId(),
                 "行注释中的 /* 不应干扰语言检测");
     }
 
@@ -299,7 +297,7 @@ class CnlCompilerTest {
         // 单引号字符串中的中文关键词不应触发中文检测
         String source = "let marker = '模块 ' and x = 10.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "单引号内的关键词不应触发中文模式");
     }
 
@@ -308,7 +306,7 @@ class CnlCompilerTest {
         // 双引号字符串中的中文关键词不应触发中文检测
         String source = "let marker = \"模块 \" and x = 10.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "双引号内的关键词不应触发中文模式");
     }
 
@@ -320,7 +318,7 @@ class CnlCompilerTest {
             Module test.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "块注释内的关键词不应触发中文模式");
     }
 
@@ -332,7 +330,7 @@ class CnlCompilerTest {
             Module test.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "行注释内的关键词不应触发中文模式");
     }
 
@@ -341,7 +339,7 @@ class CnlCompilerTest {
         // 未知 langId 但源码包含中文关键词，应自动回退到中文
         String source = "模块 test.module.";
         var lexicon = CnlCompiler.resolveLexicon("xx-YY", source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId(),
+        assertEquals("zh-CN", lexicon.getId(),
                 "未知 langId 但源码含中文关键词时应回退到中文");
     }
 
@@ -350,7 +348,7 @@ class CnlCompilerTest {
         // 未知 langId 且源码为英文，应使用英文
         String source = "Module test.";
         var lexicon = CnlCompiler.resolveLexicon("xx-YY", source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "未知 langId 且源码为英文时应使用英文");
     }
 
@@ -362,7 +360,7 @@ class CnlCompilerTest {
             Module english.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "块注释中的 // 不应破坏块注释闭合，关键词应被正确剥离");
     }
 
@@ -374,7 +372,7 @@ class CnlCompilerTest {
             Module english.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "块注释中的 # 不应破坏块注释闭合");
     }
 
@@ -386,7 +384,7 @@ class CnlCompilerTest {
             模块 test.module.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId(),
+        assertEquals("zh-CN", lexicon.getId(),
                 "行注释中的 /* 不应触发块注释");
     }
 
@@ -401,7 +399,7 @@ class CnlCompilerTest {
             Module english.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(EnUsLexicon.ID, lexicon.getId(),
+        assertEquals("en-US", lexicon.getId(),
                 "多行块注释应被完整剥离");
     }
 
@@ -413,7 +411,7 @@ class CnlCompilerTest {
             模块 test.module.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId(),
+        assertEquals("zh-CN", lexicon.getId(),
                 "# 行注释中的 /* 不应触发块注释");
     }
 
@@ -422,7 +420,7 @@ class CnlCompilerTest {
         // CR-only 行结尾（\r）应被正确处理
         String source = "// comment\r模块 test.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId(),
+        assertEquals("zh-CN", lexicon.getId(),
                 "CR-only 行结尾应被正确处理");
     }
 
@@ -431,7 +429,7 @@ class CnlCompilerTest {
         // CRLF 行结尾（\r\n）应被正确处理
         String source = "// comment\r\n模块 test.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
-        assertEquals(ZhCnLexicon.ID, lexicon.getId(),
+        assertEquals("zh-CN", lexicon.getId(),
                 "CRLF 行结尾应被正确处理");
     }
 }
