@@ -22,6 +22,11 @@ dependencies {
     implementation("cloud.aster-lang:aster-lang-core:0.0.1")
     implementation("cloud.aster-lang:aster-lang-runtime:0.0.1")
 
+    // 语言包（通过 SPI 自动发现并注册到 LexiconRegistry）
+    runtimeOnly("cloud.aster-lang:aster-lang-en:0.0.1")
+    runtimeOnly("cloud.aster-lang:aster-lang-zh:0.0.1")
+    runtimeOnly("cloud.aster-lang:aster-lang-de:0.0.1")
+
     // GraalVM Truffle 框架
     implementation("org.graalvm.truffle:truffle-api:25.0.1")
     annotationProcessor("org.graalvm.truffle:truffle-dsl-processor:25.0.1")
