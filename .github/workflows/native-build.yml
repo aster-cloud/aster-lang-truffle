@@ -1,0 +1,67 @@
+name: Native Image Build
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-core
+          path: aster-lang-core
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-runtime
+          path: aster-lang-runtime
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-en
+          path: aster-lang-en
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-zh
+          path: aster-lang-zh
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-de
+          path: aster-lang-de
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'gradle'
+
+      - name: Publish dependencies to Maven Local
+        run: |
+          cd aster-lang-core && ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-runtime && ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-en && ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-zh && ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-de && ./gradlew publishToMavenLocal -x test
+
+      - name: Native Compile
+        run: ./gradlew nativeCompile
+
+      - name: Upload Native Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: aster-native
+          path: build/native/nativeCompile/aster
+          retention-days: 7

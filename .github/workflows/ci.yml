@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-core
+          path: aster-lang-core
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-runtime
+          path: aster-lang-runtime
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-en
+          path: aster-lang-en
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-zh
+          path: aster-lang-zh
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: aster-cloud/aster-lang-de
+          path: aster-lang-de
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Publish dependencies to Maven Local
+        run: |
+          cd aster-lang-core && ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-runtime && ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-en && ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-zh && ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-de && ./gradlew publishToMavenLocal -x test
+
+      - name: Build & Test
+        run: ./gradlew build -PexcludeBenchmarks=true
