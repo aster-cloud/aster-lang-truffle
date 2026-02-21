@@ -313,12 +313,12 @@ public final class CnlCompiler {
         String stripped = stripStringLiterals(source);
         stripped = stripAllComments(stripped);
 
-        // 仅检查中文模块声明标记（这些标记非常独特，是中文 CNL 的唯一特征）
+        // 检查中文 CNL 特征关键词
         // 不检查常见关键字（如 若、返回），避免中文标识符被误判为中文 CNL
-        return stripped.contains("【模块】") || stripped.contains("【定义】") ||
-               stripped.contains("【流程】") || stripped.contains("【步骤】") ||
-               stripped.contains("【类型】") || stripped.contains("【输入】") ||
-               stripped.contains("【输出】");
+        return stripped.contains("模块 ") || stripped.contains("规则 ") ||
+               stripped.contains("包含 ") || stripped.contains("给定 ") ||
+               stripped.contains("定义 ") || stripped.contains("流程 ") ||
+               stripped.contains("步骤 ");
     }
 
     /**

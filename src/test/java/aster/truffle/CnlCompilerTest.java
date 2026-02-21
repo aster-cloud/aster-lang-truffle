@@ -19,7 +19,24 @@ class CnlCompilerTest {
 
     @Test
     void testDetectChineseCnl_ModuleDecl() {
-        String source = "【模块】测试模块。";
+        // 新语法：使用"模块 "关键词（带尾部空格）
+        String source = "模块 测试模块。";
+        var lexicon = CnlCompiler.resolveLexicon(null, source);
+        assertEquals(ZhCnLexicon.ID, lexicon.getId());
+    }
+
+    @Test
+    void testDetectChineseCnl_DefineKeyword() {
+        // 新语法：使用"定义 "关键词
+        String source = "定义 User 包含 name。";
+        var lexicon = CnlCompiler.resolveLexicon(null, source);
+        assertEquals(ZhCnLexicon.ID, lexicon.getId());
+    }
+
+    @Test
+    void testDetectChineseCnl_RuleKeyword() {
+        // 新语法：使用"规则 "关键词
+        String source = "规则 main:";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(ZhCnLexicon.ID, lexicon.getId());
     }
@@ -46,7 +63,7 @@ class CnlCompilerTest {
 
     @Test
     void testDetectEnglishCnl_Default() {
-        String source = "this module is test.";
+        String source = "Module test.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(EnUsLexicon.ID, lexicon.getId());
     }
@@ -89,8 +106,8 @@ class CnlCompilerTest {
 
     @Test
     void testIsJsonInput_CnlSource() {
-        assertFalse(CnlCompiler.isJsonInput("this module is test."));
-        assertFalse(CnlCompiler.isJsonInput("【模块】测试。"));
+        assertFalse(CnlCompiler.isJsonInput("Module test."));
+        assertFalse(CnlCompiler.isJsonInput("模块 测试。"));
     }
 
     @Test
@@ -107,9 +124,9 @@ class CnlCompilerTest {
     @Test
     void testCompile_SimpleEnglishModule() throws CnlCompiler.CompilationException {
         String source = """
-            this module is test.simple.
+            Module test.simple.
 
-            To main, produce Int:
+            Rule main:
               Return 42.
             """;
 
@@ -122,15 +139,13 @@ class CnlCompilerTest {
 
     @Test
     void testCompile_EnglishWithFunction() throws CnlCompiler.CompilationException {
-        // 正确语法: To funcName with param: Type and param: Type, produce ReturnType:
-        // 注意：算术运算使用符号 +/-/*//，函数调用使用括号 func(arg1, arg2)
         String source = """
-            this module is test.func.
+            Module test.func.
 
-            To add with x: Int and y: Int, produce Int:
+            Rule add given x: Int and y: Int:
               Return x + y.
 
-            To main, produce Int:
+            Rule main:
               Return add(1, 2).
             """;
 
@@ -149,13 +164,10 @@ class CnlCompilerTest {
 
     @Test
     void testCompile_SimpleChineseModule() throws CnlCompiler.CompilationException {
-        // 使用 ASCII 标识符和英文标点 + 中文关键字
-        // 注意：当前 Canonicalizer 不转换中文标点，需使用英文标点
-        // 与 TypeScript 前端保持一致：【函数】= FUNC_TO, 产出 = FUNC_PRODUCE
         String source = """
-            【模块】test.simple.
+            模块 test.simple.
 
-            【函数】main, 产出 Int:
+            规则 main:
               返回 42.
             """;
 
@@ -167,13 +179,10 @@ class CnlCompilerTest {
 
     @Test
     void testCompile_ChineseWithCondition() throws CnlCompiler.CompilationException {
-        // 使用 ASCII 标识符和英文标点 + 中文关键字
-        // 与 TypeScript 前端保持一致：【函数】= FUNC_TO, 如果 = IF, 否则 = OTHERWISE
-        // 注意：比较运算使用符号 > < >= <= == != 而非单词
         String source = """
-            【模块】test.condition.
+            模块 test.condition.
 
-            【函数】check 包含 value: Int, 产出 Bool:
+            规则 check 给定 value: Int:
               如果 value > 0:
                 返回 真.
               否则:
@@ -183,7 +192,6 @@ class CnlCompilerTest {
         String json = CnlCompiler.compile(source, "zh-CN");
 
         assertNotNull(json);
-        // 验证关键词被正确翻译
         assertTrue(json.contains("\"kind\""));
     }
 
@@ -206,12 +214,10 @@ class CnlCompilerTest {
 
     @Test
     void testCompile_AutoDetectChinese() throws CnlCompiler.CompilationException {
-        // 使用 ASCII 标识符和英文标点 + 中文关键字
-        // 与 TypeScript 前端保持一致：【函数】= FUNC_TO
         String source = """
-            【模块】auto.detect.
+            模块 auto.detect.
 
-            【函数】main, 产出 Int:
+            规则 main:
               返回 100.
             """;
 
@@ -224,9 +230,9 @@ class CnlCompilerTest {
     @Test
     void testCompile_AutoDetectEnglish() throws CnlCompiler.CompilationException {
         String source = """
-            this module is auto.detect.
+            Module auto.detect.
 
-            To main, produce Int:
+            Rule main:
               Return 200.
             """;
 
@@ -279,10 +285,9 @@ class CnlCompilerTest {
     @Test
     void testDetectChineseCnl_BlockCommentInLineComment() {
         // 行注释中包含 /* 不应导致误删代码
-        // 如果顺序错误（先块注释再行注释），/* 会被块注释正则捕获
         String source = """
             // TODO: /* fix this later */
-            【模块】test.module.
+            模块 test.module.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(ZhCnLexicon.ID, lexicon.getId(),
@@ -290,60 +295,60 @@ class CnlCompilerTest {
     }
 
     @Test
-    void testDetectChineseCnl_StructuralMarkerInSingleQuote() {
-        // 单引号字符串中的结构化标记不应触发中文检测
-        String source = "let marker = '【模块】' and x = 10.";
+    void testDetectChineseCnl_KeywordInSingleQuote() {
+        // 单引号字符串中的中文关键词不应触发中文检测
+        String source = "let marker = '模块 ' and x = 10.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(EnUsLexicon.ID, lexicon.getId(),
-                "单引号内的结构化标记不应触发中文模式");
+                "单引号内的关键词不应触发中文模式");
     }
 
     @Test
-    void testDetectChineseCnl_StructuralMarkerInDoubleQuote() {
-        // 双引号字符串中的结构化标记不应触发中文检测
-        String source = "let marker = \"【模块】\" and x = 10.";
+    void testDetectChineseCnl_KeywordInDoubleQuote() {
+        // 双引号字符串中的中文关键词不应触发中文检测
+        String source = "let marker = \"模块 \" and x = 10.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(EnUsLexicon.ID, lexicon.getId(),
-                "双引号内的结构化标记不应触发中文模式");
+                "双引号内的关键词不应触发中文模式");
     }
 
     @Test
-    void testDetectChineseCnl_StructuralMarkerInBlockComment() {
-        // 块注释中的结构化标记不应触发中文检测
+    void testDetectChineseCnl_KeywordInBlockComment() {
+        // 块注释中的中文关键词不应触发中文检测
         String source = """
-            /* 这是块注释 【模块】测试 */
-            this module is test.
+            /* 这是块注释 模块 测试 */
+            Module test.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(EnUsLexicon.ID, lexicon.getId(),
-                "块注释内的结构化标记不应触发中文模式");
+                "块注释内的关键词不应触发中文模式");
     }
 
     @Test
-    void testDetectChineseCnl_StructuralMarkerInLineComment() {
-        // 行注释中的结构化标记不应触发中文检测
+    void testDetectChineseCnl_KeywordInLineComment() {
+        // 行注释中的中文关键词不应触发中文检测
         String source = """
-            // 【模块】这是行注释
-            this module is test.
+            // 模块 这是行注释
+            Module test.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(EnUsLexicon.ID, lexicon.getId(),
-                "行注释内的结构化标记不应触发中文模式");
+                "行注释内的关键词不应触发中文模式");
     }
 
     @Test
     void testResolveLexicon_UnknownLangIdWithChineseSource() {
-        // 未知 langId 但源码包含中文结构化标记，应自动回退到中文
-        String source = "【模块】test.module.";
+        // 未知 langId 但源码包含中文关键词，应自动回退到中文
+        String source = "模块 test.module.";
         var lexicon = CnlCompiler.resolveLexicon("xx-YY", source);
         assertEquals(ZhCnLexicon.ID, lexicon.getId(),
-                "未知 langId 但源码含中文标记时应回退到中文");
+                "未知 langId 但源码含中文关键词时应回退到中文");
     }
 
     @Test
     void testResolveLexicon_UnknownLangIdWithEnglishSource() {
         // 未知 langId 且源码为英文，应使用英文
-        String source = "this module is test.";
+        String source = "Module test.";
         var lexicon = CnlCompiler.resolveLexicon("xx-YY", source);
         assertEquals(EnUsLexicon.ID, lexicon.getId(),
                 "未知 langId 且源码为英文时应使用英文");
@@ -352,22 +357,21 @@ class CnlCompilerTest {
     @Test
     void testDetectChineseCnl_BlockCommentWithLineCommentInside() {
         // 块注释中包含 // 不应破坏块注释的闭合
-        // 这是第19次审查发现的回归问题
         String source = """
-            /* 【模块】 // TODO: investigate */
-            this module is english.
+            /* 模块 // TODO: investigate */
+            Module english.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(EnUsLexicon.ID, lexicon.getId(),
-                "块注释中的 // 不应破坏块注释闭合，标记应被正确剥离");
+                "块注释中的 // 不应破坏块注释闭合，关键词应被正确剥离");
     }
 
     @Test
     void testDetectChineseCnl_BlockCommentWithHashInside() {
         // 块注释中包含 # 不应破坏块注释的闭合
         String source = """
-            /* 【模块】 # TODO: fix */
-            this module is english.
+            /* 模块 # TODO: fix */
+            Module english.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(EnUsLexicon.ID, lexicon.getId(),
@@ -379,7 +383,7 @@ class CnlCompilerTest {
         // 行注释中包含 /* 不应触发块注释
         String source = """
             // 这是 /* 行注释
-            【模块】test.module.
+            模块 test.module.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(ZhCnLexicon.ID, lexicon.getId(),
@@ -391,10 +395,10 @@ class CnlCompilerTest {
         // 多行块注释应被完整剥离
         String source = """
             /*
-             * 【模块】
-             * 【定义】
+             * 模块
+             * 定义
              */
-            this module is english.
+            Module english.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(EnUsLexicon.ID, lexicon.getId(),
@@ -406,7 +410,7 @@ class CnlCompilerTest {
         // # 行注释中包含 /* 不应触发块注释
         String source = """
             # 这是 /* 行注释
-            【模块】test.module.
+            模块 test.module.
             """;
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(ZhCnLexicon.ID, lexicon.getId(),
@@ -416,7 +420,7 @@ class CnlCompilerTest {
     @Test
     void testDetectChineseCnl_CROnlyLineEnding() {
         // CR-only 行结尾（\r）应被正确处理
-        String source = "// comment\r【模块】test.";
+        String source = "// comment\r模块 test.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(ZhCnLexicon.ID, lexicon.getId(),
                 "CR-only 行结尾应被正确处理");
@@ -425,7 +429,7 @@ class CnlCompilerTest {
     @Test
     void testDetectChineseCnl_CRLFLineEnding() {
         // CRLF 行结尾（\r\n）应被正确处理
-        String source = "// comment\r\n【模块】test.";
+        String source = "// comment\r\n模块 test.";
         var lexicon = CnlCompiler.resolveLexicon(null, source);
         assertEquals(ZhCnLexicon.ID, lexicon.getId(),
                 "CRLF 行结尾应被正确处理");
