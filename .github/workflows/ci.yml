@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: aster-lang-truffle
 
       - uses: actions/checkout@v4
         with:
@@ -50,11 +52,12 @@ jobs:
 
       - name: Publish dependencies to Maven Local
         run: |
-          cd aster-lang-core && ./gradlew publishToMavenLocal -x test
-          cd ../aster-lang-runtime && ./gradlew publishToMavenLocal -x test
-          cd ../aster-lang-en && ./gradlew publishToMavenLocal -x test
-          cd ../aster-lang-zh && ./gradlew publishToMavenLocal -x test
-          cd ../aster-lang-de && ./gradlew publishToMavenLocal -x test
+          cd aster-lang-core && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-runtime && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-en && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-zh && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-de && ./gradlew publishToMavenLocal -x test && cd ..
 
       - name: Build & Test
+        working-directory: aster-lang-truffle
         run: ./gradlew build -PexcludeBenchmarks=true

@@ -23,18 +23,14 @@ dependencyResolutionManagement {
 // }
 
 // 语言包模块 - 独立项目（通过 SPI 注册到 LexiconRegistry）
-includeBuild("../aster-lang-en") {
-    dependencySubstitution {
-        substitute(module("cloud.aster-lang:aster-lang-en")).using(project(":"))
-    }
-}
-includeBuild("../aster-lang-zh") {
-    dependencySubstitution {
-        substitute(module("cloud.aster-lang:aster-lang-zh")).using(project(":"))
-    }
-}
-includeBuild("../aster-lang-de") {
-    dependencySubstitution {
-        substitute(module("cloud.aster-lang:aster-lang-de")).using(project(":"))
+// 仅当兄弟目录存在时启用 composite build（本地开发）；CI 使用 Maven Local
+listOf("aster-lang-en", "aster-lang-zh", "aster-lang-de").forEach { name ->
+    val dir = file("../$name")
+    if (dir.isDirectory) {
+        includeBuild(dir) {
+            dependencySubstitution {
+                substitute(module("cloud.aster-lang:$name")).using(project(":"))
+            }
+        }
     }
 }
