@@ -140,7 +140,7 @@ class CnlCompilerTest {
         String source = """
             Module test.func.
 
-            Rule add given x: Int and y: Int:
+            Rule add given x as Int and y as Int:
               Return x + y.
 
             Rule main:
@@ -180,10 +180,10 @@ class CnlCompilerTest {
         String source = """
             模块 test.condition.
 
-            规则 check 给定 value: Int:
-              如果 value > 0:
+            规则 check 给定 value as Int:
+              如果 value > 0
                 返回 真.
-              否则:
+              否则
                 返回 假.
             """;
 
