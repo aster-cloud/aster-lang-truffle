@@ -21,12 +21,12 @@ Aster Language 的 GraalVM Truffle 实现。
 
 ### 安装依赖
 
-首先需要将 aster-core 和 aster-runtime 发布到本地 Maven 仓库：
+首先需要将 aster-lang-core 和 aster-lang-runtime 发布到本地 Maven 仓库：
 
 ```bash
 # 在 aster-lang 目录下执行
 cd ../aster-lang
-./gradlew :aster-core:publishToMavenLocal :aster-runtime:publishToMavenLocal
+./gradlew :aster-lang-core:publishToMavenLocal :aster-lang-runtime:publishToMavenLocal
 ```
 
 ### 编译项目
@@ -65,13 +65,13 @@ cd ../aster-lang
 
 ### Composite Build（推荐）
 
-如需同时修改 aster-core/aster-runtime，编辑 `settings.gradle.kts` 取消注释 composite build 配置：
+如需同时修改 aster-lang-core/aster-lang-runtime，编辑 `settings.gradle.kts` 取消注释 composite build 配置：
 
 ```kotlin
 includeBuild("../aster-lang") {
     dependencySubstitution {
-        substitute(module("io.aster:aster-core")).using(project(":aster-core"))
-        substitute(module("io.aster:aster-runtime")).using(project(":aster-runtime"))
+        substitute(module("io.aster:aster-lang-core")).using(project(":aster-lang-core"))
+        substitute(module("io.aster:aster-lang-runtime")).using(project(":aster-lang-runtime"))
     }
 }
 ```
