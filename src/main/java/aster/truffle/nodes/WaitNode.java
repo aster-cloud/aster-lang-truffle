@@ -31,11 +31,6 @@ public final class WaitNode extends Node {
     this.taskIdNames = taskIdNames;
   }
 
-  // For backward compatibility with existing code
-  public WaitNode(String[] taskIdNames) {
-    this(null, taskIdNames);
-  }
-
   public Object execute(VirtualFrame frame) {
     Profiler.inc("wait");
 

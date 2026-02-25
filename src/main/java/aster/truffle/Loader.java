@@ -374,12 +374,9 @@ public final class Loader {
       timeoutMs = wf.timeout.milliseconds;
     }
 
-    // 只有存在补偿逻辑时才传递补偿数组，否则使用旧构造器（优化内存）
-    if (hasAnyCompensation) {
-      return new WorkflowNode(env, stepBodies, compensateBodies, stepNames, dependencies, timeoutMs);
-    } else {
-      return new WorkflowNode(env, stepBodies, stepNames, dependencies, timeoutMs);
-    }
+    return new WorkflowNode(env, stepBodies,
+        hasAnyCompensation ? compensateBodies : null,
+        stepNames, dependencies, timeoutMs);
   }
 
   private AsterExpressionNode buildExpr(CoreModel.Expr e) {

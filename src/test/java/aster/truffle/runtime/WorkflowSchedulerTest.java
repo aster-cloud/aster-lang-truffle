@@ -88,13 +88,6 @@ public class WorkflowSchedulerTest {
   }
 
   @Test
-  public void testExecuteNextDelegatesToRegistry() {
-    registerTask("single", () -> registry.setResult("single", "done"), Collections.emptySet());
-    assertDoesNotThrow(() -> scheduler.executeNext());
-    assertTrue(registry.isCompleted("single"));
-  }
-
-  @Test
   public void testConstructorRejectsNullRegistry() {
     assertThrows(IllegalArgumentException.class, () -> new WorkflowScheduler(null));
   }

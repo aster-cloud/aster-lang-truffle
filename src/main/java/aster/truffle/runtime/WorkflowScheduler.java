@@ -62,12 +62,6 @@ public final class WorkflowScheduler {
     }
   }
 
-  /** 向后兼容：单步执行（Start/Await 仍可能调用此 API） */
-  @Deprecated
-  public void executeNext() {
-    registry.executeNext();
-  }
-
   /**
    * 执行所有工作流任务直至完成（依赖 AsyncTaskRegistry 的并发调度）
    *

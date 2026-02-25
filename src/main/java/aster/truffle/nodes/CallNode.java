@@ -57,30 +57,22 @@ public abstract class CallNode extends AsterExpressionNode {
         System.err.println("DEBUG: call args=" + java.util.Arrays.toString(av));
       }
 
-      // Use InvokeNode (Truffle DSL) for optimized CallTarget invocation
-      // Supports DirectCallNode caching with monomorphic/polymorphic optimization
-      com.oracle.truffle.api.CallTarget callTarget = lv.getCallTarget();
-      if (callTarget != null) {
-        // Pack arguments: [callArgs..., captureValues...]
-        // LambdaRootNode expects captures at positions paramCount..paramCount+captureCount-1
-        Object[] capturedValues = lv.getCapturedValues();
-        Object[] packedArgs = new Object[av.length + capturedValues.length];
-        System.arraycopy(av, 0, packedArgs, 0, av.length);
-        System.arraycopy(capturedValues, 0, packedArgs, av.length, capturedValues.length);
+      // Pack arguments: [callArgs..., captureValues...]
+      // LambdaRootNode expects captures at positions paramCount..paramCount+captureCount-1
+      Object[] capturedValues = lv.getCapturedValues();
+      Object[] packedArgs = new Object[av.length + capturedValues.length];
+      System.arraycopy(av, 0, packedArgs, 0, av.length);
+      System.arraycopy(capturedValues, 0, packedArgs, av.length, capturedValues.length);
 
-        try {
-          // 使用内联的 InvokeNode，实现节点对象内联优化（内存占用从 28 字节降至 9 字节）
-          Object result = invokeNode.execute(node, callTarget, packedArgs);
-          if (AsterConfig.DEBUG) {
-            System.err.println("DEBUG: CallTarget result=" + result);
-          }
-          return result;
-        } catch (ReturnNode.ReturnException r) {
-          return r.value;
+      try {
+        // 使用内联的 InvokeNode，实现节点对象内联优化（内存占用从 28 字节降至 9 字节）
+        Object result = invokeNode.execute(node, lv.getCallTarget(), packedArgs);
+        if (AsterConfig.DEBUG) {
+          System.err.println("DEBUG: CallTarget result=" + result);
         }
-      } else {
-        // Fallback to apply() for legacy mode (non-CallTarget)
-        return lv.apply(av, frame);
+        return result;
+      } catch (ReturnNode.ReturnException r) {
+        return r.value;
       }
     }
 

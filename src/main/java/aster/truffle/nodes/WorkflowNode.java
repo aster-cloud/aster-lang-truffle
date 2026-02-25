@@ -44,14 +44,6 @@ public final class WorkflowNode extends Node {
   private final long timeoutMs;
 
   /**
-   * 构造工作流节点（向后兼容：无补偿）
-   */
-  public WorkflowNode(Env env, Node[] taskExprs, String[] taskNames,
-                      Map<String, Set<String>> dependencies, long timeoutMs) {
-    this(env, taskExprs, null, taskNames, dependencies, timeoutMs);
-  }
-
-  /**
    * 构造工作流节点
    *
    * @param env 环境对象（用于变量绑定）
