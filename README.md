@@ -1,5 +1,7 @@
 # Aster Truffle
 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 Aster Language 的 GraalVM Truffle 实现。
 
 ## 概述

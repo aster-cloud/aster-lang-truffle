@@ -54,28 +54,50 @@ public final class MemberAccessNode extends AsterExpressionNode {
             if (map.containsKey(member)) {
                 return map.get(member);
             }
+            // 模糊匹配：编译后的字段名可能包含 umlaut（如 reqüstedLimit），
+            // 而 Map 键是原始形式（如 requestedLimit）
+            String denormalized = denormalizeUmlauts(member);
+            if (!denormalized.equals(member) && map.containsKey(denormalized)) {
+                return map.get(denormalized);
+            }
+            // 反向尝试：Map 键可能包含 umlaut，而成员名是 ASCII 形式
+            for (Object key : map.keySet()) {
+                if (key instanceof String keyStr && denormalizeUmlauts(keyStr).equals(denormalized)) {
+                    return map.get(key);
+                }
+            }
             throw new RuntimeException("Map 中不存在键：" + member);
         }
 
-        // 尝试解包 HostObject（Polyglot 包装的 Java 对象）
-        Object unwrapped = unwrapHostObject(base);
-        if (unwrapped != base) {
-            return accessMember(unwrapped, member);
-        }
-
-        // 使用 Polyglot InteropLibrary 处理 TruffleObject
+        // 优先使用 Polyglot InteropLibrary 处理 TruffleObject
+        // 这是处理 Polyglot 包装的 Java 对象（如 HostObject 包装的 Map）的标准方式，
+        // 比反射解包更可靠
         try {
             // 首先检查是否为 hash 类型（Map 在 Polyglot 中表现为 hash）
             if (interop.hasHashEntries(base)) {
                 if (interop.isHashEntryExisting(base, member) && interop.isHashEntryReadable(base, member)) {
-                    return interop.readHashValue(base, member);
+                    Object value = interop.readHashValue(base, member);
+                    return unboxInteropValue(value);
+                }
+                // 模糊匹配：尝试 umlaut 还原后的键名
+                String denormalized = denormalizeUmlauts(member);
+                if (!denormalized.equals(member) && interop.isHashEntryExisting(base, denormalized) && interop.isHashEntryReadable(base, denormalized)) {
+                    Object value = interop.readHashValue(base, denormalized);
+                    return unboxInteropValue(value);
                 }
             }
 
             // 然后尝试成员访问（用于普通对象属性）
             if (interop.hasMembers(base)) {
                 if (interop.isMemberReadable(base, member)) {
-                    return interop.readMember(base, member);
+                    Object value = interop.readMember(base, member);
+                    return unboxInteropValue(value);
+                }
+                // 模糊匹配
+                String denormalized = denormalizeUmlauts(member);
+                if (!denormalized.equals(member) && interop.isMemberReadable(base, denormalized)) {
+                    Object value = interop.readMember(base, denormalized);
+                    return unboxInteropValue(value);
                 }
             }
 
@@ -94,7 +116,51 @@ public final class MemberAccessNode extends AsterExpressionNode {
             throw new RuntimeException("无法访问成员 " + member + "：" + e.getMessage(), e);
         }
 
+        // 最后尝试解包 HostObject（仅作为兜底）
+        Object unwrapped = unwrapHostObject(base);
+        if (unwrapped != base) {
+            return accessMember(unwrapped, member);
+        }
+
         throw new RuntimeException("无法访问成员：对象类型 " + base.getClass().getName() + " 不支持成员访问，成员：" + member);
+    }
+
+    /**
+     * 将 Polyglot 互操作返回的值转换为 Java 原始类型
+     *
+     * InteropLibrary 的 readHashValue/readMember 返回的值可能是 Polyglot 包装的对象，
+     * 需要解包为 Java 原始类型（String、Integer 等），以便下游节点（如 PatNameNode）
+     * 能正确使用 instanceof 进行类型匹配。
+     */
+    private Object unboxInteropValue(Object value) {
+        if (value == null) return null;
+        // 已经是 Java 原始类型，直接返回
+        if (value instanceof String || value instanceof Number || value instanceof Boolean) {
+            return value;
+        }
+        // 尝试通过 InteropLibrary 解包
+        try {
+            if (interop.isString(value)) {
+                return interop.asString(value);
+            }
+            if (interop.isBoolean(value)) {
+                return interop.asBoolean(value);
+            }
+            if (interop.isNumber(value)) {
+                if (interop.fitsInInt(value)) {
+                    return interop.asInt(value);
+                }
+                if (interop.fitsInLong(value)) {
+                    return interop.asLong(value);
+                }
+                if (interop.fitsInDouble(value)) {
+                    return interop.asDouble(value);
+                }
+            }
+        } catch (UnsupportedMessageException e) {
+            // 解包失败，返回原值
+        }
+        return value;
     }
 
     /**
@@ -138,6 +204,22 @@ public final class MemberAccessNode extends AsterExpressionNode {
             }
         }
         return null;
+    }
+
+    /**
+     * 将 umlaut 字符还原为 ASCII 等价形式
+     *
+     * 德语 canonicalization 将 ue→ü, oe→ö, ae→ä，
+     * 此方法反向还原，用于模糊匹配 Map 键。
+     */
+    private static String denormalizeUmlauts(String s) {
+        return s.replace("ü", "ue")
+                .replace("ö", "oe")
+                .replace("ä", "ae")
+                .replace("ß", "ss")
+                .replace("Ü", "Ue")
+                .replace("Ö", "Oe")
+                .replace("Ä", "Ae");
     }
 
     /**

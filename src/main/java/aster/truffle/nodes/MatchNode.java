@@ -43,15 +43,21 @@ public abstract class MatchNode extends AsterExpressionNode {
 
   private Object executeCases(VirtualFrame frame, Object scrutinee) {
     if (AsterConfig.DEBUG) {
-      System.err.println("DEBUG: match scrutinee=" + scrutinee);
+      System.err.println("DEBUG: match scrutinee=" + scrutinee + " type=" + (scrutinee == null ? "null" : scrutinee.getClass().getName()) + " cases=" + cases.length);
     }
     for (CaseNode c : cases) {
+      if (AsterConfig.DEBUG) {
+        System.err.println("DEBUG: trying case pat=" + c.pat.getClass().getSimpleName());
+      }
       if (c.matchesAndBind(scrutinee, env)) {
         if (AsterConfig.DEBUG) {
           System.err.println("DEBUG: case matched");
         }
         return c.execute(frame);
       }
+    }
+    if (AsterConfig.DEBUG) {
+      System.err.println("DEBUG: no case matched, returning null");
     }
     return null;
   }
@@ -84,6 +90,13 @@ public abstract class MatchNode extends AsterExpressionNode {
       if (s instanceof AsterDataValue dataValue) {
         if (!typeName.equals(dataValue.getTypeName())) return false;
         return matchOrderedFields(dataValue.fieldCount(), idx -> dataValue.fieldValue(idx), env);
+      }
+      if (s instanceof AsterEnumValue enumValue) {
+        return typeName.equals(enumValue.getVariantName()) || typeName.equals(enumValue.getEnumName());
+      }
+      // 枚举变体的字符串表示匹配（如 "Addieren" 匹配 When Addieren）
+      if (s instanceof String str) {
+        return typeName.equals(str);
       }
       if (!(s instanceof java.util.Map)) return false;
       var m = (java.util.Map<String,Object>) s;
@@ -125,6 +138,9 @@ public abstract class MatchNode extends AsterExpressionNode {
     private final String name;
     public PatNameNode(String name) { this.name = name; }
     @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, Env env) {
+      if (AsterConfig.DEBUG) {
+        System.err.println("DEBUG: PatNameNode name=" + name + " scrutinee=" + s + " type=" + (s == null ? "null" : s.getClass().getName()));
+      }
       if (s == null) return false;
       if (s instanceof String) return name.equals(s);
       if (s instanceof AsterEnumValue enumValue) {
