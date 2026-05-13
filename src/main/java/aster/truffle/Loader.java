@@ -64,6 +64,8 @@ public final class Loader {
     // Group functions by name for possible overloading
     java.util.Map<String, java.util.List<CoreModel.Func>> funcGroups = new java.util.LinkedHashMap<>();
     if (mod.decls != null) for (var d : mod.decls) if (d instanceof CoreModel.Func fn) funcGroups.computeIfAbsent(fn.name, k -> new java.util.ArrayList<>()).add(fn);
+    // 注册到字段，让 buildExpr 在分发 Call 时可查（用户函数屏蔽同名 builtin）
+    this.userFunctionNames = java.util.Set.copyOf(funcGroups.keySet());
     // Resolve entry function with simple overload selection if needed
     CoreModel.Func entry = null;
     if (funcName != null && !funcName.isEmpty()) {
@@ -281,6 +283,17 @@ public final class Loader {
   private final java.util.Deque<java.util.Map<String,Integer>> paramSlotStack = new java.util.ArrayDeque<>();
   private final java.util.Deque<CoreModel.Type> returnTypeStack = new java.util.ArrayDeque<>();
   private java.util.Map<String, CoreModel.Data> dataTypeIndex;
+  /**
+   * 用户定义的函数名集合。Loader 在 buildProgramInternal 第一阶段填入，
+   * buildExpr 在判断 Call 是否走 BuiltinCallNode 时**先**检查此集合 ——
+   * 用户定义函数优先于同名 builtin（如 user 的 `Rule add` 应屏蔽内置
+   * arithmetic add）。
+   *
+   * 若不做这个屏蔽，用户 `add(request)` 会被识别为 builtin add(a,b)，
+   * 收到 1 个 Map 参数后 arity 错误，但 fallback 路径在 DSL 重写中
+   * 被吞掉返回 0 —— 这正是导致 calculator 案例返回 0 的根因。
+   */
+  private java.util.Set<String> userFunctionNames = java.util.Set.of();
 
   private Node buildBlock(CoreModel.Block b) {
     if (b == null || b.statements == null || b.statements.isEmpty()) return LiteralNode.create(null);
@@ -462,9 +475,11 @@ public final class Loader {
     if (e instanceof CoreModel.Name n) return buildName(n.name);
     if (e instanceof CoreModel.Call c) {
       // 检测 builtin 调用：如果 target 是 Name 且是已注册的 builtin，使用 BuiltinCallNode 优化
+      // **但**用户定义的函数（如 `Rule add ...`）必须优先于同名 builtin —— 不然
+      // user 的 `add(request)` 会被识别为算术 add(a,b) 然后 arity 失配。
       if (c.target instanceof CoreModel.Name targetName) {
         String name = targetName.name;
-        if (Builtins.has(name)) {
+        if (Builtins.has(name) && !userFunctionNames.contains(name)) {
           // 创建 BuiltinCallNode（内联优化）
           var argNodes = new java.util.ArrayList<aster.truffle.nodes.AsterExpressionNode>();
           if (c.args != null) {
