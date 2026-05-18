@@ -46,7 +46,8 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
 
     // Quarkus 核心（运行时集成）
-    implementation("io.quarkus:quarkus-core:3.30.2")
+    // R21-Major-5：与 aster-api 对齐到 3.32.2
+    implementation("io.quarkus:quarkus-core:3.32.2")
 
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
