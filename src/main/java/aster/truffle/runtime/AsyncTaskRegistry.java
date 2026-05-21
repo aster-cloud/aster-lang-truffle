@@ -609,18 +609,38 @@ public final class AsyncTaskRegistry {
     }
   }
 
+  /**
+   * 清理已完成 / 已失败且过期的任务元数据。
+   *
+   * <p>修复点（H5）：原实现只清理 {@code tasks} 和 {@code taskInfos}，
+   * 长时间运行的进程会留下大量孤立的 retry / 依赖图 / 补偿栈条目。
+   * 现在统一通过 {@link #removeTask}+{@link #cleanupRetryState} 完整释放：
+   * <ul>
+   *   <li>{@code retryPolicies} / {@code attemptCounters} / {@code workflowRetryTasks}
+   *       / {@code pendingRetryTasks} —— retry 元数据</li>
+   *   <li>{@code dependencyGraph} —— 依赖图节点</li>
+   *   <li>{@code compensationStacks} —— workflow 补偿栈（如该 task 仍残留）</li>
+   * </ul>
+   * 这些 map 缺一项都会让长生命周期 workflow 产生缓慢内存泄漏。
+   */
   public void gc() {
     long now = System.currentTimeMillis();
-    tasks.entrySet().removeIf(entry -> {
+    List<String> toRemove = new ArrayList<>();
+    for (Map.Entry<String, TaskState> entry : tasks.entrySet()) {
       TaskState state = entry.getValue();
       TaskStatus status = state.status.get();
       boolean expired = now - state.createdAt > DEFAULT_TTL_MILLIS;
       if ((status == TaskStatus.COMPLETED || status == TaskStatus.FAILED) && expired) {
-        taskInfos.remove(state.taskId);
-        return true;
+        toRemove.add(entry.getKey());
       }
-      return false;
-    });
+    }
+    for (String taskId : toRemove) {
+      // removeTask 已经处理 tasks/taskInfos/dependencyGraph/compensationStacks，
+      // 这里再调一次 cleanupRetryState 兜底 retry 相关 map（即使 removeTask 后
+      // 还有遗漏，也不会再被引用，可以安全清空）。
+      removeTask(taskId);
+      cleanupRetryState(taskId);
+    }
   }
 
   public int getTaskCount() {
