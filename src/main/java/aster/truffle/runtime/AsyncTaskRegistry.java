@@ -703,48 +703,52 @@ public final class AsyncTaskRegistry {
     if (state == null || info == null) {
       return;
     }
+    terminateExternally(taskId, state, info);
+  }
 
-    // 使用自旋确保正确取消，处理 PENDING 和 RUNNING 状态（与 cancelAll 保持一致）
-    while (true) {
-      TaskStatus status = state.status.get();
-      switch (status) {
-        case PENDING:
-          if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
-            // bump generation 让任何已 scheduled 的 timeout 回调 / 已 enqueue
-            // 的 runTask 走 isStaleGeneration 路径直接 abort。
-            info.generation.incrementAndGet();
-            clearTimeoutHandle(info);
-            info.future.cancel(true);
-            remainingTasks.decrementAndGet();
-            synchronized (graphLock) {
-              dependencyGraph.markCompleted(taskId);
-            }
-            cleanupRetryState(taskId);
-            return;
-          }
-          // CAS 失败，继续自旋重试
-          continue;
-        case RUNNING:
-          // 关键：先 bump generation。若 callable 忽略中断、迟到返回，
-          // runTask 的 isStaleGeneration 检查会兜底防止 state 被污染。
-          // 这也让 schedule 中的 timeout 回调直接 return。
-          info.generation.incrementAndGet();
-          clearTimeoutHandle(info);
-          java.util.concurrent.Future<?> executorFuture = info.runningFuture.getAndSet(null);
-          if (executorFuture != null) {
-            executorFuture.cancel(true); // 发送中断信号到执行线程
-          }
-          info.future.cancel(true);
-          // 不修改状态和计数，让 runTask() 正常完成并处理状态转换
-          cleanupRetryState(taskId);
-          return;
-        case COMPLETED:
-        case FAILED:
-        case CANCELLED:
-          // 已完成或已取消，无需处理
-          return;
+  /**
+   * 集中化的外部取消终态清理。原实现把 RUNNING 路径的状态/计数清理"留给 runTask 处理"，
+   * 这在 stale-generation 模式下会失效 —— runTask 的 isStaleGeneration 检查
+   * 会直接 return，永远不到 finally。结果：状态永远停在 RUNNING，
+   * remainingTasks 不递减，executeUntilComplete 永远 hang。
+   *
+   * <p>修复方案：cancelTask / cancelAll 调用本方法，自己负责完整终态：
+   * <ul>
+   *   <li>bump generation —— 让任何已 scheduled 的 timeout 回调 / 已 enqueue
+   *       的 runTask 走 isStaleGeneration 路径直接 abort</li>
+   *   <li>清空 timeoutHandle</li>
+   *   <li>cancel runningFuture（如有）</li>
+   *   <li>cancel info.future</li>
+   *   <li>CAS status → CANCELLED（无论从 PENDING 还是 RUNNING）</li>
+   *   <li>decrement remainingTasks（仅在 CAS 成功时，避免双减）</li>
+   *   <li>dependencyGraph.markCompleted</li>
+   *   <li>cleanupRetryState</li>
+   * </ul>
+   * 若 CAS 失败（任务并发完成 / 已被 cancel），仅做尽力 bump+cancel 不重复扣计数。
+   */
+  private void terminateExternally(String taskId, TaskState state, TaskInfo info) {
+    // 先 bump generation + 取消 future，让任何并发的 runTask / timeout 回调
+    // 在到达 mutation 前看到代次失配并 abort。
+    info.generation.incrementAndGet();
+    clearTimeoutHandle(info);
+    java.util.concurrent.Future<?> executorFuture = info.runningFuture.getAndSet(null);
+    if (executorFuture != null) {
+      executorFuture.cancel(true);
+    }
+    info.future.cancel(true);
+
+    // CAS status：把 PENDING/RUNNING 推进到 CANCELLED。只在 CAS 成功时才扣计数，
+    // 避免与 runTask 的最终路径或另一次 cancel 双减。
+    boolean transitioned =
+        state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)
+            || state.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.CANCELLED);
+    if (transitioned) {
+      remainingTasks.decrementAndGet();
+      synchronized (graphLock) {
+        dependencyGraph.markCompleted(taskId);
       }
     }
+    cleanupRetryState(taskId);
   }
 
   public boolean isCancelled(String taskId) {
@@ -763,47 +767,13 @@ public final class AsyncTaskRegistry {
       String taskId = entry.getKey();
       TaskState state = tasks.get(taskId);
       TaskInfo info = entry.getValue();
-      if (state == null || info == null) {
+      if (state == null || info == null) continue;
+      TaskStatus status = state.status.get();
+      if (status == TaskStatus.COMPLETED || status == TaskStatus.FAILED
+          || status == TaskStatus.CANCELLED) {
         continue;
       }
-
-      // 使用自旋确保正确取消，处理 PENDING 和 RUNNING 状态
-      while (true) {
-        TaskStatus status = state.status.get();
-        switch (status) {
-          case PENDING:
-            if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
-              info.generation.incrementAndGet();
-              clearTimeoutHandle(info);
-              info.future.cancel(true);
-              remainingTasks.decrementAndGet();
-              synchronized (graphLock) {
-                dependencyGraph.markCompleted(taskId);
-              }
-              cleanupRetryState(taskId); // 清理 retry 元数据
-              break; // 成功取消，退出 switch
-            }
-            // CAS 失败，继续自旋重试
-            continue;
-          case RUNNING:
-            info.generation.incrementAndGet();
-            clearTimeoutHandle(info);
-            java.util.concurrent.Future<?> executorFuture = info.runningFuture.getAndSet(null);
-            if (executorFuture != null) {
-              executorFuture.cancel(true); // 发送中断信号到执行线程
-            }
-            info.future.cancel(true);
-            // 不修改状态和计数，让 runTask() 正常完成并处理状态转换
-            cleanupRetryState(taskId); // 清理 retry 元数据
-            break;
-          case COMPLETED:
-          case FAILED:
-          case CANCELLED:
-            // 已完成或已取消，无需处理
-            break;
-        }
-        break; // 退出 while 循环
-      }
+      terminateExternally(taskId, state, info);
     }
   }
 
@@ -961,21 +931,37 @@ public final class AsyncTaskRegistry {
       ownHandle = null;
     }
 
-    // 绑定执行线程 Future，使 cancelAll() 可真正中断
+    // 绑定执行线程 Future，使 cancelAll() 可真正中断。
+    // 关键修复（终审v3 C2）：runningFuture 也必须代次感知。原实现先
+    // executor.submit 拿到 future，然后 info.runningFuture.set(future)。
+    // 若 timeoutMs 极小，timeout 回调可能在 set 前触发 → retry 代次
+    // 已 install 新 runningFuture → 然后旧代次的 set 又把它覆盖回去。
+    // 解决：把"本提交安装的 future"也作为 own 句柄，仅在仍是本代次时
+    // 写入 runningFuture；finally 清空时也用 compareAndSet 抑制 ABA。
     java.util.concurrent.Future<?> executorFuture = executor.submit(() -> {
       try {
         runTask(info, submissionGen);
       } finally {
-        info.runningFuture.set(null); // 任务结束后清除引用
-        // runTask 终态（成功或最终失败）后取消"本次提交"的超时句柄。
-        // 关键修复：必须只取消我们自己的 handle —— 旧代次 runTask 的
-        // finally 不应该清掉 retry 代次刚 install 的新 handle。
-        // 用 compareAndSet 保证：只有当 timeoutHandle 仍指向我们的句柄时才清。
+        clearOwnRunningFuture(info, submissionGen);
         cancelOwnTimeoutHandle(info, ownHandle);
       }
     });
-    info.runningFuture.set(executorFuture);
+    if (info.generation.get() == submissionGen) {
+      info.runningFuture.set(executorFuture);
+    } else {
+      // 已被 retry/cancel 取代：直接打中断，避免线程泄漏。
+      executorFuture.cancel(true);
+    }
     return info.future;
+  }
+
+  /**
+   * 仅在仍是本代次时清空 runningFuture。stale finally 不应擦除 retry 代次
+   * 刚 install 的新 future。
+   */
+  private static void clearOwnRunningFuture(TaskInfo info, int submissionGen) {
+    if (info.generation.get() != submissionGen) return;
+    info.runningFuture.set(null);
   }
 
   /**
@@ -1283,7 +1269,12 @@ public final class AsyncTaskRegistry {
       executeCompensations(info.workflowId);
     }
 
-    // 注意：不递减 remainingTasks，runTask 的 finally 块会处理
+    // 必须在这里递减计数。原实现注释说"runTask 的 finally 块会处理"，
+    // 但本路径在前面 incrementAndGet generation —— stale runTask 会被
+    // isStaleGeneration 提前 return，永远到不了 finally。
+    // 由于此前的 CAS 成功才进入这里（`updated == true`），decrement
+    // 必然唯一对应一次 register，不会双减。
+    remainingTasks.decrementAndGet();
   }
 
   /**
