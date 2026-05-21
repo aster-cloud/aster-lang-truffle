@@ -8,6 +8,14 @@ plugins {
 group = "cloud.aster-lang"
 version = "0.0.1"
 
+// 版本统一管理 — 升级 GraalVM/Truffle 或 Quarkus 时只改这里。
+// 此前 25.0.1 在 4 处 dependency 重复硬编码，升级容易半成功。
+val graalvmVersion = "25.0.1"
+val quarkusVersion = "3.32.2"
+val junitVersion = "6.0.0"
+val junitPlatformVersion = "6.0.0"  // JUnit Jupiter 6.x 配套 Platform 走同版本
+val jacksonVersion = "2.18.2"
+
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
@@ -38,24 +46,23 @@ dependencies {
     runtimeOnly("cloud.aster-lang:aster-lang-de:0.0.1")
 
     // GraalVM Truffle 框架
-    implementation("org.graalvm.truffle:truffle-api:25.0.1")
-    annotationProcessor("org.graalvm.truffle:truffle-dsl-processor:25.0.1")
-    implementation("org.graalvm.sdk:graal-sdk:25.0.1")
+    implementation("org.graalvm.truffle:truffle-api:$graalvmVersion")
+    annotationProcessor("org.graalvm.truffle:truffle-dsl-processor:$graalvmVersion")
+    implementation("org.graalvm.sdk:graal-sdk:$graalvmVersion")
 
-    // JSON 序列化（与 aster-core 2.18.2 保持一致）
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
+    // JSON 序列化（与 aster-lang-core 保持一致）
+    implementation("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
 
-    // Quarkus 核心（运行时集成）
-    // R21-Major-5：与 aster-api 对齐到 3.32.2
-    implementation("io.quarkus:quarkus-core:3.32.2")
+    // Quarkus 核心（运行时集成；与 aster-api / aster-lang-runtime 对齐）
+    implementation("io.quarkus:quarkus-core:$quarkusVersion")
 
     // 测试依赖
-    testImplementation("org.junit.jupiter:junit-jupiter:5.10.1")
-    testImplementation("org.graalvm.truffle:truffle-api:25.0.1")
-    testRuntimeOnly("org.graalvm.truffle:truffle-runtime:25.0.1")
-    testRuntimeOnly("org.graalvm.truffle:truffle-compiler:25.0.1")
-    testRuntimeOnly("org.graalvm.compiler:compiler:25.0.1")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.1")
+    testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
+    testImplementation("org.graalvm.truffle:truffle-api:$graalvmVersion")
+    testRuntimeOnly("org.graalvm.truffle:truffle-runtime:$graalvmVersion")
+    testRuntimeOnly("org.graalvm.truffle:truffle-compiler:$graalvmVersion")
+    testRuntimeOnly("org.graalvm.compiler:compiler:$graalvmVersion")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 }
 
 application {
