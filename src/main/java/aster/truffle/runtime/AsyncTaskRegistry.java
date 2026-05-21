@@ -22,6 +22,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.LockSupport;
@@ -66,6 +69,12 @@ public final class AsyncTaskRegistry {
   private final AtomicInteger remainingTasks = new AtomicInteger();
   // 线程池（默认 CPU 核数，可配置），size=1 时即单线程回退模式
   private final ExecutorService executor;
+  /**
+   * 单线程守护 scheduler 专门触发任务超时回调。和工作 executor 分离，
+   * 让超时信号不会被任务自身的阻塞 starve 住。线程为 daemon —— JVM 退出时
+   * 自动释放，避免持挂应用进程。
+   */
+  private final ScheduledExecutorService timeoutScheduler;
   private final boolean singleThreadMode;
   // graph 同步锁，DependencyGraph 非线程安全
   private final Object graphLock = new Object();
@@ -99,14 +108,24 @@ public final class AsyncTaskRegistry {
     final AtomicReference<java.util.concurrent.Future<?>> runningFuture = new AtomicReference<>();
 
     /**
+     * 当前代次的超时调度句柄。
+     *
+     * <p>取代旧实现中的 {@code info.future.orTimeout(...)} —— 旧链路把超时
+     * 信号直接写进 {@code info.future}，导致即使重试成功，{@code info.future}
+     * 也已被 orTimeout 完成异常，barrier.join() 仍会抛 CompletionException。
+     *
+     * <p>现在改为：每次 submit 时通过 {@code timeoutScheduler.schedule(...)}
+     * 单独安排一个 timeout 任务，结果不会触达 {@code info.future}。runTask
+     * 完成（成功或失败）会 cancel 这个句柄；超时触发则只调用
+     * {@link #handleTaskTimeout}，由它去 cancel runningFuture / bump generation /
+     * 触发重试 —— 期间 {@code info.future} 不被外部信号污染。
+     */
+    final AtomicReference<java.util.concurrent.ScheduledFuture<?>> timeoutHandle = new AtomicReference<>();
+
+    /**
      * 执行代次令牌：每次任务被提交（初次/重试）前递增。
      * runTask 在关键 mutation 前重读此值，若与提交时不一致则视为本次
      * 执行已被 timeout/cancel/retry 取代，立即 abort，禁止写入 state/future。
-     *
-     * <p>该字段修复了原实现的 compound-action 竞态：当 orTimeout 触发
-     * handleTaskTimeout 并安排重试时，原 runTask 仍在工作线程中执行，
-     * 可能在重试已经把状态推进至 PENDING/RUNNING(新代次) 后才完成，
-     * 用旧结果污染 state.result 或 future。
      */
     final AtomicInteger generation = new AtomicInteger(0);
 
@@ -200,6 +219,13 @@ public final class AsyncTaskRegistry {
   private AsyncTaskRegistry(int threadPoolSize, long defaultTimeoutMs, DeterminismContext determinismContext) {
     int normalizedSize = Math.max(1, threadPoolSize);
     this.executor = Executors.newFixedThreadPool(normalizedSize);
+    // 守护线程的 ThreadFactory：JVM 退出时 scheduler 不会阻挡 shutdown。
+    ThreadFactory timeoutThreadFactory = r -> {
+      Thread t = new Thread(r, "aster-task-timeout");
+      t.setDaemon(true);
+      return t;
+    };
+    this.timeoutScheduler = Executors.newSingleThreadScheduledExecutor(timeoutThreadFactory);
     this.singleThreadMode = normalizedSize == 1;
     this.defaultTimeoutMs = Math.max(0L, defaultTimeoutMs);
     this.determinismContext = Objects.requireNonNull(determinismContext, "determinismContext cannot be null");
@@ -821,6 +847,7 @@ public final class AsyncTaskRegistry {
    */
   public void shutdown() {
     stopPolling();
+    timeoutScheduler.shutdownNow();
     executor.shutdown();
     try {
       if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
@@ -901,25 +928,22 @@ public final class AsyncTaskRegistry {
     // 提交本次代次令牌，runTask 通过比对该值识别过期执行
     final int submissionGen = info.generation.incrementAndGet();
 
-    CompletableFuture<Object> trackedFuture = info.future;
+    // 调度独立的超时回调（不污染 info.future）。捕获 submissionGen，
+    // 当回调触发时验证仍是本代次再处理，避免重试代次的 callable
+    // 被旧代次的超时杀掉。
     if (info.timeoutMs > 0) {
-      trackedFuture = info.future
-          .orTimeout(info.timeoutMs, TimeUnit.MILLISECONDS)
-          .handle((result, throwable) -> {
-            if (throwable == null) {
-              return result;
-            }
-            Throwable actual = throwable instanceof CompletionException
-                ? throwable.getCause()
-                : throwable;
-            if (actual instanceof TimeoutException timeout) {
-              TimeoutException enriched = new TimeoutException("任务超时: " + info.taskId);
-              enriched.initCause(timeout);
-              handleTaskTimeout(info.taskId, enriched);
-              throw new CompletionException(enriched);
-            }
-            throw new CompletionException(actual);
-          });
+      cancelTimeoutHandle(info);
+      ScheduledFuture<?> handle = timeoutScheduler.schedule(() -> {
+        if (info.generation.get() != submissionGen) return;
+        TimeoutException timeout = new TimeoutException("任务超时: " + info.taskId);
+        try {
+          handleTaskTimeout(info.taskId, timeout);
+        } catch (RuntimeException ex) {
+          logger.log(Level.WARNING,
+              String.format("超时处理异常 [taskId=%s]: %s", info.taskId, ex.getMessage()), ex);
+        }
+      }, info.timeoutMs, TimeUnit.MILLISECONDS);
+      info.timeoutHandle.set(handle);
     }
 
     // 绑定执行线程 Future，使 cancelAll() 可真正中断
@@ -928,10 +952,18 @@ public final class AsyncTaskRegistry {
         runTask(info, submissionGen);
       } finally {
         info.runningFuture.set(null); // 任务结束后清除引用
+        // runTask 终态（成功或最终失败）后取消超时句柄，避免迟到的 timeout
+        // 触发误判。注意：retry 路径会在 handleTaskTimeout 内重新 set 新 handle。
+        cancelTimeoutHandle(info);
       }
     });
     info.runningFuture.set(executorFuture);
-    return trackedFuture;
+    return info.future;
+  }
+
+  private static void cancelTimeoutHandle(TaskInfo info) {
+    ScheduledFuture<?> prev = info.timeoutHandle.getAndSet(null);
+    if (prev != null) prev.cancel(false);
   }
 
   private void runTaskInline(TaskInfo info) {
@@ -1180,6 +1212,18 @@ public final class AsyncTaskRegistry {
             || state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.FAILED);
     if (!updated) {
       return;
+    }
+
+    // 关键：最终超时分支也必须 bump generation + 取消 runningFuture，
+    // 否则 callable 若忽略中断、超时后才返回，runTask 仍会落入
+    // catch 之外的成功路径写入 state.result，污染已 FAILED 的任务。
+    // （成功 future 完成被 obtrudeException 兜底，但 state.result/exception
+    //  写入仍是数据正确性漏洞。）
+    if (info != null) {
+      info.generation.incrementAndGet();
+      java.util.concurrent.Future<?> running = info.runningFuture.getAndSet(null);
+      if (running != null) running.cancel(true);
+      cancelTimeoutHandle(info);
     }
 
     state.exception = timeoutException;
