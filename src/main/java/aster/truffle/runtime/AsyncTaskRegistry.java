@@ -710,6 +710,10 @@ public final class AsyncTaskRegistry {
       switch (status) {
         case PENDING:
           if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
+            // bump generation 让任何已 scheduled 的 timeout 回调 / 已 enqueue
+            // 的 runTask 走 isStaleGeneration 路径直接 abort。
+            info.generation.incrementAndGet();
+            clearTimeoutHandle(info);
             info.future.cancel(true);
             remainingTasks.decrementAndGet();
             synchronized (graphLock) {
@@ -721,7 +725,11 @@ public final class AsyncTaskRegistry {
           // CAS 失败，继续自旋重试
           continue;
         case RUNNING:
-          // 使用绑定的执行器 Future 真正中断线程
+          // 关键：先 bump generation。若 callable 忽略中断、迟到返回，
+          // runTask 的 isStaleGeneration 检查会兜底防止 state 被污染。
+          // 这也让 schedule 中的 timeout 回调直接 return。
+          info.generation.incrementAndGet();
+          clearTimeoutHandle(info);
           java.util.concurrent.Future<?> executorFuture = info.runningFuture.getAndSet(null);
           if (executorFuture != null) {
             executorFuture.cancel(true); // 发送中断信号到执行线程
@@ -765,6 +773,8 @@ public final class AsyncTaskRegistry {
         switch (status) {
           case PENDING:
             if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
+              info.generation.incrementAndGet();
+              clearTimeoutHandle(info);
               info.future.cancel(true);
               remainingTasks.decrementAndGet();
               synchronized (graphLock) {
@@ -776,7 +786,8 @@ public final class AsyncTaskRegistry {
             // CAS 失败，继续自旋重试
             continue;
           case RUNNING:
-            // 使用绑定的执行器 Future 真正中断线程
+            info.generation.incrementAndGet();
+            clearTimeoutHandle(info);
             java.util.concurrent.Future<?> executorFuture = info.runningFuture.getAndSet(null);
             if (executorFuture != null) {
               executorFuture.cancel(true); // 发送中断信号到执行线程
@@ -931,9 +942,9 @@ public final class AsyncTaskRegistry {
     // 调度独立的超时回调（不污染 info.future）。捕获 submissionGen，
     // 当回调触发时验证仍是本代次再处理，避免重试代次的 callable
     // 被旧代次的超时杀掉。
+    final ScheduledFuture<?> ownHandle;
     if (info.timeoutMs > 0) {
-      cancelTimeoutHandle(info);
-      ScheduledFuture<?> handle = timeoutScheduler.schedule(() -> {
+      ownHandle = timeoutScheduler.schedule(() -> {
         if (info.generation.get() != submissionGen) return;
         TimeoutException timeout = new TimeoutException("任务超时: " + info.taskId);
         try {
@@ -943,7 +954,11 @@ public final class AsyncTaskRegistry {
               String.format("超时处理异常 [taskId=%s]: %s", info.taskId, ex.getMessage()), ex);
         }
       }, info.timeoutMs, TimeUnit.MILLISECONDS);
-      info.timeoutHandle.set(handle);
+      // 仅在仍是本代次时占用 timeoutHandle；后续 retry 代次会在 handleTaskTimeout
+      // 内通过同样的 generation-aware 方式安装新 handle。
+      info.timeoutHandle.set(ownHandle);
+    } else {
+      ownHandle = null;
     }
 
     // 绑定执行线程 Future，使 cancelAll() 可真正中断
@@ -952,16 +967,36 @@ public final class AsyncTaskRegistry {
         runTask(info, submissionGen);
       } finally {
         info.runningFuture.set(null); // 任务结束后清除引用
-        // runTask 终态（成功或最终失败）后取消超时句柄，避免迟到的 timeout
-        // 触发误判。注意：retry 路径会在 handleTaskTimeout 内重新 set 新 handle。
-        cancelTimeoutHandle(info);
+        // runTask 终态（成功或最终失败）后取消"本次提交"的超时句柄。
+        // 关键修复：必须只取消我们自己的 handle —— 旧代次 runTask 的
+        // finally 不应该清掉 retry 代次刚 install 的新 handle。
+        // 用 compareAndSet 保证：只有当 timeoutHandle 仍指向我们的句柄时才清。
+        cancelOwnTimeoutHandle(info, ownHandle);
       }
     });
     info.runningFuture.set(executorFuture);
     return info.future;
   }
 
-  private static void cancelTimeoutHandle(TaskInfo info) {
+  /**
+   * 取消指定 ScheduledFuture（仅当 info.timeoutHandle 当前仍持有它时清空）。
+   *
+   * <p>修复一个回归：旧实现的 {@code cancelTimeoutHandle} 无条件 getAndSet null，
+   * 在 runTask finally 与新 retry submit 之间存在竞态——
+   * stale finally 会清掉 retry 代次刚 install 的新 handle，让重试 hang。
+   * 用 own-handle + compareAndSet 抑制 ABA：永远不影响其它代次的 handle。
+   */
+  private static void cancelOwnTimeoutHandle(TaskInfo info, ScheduledFuture<?> own) {
+    if (own == null) return;
+    info.timeoutHandle.compareAndSet(own, null);
+    own.cancel(false);
+  }
+
+  /**
+   * 无条件清空当前 timeoutHandle。仅供 handleTaskTimeout / cancelTask / shutdown 调用，
+   * 它们的语义是"丢弃所有未触发的超时"。
+   */
+  private static void clearTimeoutHandle(TaskInfo info) {
     ScheduledFuture<?> prev = info.timeoutHandle.getAndSet(null);
     if (prev != null) prev.cancel(false);
   }
@@ -1223,7 +1258,7 @@ public final class AsyncTaskRegistry {
       info.generation.incrementAndGet();
       java.util.concurrent.Future<?> running = info.runningFuture.getAndSet(null);
       if (running != null) running.cancel(true);
-      cancelTimeoutHandle(info);
+      clearTimeoutHandle(info);
     }
 
     state.exception = timeoutException;
