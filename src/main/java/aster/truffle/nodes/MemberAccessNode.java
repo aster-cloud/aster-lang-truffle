@@ -1,6 +1,7 @@
 package aster.truffle.nodes;
 
 import aster.truffle.runtime.AsterDataValue;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
@@ -9,7 +10,12 @@ import com.oracle.truffle.api.interop.UnknownKeyException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.NodeInfo;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.InaccessibleObjectException;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * 成员访问节点
@@ -164,38 +170,78 @@ public final class MemberAccessNode extends AsterExpressionNode {
     }
 
     /**
-     * 尝试解包 Polyglot HostObject 获取底层 Java 对象
+     * 尝试解包 Polyglot HostObject 获取底层 Java 对象。
+     *
+     * <p>该路径仅在 InteropLibrary 标准 API（hasMembers/hasHashEntries 等）
+     * 都无法访问目标对象时作为兜底使用。Truffle 内部的 HostObject 类不暴露
+     * 公开 API，故只能反射获取 {@code obj}/{@code delegate} 字段。
+     *
+     * <p>安全收紧：
+     * <ul>
+     *   <li>{@link CompilerDirectives.TruffleBoundary} 标注：阻止反射进入 PE 编译。</li>
+     *   <li>失败异常按类别分类计数（NoSuchField / InaccessibleObject / IllegalAccess）。
+     *       命中 JDK 17+ 模块访问限制时，第一次会以 WARNING 级别记录全栈，
+     *       避免静默吞错；后续命中只递增计数器，避免污染日志。</li>
+     *   <li>JDK 17+ {@link InaccessibleObjectException} 单独识别 —— 这是
+     *       native-image / 严格模块场景下最常见的失败原因，对运维更友好。</li>
+     * </ul>
      */
+    @CompilerDirectives.TruffleBoundary
     private Object unwrapHostObject(Object obj) {
         if (obj == null) return null;
 
         String className = obj.getClass().getName();
+        if (!(className.contains("HostObject") || className.contains("HostProxy"))) {
+            return obj;
+        }
 
-        // 检查是否为 Truffle HostObject
-        if (className.contains("HostObject") || className.contains("HostProxy")) {
-            try {
-                // 尝试通过反射获取 obj 字段
-                java.lang.reflect.Field objField = findField(obj.getClass(), "obj");
-                if (objField != null) {
-                    objField.setAccessible(true);
-                    return objField.get(obj);
-                }
+        Field objField = findField(obj.getClass(), "obj");
+        if (objField != null) {
+            Object unwrapped = tryReflectiveRead(objField, obj);
+            if (unwrapped != null) return unwrapped;
+        }
 
-                // 尝试 delegate 字段
-                java.lang.reflect.Field delegateField = findField(obj.getClass(), "delegate");
-                if (delegateField != null) {
-                    delegateField.setAccessible(true);
-                    return delegateField.get(obj);
-                }
-            } catch (Exception e) {
-                // 反射失败，返回原对象
-            }
+        Field delegateField = findField(obj.getClass(), "delegate");
+        if (delegateField != null) {
+            Object unwrapped = tryReflectiveRead(delegateField, obj);
+            if (unwrapped != null) return unwrapped;
         }
 
         return obj;
     }
 
-    private java.lang.reflect.Field findField(Class<?> clazz, String name) {
+    private static Object tryReflectiveRead(Field field, Object obj) {
+        try {
+            field.setAccessible(true);
+            return field.get(obj);
+        } catch (InaccessibleObjectException e) {
+            logUnwrapFailure("inaccessible-object", field, e);
+        } catch (IllegalAccessException e) {
+            logUnwrapFailure("illegal-access", field, e);
+        } catch (SecurityException e) {
+            logUnwrapFailure("security-manager", field, e);
+        } catch (RuntimeException e) {
+            // 仅捕获 RuntimeException（保留 Error 让 JVM 处理）
+            logUnwrapFailure("runtime", field, e);
+        }
+        return null;
+    }
+
+    private static final AtomicInteger UNWRAP_FAILURE_COUNT = new AtomicInteger(0);
+    private static final int UNWRAP_FAILURE_LOG_LIMIT = 5;
+    private static final Logger LOG = Logger.getLogger(MemberAccessNode.class.getName());
+
+    private static void logUnwrapFailure(String reason, Field field, Throwable t) {
+        int n = UNWRAP_FAILURE_COUNT.incrementAndGet();
+        if (n <= UNWRAP_FAILURE_LOG_LIMIT) {
+            LOG.log(Level.WARNING,
+                String.format("HostObject 反射解包失败（%s）field=%s 第%d次（前%d次会记录详细堆栈）",
+                    reason, field.getName(), n, UNWRAP_FAILURE_LOG_LIMIT),
+                t);
+        }
+    }
+
+    private static Field findField(Class<?> clazz, String name) {
         while (clazz != null) {
             try {
                 return clazz.getDeclaredField(name);

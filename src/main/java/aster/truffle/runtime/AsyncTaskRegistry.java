@@ -98,6 +98,18 @@ public final class AsyncTaskRegistry {
     // 绑定执行线程的 Future，用于 cancelAll() 真正中断运行中的任务
     final AtomicReference<java.util.concurrent.Future<?>> runningFuture = new AtomicReference<>();
 
+    /**
+     * 执行代次令牌：每次任务被提交（初次/重试）前递增。
+     * runTask 在关键 mutation 前重读此值，若与提交时不一致则视为本次
+     * 执行已被 timeout/cancel/retry 取代，立即 abort，禁止写入 state/future。
+     *
+     * <p>该字段修复了原实现的 compound-action 竞态：当 orTimeout 触发
+     * handleTaskTimeout 并安排重试时，原 runTask 仍在工作线程中执行，
+     * 可能在重试已经把状态推进至 PENDING/RUNNING(新代次) 后才完成，
+     * 用旧结果污染 state.result 或 future。
+     */
+    final AtomicInteger generation = new AtomicInteger(0);
+
     TaskInfo(String taskId, String workflowId, Callable<?> callable, Set<String> dependencies, long timeoutMs,
              Runnable compensationCallback, int priority) {
       this.taskId = taskId;
@@ -847,10 +859,27 @@ public final class AsyncTaskRegistry {
     return state != null && state.status.get() == TaskStatus.PENDING;
   }
 
+  /**
+   * 判断 runTask 当前执行是否已被新代次取代。
+   *
+   * <p>超时 + 重试场景下：原 runTask 仍在工作线程中执行，
+   * orTimeout 已经在另一个线程触发 {@link #handleTaskTimeout}
+   * 并把 {@link TaskInfo#generation} 递增、resubmit 了新一次执行。
+   * 此时旧 runTask 的剩余路径必须 abort，否则会用陈旧结果污染状态。
+   *
+   * @return true 表示当前执行已过期，调用者应立即 return 而不再 mutate state/future
+   */
+  private static boolean isStaleGeneration(TaskInfo info, int submissionGen) {
+    return info.generation.get() != submissionGen;
+  }
+
   private CompletableFuture<Object> submitTask(TaskInfo info) {
     if (!info.submitted.compareAndSet(false, true)) {
       return info.future;
     }
+
+    // 提交本次代次令牌，runTask 通过比对该值识别过期执行
+    final int submissionGen = info.generation.incrementAndGet();
 
     CompletableFuture<Object> trackedFuture = info.future;
     if (info.timeoutMs > 0) {
@@ -876,7 +905,7 @@ public final class AsyncTaskRegistry {
     // 绑定执行线程 Future，使 cancelAll() 可真正中断
     java.util.concurrent.Future<?> executorFuture = executor.submit(() -> {
       try {
-        runTask(info);
+        runTask(info, submissionGen);
       } finally {
         info.runningFuture.set(null); // 任务结束后清除引用
       }
@@ -889,22 +918,32 @@ public final class AsyncTaskRegistry {
     if (!info.submitted.compareAndSet(false, true)) {
       return;
     }
-    if (singleThreadMode) {
-      runTask(info);
-    } else {
-      // 在多线程模式下，同步执行仍运行于调用线程，适合旧节点的协作式调用
-      runTask(info);
-    }
+    int gen = info.generation.incrementAndGet();
+    // 内联执行：同步运行于调用线程，因此不存在与 timeout 的真实并发风险，
+    // 仍然遵循代次令牌契约保证语义一致。
+    runTask(info, gen);
   }
 
   /**
    * 核心执行逻辑：更新状态、写回依赖图、完成 future
+   *
+   * @param submissionGen 本次提交时的代次令牌（来自 {@link TaskInfo#generation}）。
+   *                      任何写入 state/future 前都会 re-check {@code info.generation.get()}
+   *                      是否仍等于此值；不等则说明本次执行已被 timeout/cancel/retry 取代，
+   *                      静默 abort 防止污染新代次的状态。
    */
-  private void runTask(TaskInfo info) {
+  private void runTask(TaskInfo info, int submissionGen) {
     TaskState state = tasks.get(info.taskId);
     if (state == null) {
-      info.future.completeExceptionally(new IllegalStateException("Unknown task: " + info.taskId));
-      remainingTasks.decrementAndGet();
+      // 仅在仍为当前代次时上报，避免污染重试 future
+      if (info.generation.get() == submissionGen) {
+        info.future.completeExceptionally(new IllegalStateException("Unknown task: " + info.taskId));
+        remainingTasks.decrementAndGet();
+      }
+      return;
+    }
+
+    if (isStaleGeneration(info, submissionGen)) {
       return;
     }
 
@@ -938,6 +977,11 @@ public final class AsyncTaskRegistry {
     Throwable failure = null;
     try {
       Object callResult = info.callable.call();
+      if (isStaleGeneration(info, submissionGen)) {
+        // 本次执行已被 timeout/retry 取代，不要写入 state.result，
+        // 也不要 complete 新代次的 future，直接 abort。
+        return;
+      }
       if (callResult != null && state.result == null) {
         state.result = callResult;
       }
@@ -954,6 +998,11 @@ public final class AsyncTaskRegistry {
         }
       }
     } catch (Throwable t) {
+      // 失败路径也要检查代次：若本次执行已被 timeout/retry 取代，
+      // 不要再次触发 onTaskFailed/retry —— 新代次已在重试了。
+      if (isStaleGeneration(info, submissionGen)) {
+        return;
+      }
       failure = t;
       RetryPolicy policy = retryPolicies.get(info.taskId);
       if (policy != null) {
@@ -978,8 +1027,10 @@ public final class AsyncTaskRegistry {
         handleFinalTaskFailure(info, state, failure);
       }
     } finally {
-      if (!retryScheduled) {
-        // 仅在任务真正结束时递减计数器
+      if (!retryScheduled && info.generation.get() == submissionGen) {
+        // 仅在任务真正结束且仍为本代次时递减计数器
+        // （过期代次的 abort 路径已在 isStaleGeneration 处直接 return，
+        //  没有 decrement，新代次结束时会再次落入这里）
         remainingTasks.decrementAndGet();
       }
     }
@@ -1076,8 +1127,17 @@ public final class AsyncTaskRegistry {
       if (attempt < policy.maxAttempts) {
         // 重置状态为 PENDING 以允许重新调度
         if (state.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.PENDING)) {
-          // 重置 submitted 标记，允许重新提交
+          // 关键：先 bump generation，让原本仍在工作线程里跑的 runTask
+          // 在 isStaleGeneration 检查时 abort，避免它用陈旧结果污染重试代次。
+          // 顺序：bump generation → 取消 runningFuture → reset submitted → onTaskFailed
           if (info != null) {
+            info.generation.incrementAndGet();
+            java.util.concurrent.Future<?> running = info.runningFuture.getAndSet(null);
+            if (running != null) {
+              // mayInterruptIfRunning=true：超时已确定，要尽快释放工作线程；
+              // 旧 runTask 的剩余路径会被 isStaleGeneration 检查兜底
+              running.cancel(true);
+            }
             info.submitted.set(false);
           }
           // 复用 onTaskFailed 的重试逻辑
