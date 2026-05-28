@@ -64,7 +64,16 @@ public final class Runner {
         System.err.println("DEBUG: funcName=" + funcName);
       }
 
-      // Create Polyglot context
+      // Create Polyglot context.
+      //
+      // R21 (audit): this is the **developer CLI** entry (`java -cp ... Runner`),
+      // not the production policy-execution path. Developers may run untrusted
+      // local .aster files; `allowAllAccess(true)` is acceptable here because
+      // the operator chose to invoke this CLI on their workstation.
+      //
+      // Production policy execution lives in
+      //   aster-api/src/main/java/io/aster/policy/runtime/TrufflePolicyRuntime.java
+      // which uses HostAccess.EXPLICIT + IOAccess.NONE + native/process denied.
       try (Context context = Context.newBuilder("aster")
           .allowAllAccess(true)
           .build()) {
