@@ -29,7 +29,13 @@ public final class FrameSlotBuilder {
       throw new IllegalStateException("Duplicate variable: " + name);
     }
     int slotIndex = nextSlotIndex++;
-    descriptorBuilder.addSlot(FrameSlotKind.Illegal, name, null);
+    // R32 P0：原 FrameSlotKind.Illegal 让 Truffle 在每次写入时强制 deopt-
+    // and-tag。Aster 是动态语言，主流类型是 Object（含 Long / Boolean /
+    // String 装箱）。用 Object 作为初始 kind 配合 setObject 写入，PE
+    // 把 frame access 编译为单一 getObject，type profiling 由 SetNode /
+    // LetNode 的 @Specialization 提供，整体编译质量优于 Illegal 起点。
+    // 详见 GraalVM Truffle slot-kind tuning guide。
+    descriptorBuilder.addSlot(FrameSlotKind.Object, name, null);
     variableToSlot.put(name, slotIndex);
   }
 
@@ -41,7 +47,8 @@ public final class FrameSlotBuilder {
       System.err.println("Warning: Re-binding variable: " + name);
     }
     int slotIndex = nextSlotIndex++;
-    descriptorBuilder.addSlot(FrameSlotKind.Illegal, name, null);
+    // R32 P0：见 addParameter 注释，同因同果。
+    descriptorBuilder.addSlot(FrameSlotKind.Object, name, null);
     variableToSlot.put(name, slotIndex);
   }
 
