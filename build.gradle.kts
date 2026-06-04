@@ -96,6 +96,15 @@ tasks.test {
     // Profiler 支持
     systemProperty("aster.profiler.enabled", System.getProperty("aster.profiler.enabled", "false"))
 
+    // Forward the two parity.eval.* system properties used by
+    // CoreIrEvalCli (mirrors aster-lang-core's parity.ir.* forwarding
+    // for the Phase B fingerprint CLI). Scoped to the exact key names
+    // so future tests don't accidentally couple to the parity runner.
+    listOf("parity.eval.input", "parity.eval.output").forEach { key ->
+        val v = System.getProperty(key)
+        if (v != null) systemProperty(key, v)
+    }
+
     // CI 模式：通过 -PexcludeBenchmarks=true 排除耗时测试
     val excludeBenchmarks: String? by project
     if (excludeBenchmarks == "true") {
