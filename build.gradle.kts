@@ -36,14 +36,13 @@ publishing {
 }
 
 dependencies {
-    // Maven 坐标依赖（从 mavenLocal 或 mavenCentral 解析）
-    implementation("cloud.aster-lang:aster-lang-core:0.0.1")
-    implementation("cloud.aster-lang:aster-lang-runtime:0.0.1")
+    // aster-lang 生态依赖：版本由共享 version catalog（aster-lang-platform）
+    // 统一管理，见 settings.gradle.kts 的 asterLibs 导入（ADR 0012）。
+    implementation(asterLibs.core)
+    implementation(asterLibs.runtime)
 
     // 语言包（通过 SPI 自动发现并注册到 LexiconRegistry）
-    runtimeOnly("cloud.aster-lang:aster-lang-en:0.0.1")
-    runtimeOnly("cloud.aster-lang:aster-lang-zh:0.0.1")
-    runtimeOnly("cloud.aster-lang:aster-lang-de:0.0.1")
+    runtimeOnly(asterLibs.bundles.locales)  // en + zh + de
 
     // GraalVM Truffle 框架
     implementation("org.graalvm.truffle:truffle-api:$graalvmVersion")

@@ -12,6 +12,13 @@ dependencyResolutionManagement {
         mavenLocal()  // 优先使用本地 Maven 仓库（aster-core, aster-runtime）
         mavenCentral()
     }
+    // 共享版本目录（aster-lang-platform，ADR 0012）：aster-lang 生态依赖版本
+    // 的单一来源。用 asterLibs.* 别名代替散落的 "cloud.aster-lang:...:0.0.1"。
+    versionCatalogs {
+        create("asterLibs") {
+            from("cloud.aster-lang:aster-lang-platform:0.1.0")
+        }
+    }
 }
 
 // Composite Build 支持（用于本地开发调试）
