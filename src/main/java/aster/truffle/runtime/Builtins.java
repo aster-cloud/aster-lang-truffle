@@ -59,6 +59,14 @@ public final class Builtins {
     // === Arithmetic Operations (纯函数，无副作用) ===
     register("add", new BuiltinDef(args -> {
       checkArity("add", args, 2);
+      // `+` 双语义，与 TS 解释器一致（interpreter.ts case '+'）：任一操作数
+      // 是字符串 → 字符串拼接；否则整数相加。修复前强制 toInt 导致
+      // "Hello, " + name 抛 NumberFormatException（双引擎 eval 分歧）。
+      Object a = unwrap(args[0]);
+      Object b = unwrap(args[1]);
+      if (a instanceof String || b instanceof String) {
+        return textValue(args[0]) + textValue(args[1]);
+      }
       return toInt(args[0]) + toInt(args[1]);
     }));
 

@@ -14,6 +14,7 @@ import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.UnexpectedResultException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -163,26 +164,17 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   /**
    * 内联 add (int + int)
    */
-  @Specialization(guards = {"isAdd()", "hasTwoArgs()"})
-  protected int doAddInt(VirtualFrame frame) {
+  @Specialization(guards = {"isAdd()", "hasTwoArgs()"}, rewriteOn = UnexpectedResultException.class)
+  protected int doAddInt(VirtualFrame frame) throws UnexpectedResultException {
     Profiler.inc("builtin_add_inlined");
 
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a + b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Integer) {
-        return (int) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'add' expected int result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
-    }
+    // int 快路径。任一操作数不是 int（如字符串拼接 "Hello, " + name）时，
+    // executeInt 抛 UnexpectedResultException，Truffle 据 rewriteOn 重特化到
+    // doGeneric（返回 Object），由 Builtins.add 做字符串/数值双语义分发。
+    // 修复前这里 catch 后强制走 int-only 路径，导致字符串拼接抛 NFE。
+    int a = argNodes[0].executeInt(frame);
+    int b = argNodes[1].executeInt(frame);
+    return a + b;
   }
 
   /**
