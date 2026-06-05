@@ -750,7 +750,7 @@ public final class Builtins {
    * @return 返回值，如果不存在返回null
    */
   public static Object call(String name, Object[] args) throws BuiltinException {
-    BuiltinDef def = REGISTRY.get(name);
+    BuiltinDef def = REGISTRY.get(canonicalName(name));
     if (def == null) return null;
     return def.impl.call(args);
   }
@@ -759,7 +759,7 @@ public final class Builtins {
    * 检查builtin是否存在
    */
   public static boolean has(String name) {
-    return REGISTRY.containsKey(name);
+    return REGISTRY.containsKey(canonicalName(name));
   }
 
   /**
@@ -768,8 +768,44 @@ public final class Builtins {
    * @return effects集合，如果不存在返回null
    */
   public static Set<String> getEffects(String name) {
-    BuiltinDef def = REGISTRY.get(name);
+    BuiltinDef def = REGISTRY.get(canonicalName(name));
     return def != null ? def.requiredEffects : null;
+  }
+
+  /**
+   * 把 parser / Core IR 里的运算符拼写归一化为 runtime builtin 名。
+   *
+   * <p>TS 引擎把 {@code x plus y} 降级为 {@code Call target Name "+"}（运算符
+   * 符号），Java 这边 builtin 注册名是 {@code add}。归一化前，{@code "+"} 在
+   * BuiltinCallNode 的 guard 里匹配不到 {@code "add"}，落到 CallNode 的
+   * unknown-call 分支返回 null —— 随后 GraalVM 把这个 guest null 结果转成 host
+   * Value 时 NPE（"arg2Value is null"）。归一化让这些调用在结果离开 guest
+   * 函数前就解析成功。覆盖符号（+ - * / %、比较）与英文拼写两种形式。
+   */
+  public static String canonicalName(String name) {
+    if (name == null) {
+      return null;
+    }
+    String normalized = name.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ").trim();
+    return switch (normalized) {
+      case "+", "plus" -> "add";
+      case "-", "minus" -> "sub";
+      case "*", "times", "multiplied by" -> "mul";
+      case "/", "divide", "divided by" -> "div";
+      case "%", "modulo" -> "mod";
+      case "==", "=", "equals", "equals to", "is" -> "eq";
+      case "!=", "not equals", "not equal to" -> "ne";
+      case "<", "less than", "under" -> "lt";
+      case ">", "greater than", "more than", "over" -> "gt";
+      case "<=", "less than or equal to", "at most" -> "lte";
+      case ">=", "greater than or equal to", "at least" -> "gte";
+      default -> name;
+    };
+  }
+
+  /** guard 辅助：name 归一化后是否等于给定 canonical builtin 名。 */
+  public static boolean isCanonicalName(String name, String canonical) {
+    return canonical.equals(canonicalName(name));
   }
 
   // ===  辅助方法 ===

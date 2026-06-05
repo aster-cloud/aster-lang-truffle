@@ -45,52 +45,52 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
    */
   @Idempotent
   protected boolean isAdd() {
-    return "add".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "add");
   }
 
   @Idempotent
   protected boolean isSub() {
-    return "sub".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "sub");
   }
 
   @Idempotent
   protected boolean isMul() {
-    return "mul".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "mul");
   }
 
   @Idempotent
   protected boolean isDiv() {
-    return "div".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "div");
   }
 
   @Idempotent
   protected boolean isMod() {
-    return "mod".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "mod");
   }
 
   @Idempotent
   protected boolean isEq() {
-    return "eq".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "eq");
   }
 
   @Idempotent
   protected boolean isLt() {
-    return "lt".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "lt");
   }
 
   @Idempotent
   protected boolean isGt() {
-    return "gt".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "gt");
   }
 
   @Idempotent
   protected boolean isLte() {
-    return "lte".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "lte");
   }
 
   @Idempotent
   protected boolean isGte() {
-    return "gte".equals(builtinName);
+    return Builtins.isCanonicalName(builtinName, "gte");
   }
 
   @Idempotent

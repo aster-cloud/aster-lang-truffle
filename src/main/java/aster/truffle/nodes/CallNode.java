@@ -97,7 +97,12 @@ public abstract class CallNode extends AsterExpressionNode {
       }
     }
 
-    // 3. Unknown call target - return null
-    return null;
+    // 3. Unknown call target — 在 guest 内显式失败，而不是返回 null。
+    // 返回 null 会让 GraalVM 在把结果转回 host Value 时抛出难以诊断的
+    // "arg2Value is null" NPE（ToHostValueNode）。在这里抛 guest 异常能给出
+    // 真正的根因（哪个 call target 没解析）。运算符拼写（+/plus 等）已由
+    // Builtins.canonicalName 在上面的 builtin 分支解析，不会落到这里。
+    throw new RuntimeException(
+        "Unknown call target: " + (t == null ? "null" : t));
   }
 }
