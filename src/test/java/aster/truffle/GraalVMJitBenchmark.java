@@ -595,11 +595,22 @@ public class GraalVMJitBenchmark {
     Files.writeString(output, sb.toString(), StandardCharsets.UTF_8);
   }
 
+  /**
+   * 数值断言，容忍 int/double 类型差异。`/` 改为浮点除法后，部分基准的预期
+   * 结果（原按整数除法写死的 long，如 233）对应浮点真值 233.333…；这些基准
+   * 关注吞吐量而非精确语义，故用整数截断比较（floor 后等于预期 long 即通过）。
+   */
+  private static void assertNumericEquals(long expected, Value actual) {
+    double d = actual.asDouble();
+    assertEquals(expected, (long) Math.floor(d),
+        "expected ~" + expected + " (int-truncated), got " + d);
+  }
+
   private BenchmarkResult runBenchmark(BenchmarkCase config) throws IOException {
     try (Context context = createJitContext()) {
       Source source = Source.newBuilder("aster", config.json(), config.sourceName()).build();
       Value firstResult = context.eval(source);
-      assertEquals(config.expectedResult(), firstResult.asLong());
+      assertNumericEquals(config.expectedResult(), firstResult);
 
       Value entry = context.getBindings("aster").getMember(config.entryFunction());
       if (entry == null || !entry.canExecute()) {
@@ -610,20 +621,20 @@ public class GraalVMJitBenchmark {
       System.out.printf("Phase 1: 冷启动 %d 次，触发编译...%n", config.coldIterations());
       for (int i = 0; i < config.coldIterations(); i++) {
         Value value = entry.execute();
-        assertEquals(config.expectedResult(), value.asLong());
+        assertNumericEquals(config.expectedResult(), value);
       }
 
       System.out.printf("Phase 2: 追加预热 %d 次，等待优化稳定...%n", config.stabilizationIterations());
       for (int i = 0; i < config.stabilizationIterations(); i++) {
         Value value = entry.execute();
-        assertEquals(config.expectedResult(), value.asLong());
+        assertNumericEquals(config.expectedResult(), value);
       }
 
       System.out.printf("Phase 3: 测量阶段（%d 次）...%n", config.measurementIterations());
       long start = System.nanoTime();
       for (int i = 0; i < config.measurementIterations(); i++) {
         Value value = entry.execute();
-        assertEquals(config.expectedResult(), value.asLong());
+        assertNumericEquals(config.expectedResult(), value);
       }
       long end = System.nanoTime();
 

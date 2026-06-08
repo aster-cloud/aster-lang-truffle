@@ -44,30 +44,8 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   /**
    * Guards helper methods - 标记为 @Idempotent 因为结果仅依赖于 @CompilationFinal 字段
    */
-  @Idempotent
-  protected boolean isAdd() {
-    return Builtins.isCanonicalName(builtinName, "add");
-  }
-
-  @Idempotent
-  protected boolean isSub() {
-    return Builtins.isCanonicalName(builtinName, "sub");
-  }
-
-  @Idempotent
-  protected boolean isMul() {
-    return Builtins.isCanonicalName(builtinName, "mul");
-  }
-
-  @Idempotent
-  protected boolean isDiv() {
-    return Builtins.isCanonicalName(builtinName, "div");
-  }
-
-  @Idempotent
-  protected boolean isMod() {
-    return Builtins.isCanonicalName(builtinName, "mod");
-  }
+  // 算术 add/sub/mul/div/mod 无 int 快路径（统一走 doGeneric → Builtins.*，
+  // 已做 int/double 提升 + 字符串拼接），故无 isAdd/isSub/isMul/isDiv/isMod guard。
 
   @Idempotent
   protected boolean isEq() {
@@ -161,121 +139,13 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     return argNodes.length == 1;
   }
 
-  /**
-   * 内联 add (int + int)
-   */
-  @Specialization(guards = {"isAdd()", "hasTwoArgs()"}, rewriteOn = UnexpectedResultException.class)
-  protected int doAddInt(VirtualFrame frame) throws UnexpectedResultException {
-    Profiler.inc("builtin_add_inlined");
-
-    // int 快路径。任一操作数不是 int（如字符串拼接 "Hello, " + name）时，
-    // executeInt 抛 UnexpectedResultException，Truffle 据 rewriteOn 重特化到
-    // doGeneric（返回 Object），由 Builtins.add 做字符串/数值双语义分发。
-    // 修复前这里 catch 后强制走 int-only 路径，导致字符串拼接抛 NFE。
-    int a = argNodes[0].executeInt(frame);
-    int b = argNodes[1].executeInt(frame);
-    return a + b;
-  }
-
-  /**
-   * 内联 sub (int - int)
-   */
-  @Specialization(guards = {"isSub()", "hasTwoArgs()"})
-  protected int doSubInt(VirtualFrame frame) {
-    Profiler.inc("builtin_sub_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a - b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Integer) {
-        return (int) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'sub' expected int result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
-    }
-  }
-
-  /**
-   * 内联 mul (int * int)
-   */
-  @Specialization(guards = {"isMul()", "hasTwoArgs()"})
-  protected int doMulInt(VirtualFrame frame) {
-    Profiler.inc("builtin_mul_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a * b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Integer) {
-        return (int) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'mul' expected int result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
-    }
-  }
-
-  /**
-   * 内联 div (int / int)，检查除数为零
-   */
-  @Specialization(guards = {"isDiv()", "hasTwoArgs()"})
-  protected int doDivInt(VirtualFrame frame) {
-    Profiler.inc("builtin_div_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a / b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Integer) {
-        return (int) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'div' expected int result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
-    }
-  }
-
-  /**
-   * 内联 mod (int % int)，检查除数为零
-   */
-  @Specialization(guards = {"isMod()", "hasTwoArgs()"})
-  protected int doModInt(VirtualFrame frame) {
-    Profiler.inc("builtin_mod_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a % b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Integer) {
-        return (int) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'mod' expected int result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
-    }
-  }
+  // 算术 add/sub/mul/div/mod 不再用 int 快路径（@Specialization 返回 int）。
+  // 原因：`/` 改为浮点后会产生 double，int 与 double 混算（如 subtotal(int) +
+  // tax(double)）经 int-specialization 的 rewriteOn / executeInt 重特化路径会
+  // 错误返回 UnexpectedResultException 携带的单个操作数值（实测 100 - 10.0 → 10）。
+  // 统一走 doGeneric → Builtins.*（已做 int/double 数值提升 + 字符串拼接双语义），
+  // 由 CoreIrEvalCli.valueToJson 的 fitsInInt 把整数值 double 收敛回 int，
+  // 与 TS（统一 number）逐位一致。算术非热点循环，正确性优先于内联。
 
   /**
    * 内联 eq (int == int)
@@ -838,8 +708,7 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
    * 处理所有未内联的 builtin 或类型不匹配的情况
    * Phase 3C P1-1: 添加 doListMapSmall, doListFilterSmall 到 replaces 列表
    */
-  @Specialization(replaces = {"doAddInt", "doSubInt", "doMulInt", "doDivInt", "doModInt",
-                               "doEqInt", "doLtInt", "doGtInt", "doLteInt", "doGteInt",
+  @Specialization(replaces = {"doEqInt", "doLtInt", "doGtInt", "doLteInt", "doGteInt",
                                "doAndBoolean", "doOrBoolean", "doNotBoolean",
                                "doTextConcat", "doTextLength", "doListLength", "doListAppend",
                                "doListMapSmall", "doListMap", "doListFilterSmall", "doListFilter"})

@@ -382,7 +382,8 @@ public class BenchmarkTest {
       int iterations = 10000;
       for (int i = 0; i < iterations; i++) {
         Value result = context.eval(source);
-        assertEquals(233, result.asInt(), "compute(100) should be 233");
+        // `/` 为浮点除法：compute(100) = 100*2 + 100/3 = 200 + 33.333… = 233.333…
+        assertEquals(200 + 100.0 / 3, result.asDouble(), 1e-9, "compute(100) should be 233.333…");
       }
       long end = System.nanoTime();
 
