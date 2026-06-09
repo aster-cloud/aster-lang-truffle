@@ -1,6 +1,8 @@
 package aster.truffle.runtime;
 
 import aster.truffle.nodes.LambdaValue;
+import aster.truffle.runtime.interop.AsterListValue;
+import aster.truffle.runtime.interop.AsterMapValue;
 import com.oracle.truffle.api.CallTarget;
 import java.util.*;
 
@@ -264,13 +266,15 @@ public final class Builtins {
 
     register("List.length", new BuiltinDef(args -> {
       checkArity("List.length", args, 1);
-      if (args[0] instanceof List<?> l) return l.size();
+      List<Object> l = asList(args[0]);
+      if (l != null) return l.size();
       throw new BuiltinException(ErrorMessages.operationExpectedType("List.length", "List", typeName(args[0])));
     }));
 
     register("List.get", new BuiltinDef(args -> {
       checkArity("List.get", args, 2);
-      if (args[0] instanceof List<?> l) {
+      List<Object> l = asList(args[0]);
+      if (l != null) {
         int idx = toInt(args[1]);
         if (idx < 0 || idx >= l.size()) throw new BuiltinException(ErrorMessages.collectionIndexOutOfBounds(idx, l.size()));
         return l.get(idx);
@@ -304,10 +308,18 @@ public final class Builtins {
 
     register("List.contains", new BuiltinDef(args -> {
       checkArity("List.contains", args, 2);
-      if (args[0] instanceof List<?> l) {
+      List<Object> l = asList(args[0]);
+      if (l != null) {
         return l.contains(args[1]);
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("List.contains", "List", typeName(args[0])));
+    }));
+
+    register("List.isEmpty", new BuiltinDef(args -> {
+      checkArity("List.isEmpty", args, 1);
+      List<Object> l = asList(args[0]);
+      if (l != null) return l.isEmpty();
+      throw new BuiltinException(ErrorMessages.operationExpectedType("List.isEmpty", "List", typeName(args[0])));
     }));
 
     register("List.slice", new BuiltinDef(args -> {
@@ -324,7 +336,8 @@ public final class Builtins {
 
     register("List.map", new BuiltinDef(args -> {
       checkArity("List.map", args, 2);
-      if (!(args[0] instanceof List<?> l)) {
+      List<Object> l = asList(args[0]);
+      if (l == null) {
         throw new BuiltinException(ErrorMessages.operationExpectedType("List.map", "List", typeName(args[0])));
       }
       if (!(args[1] instanceof LambdaValue lambda)) {
@@ -382,7 +395,8 @@ public final class Builtins {
 
     register("List.reduce", new BuiltinDef(args -> {
       checkArity("List.reduce", args, 3);
-      if (!(args[0] instanceof List<?> l)) {
+      List<Object> l = asList(args[0]);
+      if (l == null) {
         throw new BuiltinException(ErrorMessages.operationExpectedType("List.reduce", "List", typeName(args[0])));
       }
       Object accumulator = args[1]; // initial value
@@ -416,8 +430,9 @@ public final class Builtins {
 
     register("Map.get", new BuiltinDef(args -> {
       checkArity("Map.get", args, 2);
-      if (args[0] instanceof Map<?,?> m) {
-        return m.get(args[1]);
+      Map<String, Object> m = asMap(args[0]);
+      if (m != null) {
+        return m.get(String.valueOf(args[1]));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.get", "Map", typeName(args[0])));
     }));
@@ -446,8 +461,9 @@ public final class Builtins {
 
     register("Map.contains", new BuiltinDef(args -> {
       checkArity("Map.contains", args, 2);
-      if (args[0] instanceof Map<?,?> m) {
-        return m.containsKey(args[1]);
+      Map<String, Object> m = asMap(args[0]);
+      if (m != null) {
+        return m.containsKey(String.valueOf(args[1]));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.contains", "Map", typeName(args[0])));
     }));
@@ -932,6 +948,41 @@ public final class Builtins {
 
   private static Object unwrap(Object value) {
     return AsterPiiValue.unwrap(value);
+  }
+
+  /**
+   * 把一个值转成 {@link List}（若可能），否则返回 null。既接受引擎内部产生的原生
+   * {@code java.util.List}，也接受 guest 互操作列表 {@link AsterListValue}（例如 CLI/宿主
+   * 经 {@link AsterInteropAdapter} 注入的数组）。统一在此处归一，避免每个 List.* builtin
+   * 各写一遍类型判断。
+   */
+  public static List<Object> asList(Object o) {
+    Object v = unwrap(o);
+    if (v instanceof AsterListValue alv) {
+      return alv.elements();
+    }
+    if (v instanceof List<?> l) {
+      @SuppressWarnings("unchecked")
+      List<Object> cast = (List<Object>) l;
+      return cast;
+    }
+    return null;
+  }
+
+  /**
+   * 把一个值转成 {@code Map<String,Object>}（若可能），否则返回 null。既接受原生
+   * {@code java.util.Map}，也接受 guest 互操作映射 {@link AsterMapValue}。
+   */
+  @SuppressWarnings("unchecked")
+  public static Map<String, Object> asMap(Object o) {
+    Object v = unwrap(o);
+    if (v instanceof AsterMapValue amv) {
+      return amv.entries();
+    }
+    if (v instanceof Map<?, ?> m) {
+      return (Map<String, Object>) m;
+    }
+    return null;
   }
 
   /**

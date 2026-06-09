@@ -131,7 +131,8 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
       return false;
     }
     Object listObj = argNodes[0].executeGeneric(frame);
-    return listObj instanceof List<?> list && list.size() <= 10;
+    List<Object> list = Builtins.asList(listObj);
+    return list != null && list.size() <= 10;
   }
 
   @Idempotent
@@ -393,7 +394,8 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Profiler.inc("builtin_list_length_inlined");
 
     Object list = argNodes[0].executeGeneric(frame);
-    if (list instanceof List<?> l) {
+    List<Object> l = Builtins.asList(list);
+    if (l != null) {
       return l.size();
     }
 
@@ -416,8 +418,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object listObj = argNodes[0].executeGeneric(frame);
     Object element = argNodes[1].executeGeneric(frame);
 
-    if (listObj instanceof List<?>) {
-      List<Object> mutable = new ArrayList<>((List<Object>)listObj);
+    List<Object> src = Builtins.asList(listObj);
+    if (src != null) {
+      List<Object> mutable = new ArrayList<>(src);
       mutable.add(element);
       return mutable;
     }
@@ -447,8 +450,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object listObj = argNodes[0].executeGeneric(frame);
     Object lambdaObj = argNodes[1].executeGeneric(frame);
 
-    // 类型检查
-    if (!(listObj instanceof List<?> list)) {
+    // 类型检查（asList 兼容 guest AsterListValue 与原生 java.util.List）
+    List<Object> list = Builtins.asList(listObj);
+    if (list == null) {
       throw new RuntimeException(
         ErrorMessages.operationExpectedType("List.map", "List",
           listObj == null ? "null" : listObj.getClass().getSimpleName())
@@ -514,8 +518,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object listObj = argNodes[0].executeGeneric(frame);
     Object lambdaObj = argNodes[1].executeGeneric(frame);
 
-    // 类型检查
-    if (!(listObj instanceof List<?> list)) {
+    // 类型检查（asList 兼容 guest AsterListValue 与原生 java.util.List）
+    List<Object> list = Builtins.asList(listObj);
+    if (list == null) {
       throw new RuntimeException(
         ErrorMessages.operationExpectedType("List.map", "List",
           listObj == null ? "null" : listObj.getClass().getSimpleName())
@@ -578,8 +583,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object listObj = argNodes[0].executeGeneric(frame);
     Object predicateObj = argNodes[1].executeGeneric(frame);
 
-    // 类型检查
-    if (!(listObj instanceof List<?> list)) {
+    // 类型检查（asList 兼容 guest AsterListValue 与原生 java.util.List）
+    List<Object> list = Builtins.asList(listObj);
+    if (list == null) {
       throw new RuntimeException(
         ErrorMessages.operationExpectedType("List.filter", "List",
           listObj == null ? "null" : listObj.getClass().getSimpleName())
@@ -647,8 +653,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object listObj = argNodes[0].executeGeneric(frame);
     Object predicateObj = argNodes[1].executeGeneric(frame);
 
-    // 类型检查
-    if (!(listObj instanceof List<?> list)) {
+    // 类型检查（asList 兼容 guest AsterListValue 与原生 java.util.List）
+    List<Object> list = Builtins.asList(listObj);
+    if (list == null) {
       throw new RuntimeException(
         ErrorMessages.operationExpectedType("List.filter", "List",
           listObj == null ? "null" : listObj.getClass().getSimpleName())

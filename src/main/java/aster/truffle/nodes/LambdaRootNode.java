@@ -77,9 +77,14 @@ public final class LambdaRootNode extends RootNode {
       if (AsterConfig.DEBUG) {
         System.err.println("DEBUG: lambda body returned=" + result);
       }
-      return result;
+      return aster.truffle.runtime.interop.AsterInteropAdapter.adapt(result);
     } catch (ReturnNode.ReturnException r) {
-      return r.value;
+      // 把返回的原生集合/结构（java.util.List/Map）归一为 guest 互操作值
+      // （AsterListValue/AsterMapValue），使其作为入口函数被宿主 Value.execute()
+      // 调用时能正确跨边界（否则裸 LinkedHashMap 会在 ToHostValue 处抛
+      // ClassCastException）；内部互调的下游消费点（asList/asMap、MatchNode、
+      // 各 Maybe/Result builtins）已统一识别这些包装类型。
+      return aster.truffle.runtime.interop.AsterInteropAdapter.adapt(r.value);
     }
   }
 
