@@ -15,8 +15,13 @@ import java.util.Map;
 public final class AsterMapValue implements TruffleObject {
   private final Map<String, Object> entries;
 
-  AsterMapValue(Map<String, Object> entries) {
+  public AsterMapValue(Map<String, Object> entries) {
     this.entries = entries;
+  }
+
+  /** 暴露底层映射，供 Map.* builtins 直接消费。 */
+  public Map<String, Object> entries() {
+    return entries;
   }
 
   @ExportMessage

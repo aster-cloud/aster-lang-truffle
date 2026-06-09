@@ -393,7 +393,8 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Profiler.inc("builtin_list_length_inlined");
 
     Object list = argNodes[0].executeGeneric(frame);
-    if (list instanceof List<?> l) {
+    List<Object> l = Builtins.asList(list);
+    if (l != null) {
       return l.size();
     }
 
@@ -416,8 +417,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object listObj = argNodes[0].executeGeneric(frame);
     Object element = argNodes[1].executeGeneric(frame);
 
-    if (listObj instanceof List<?>) {
-      List<Object> mutable = new ArrayList<>((List<Object>)listObj);
+    List<Object> src = Builtins.asList(listObj);
+    if (src != null) {
+      List<Object> mutable = new ArrayList<>(src);
       mutable.add(element);
       return mutable;
     }

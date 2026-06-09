@@ -17,6 +17,11 @@ public final class AsterListValue implements TruffleObject {
     this.elements = elements;
   }
 
+  /** 暴露底层列表，供 List.* builtins 直接消费（避免逐元素 interop 读取）。 */
+  public List<Object> elements() {
+    return elements;
+  }
+
   @ExportMessage
   boolean hasArrayElements() {
     return true;

@@ -154,6 +154,7 @@ class CoreIrEvalCli {
             throws Exception {
         String samplePath = request.path("samplePath").asText("");
         JsonNode inputArr = request.path("input");
+        String entry = request.path("entry").asText("");
         if (samplePath.isEmpty()) {
             throw new IllegalArgumentException("samplePath required");
         }
@@ -173,6 +174,28 @@ class CoreIrEvalCli {
         aster.core.ast.Module ast = builder.visitModule(moduleCtx);
 
         CoreModel.Module coreModule = lowering.lowerModule(ast);
+
+        // The language's parse() picks the entry function via DEFAULT_FUNCTION
+        // (env ASTER_TRUFFLE_FUNC, default "main"); when absent it falls back to
+        // the *first* Func declaration. Multi-rule samples therefore always ran
+        // their first rule regardless of the requested entry. Hoist the requested
+        // entry Func to the front of the decls so the loader's first-Func fallback
+        // selects it. (Test-only IR reshaping; production runtime is untouched.)
+        if (!entry.isEmpty() && coreModule.decls != null) {
+            java.util.List<CoreModel.Decl> decls = new java.util.ArrayList<>(coreModule.decls);
+            int idx = -1;
+            for (int i = 0; i < decls.size(); i++) {
+                if (decls.get(i) instanceof CoreModel.Func f && entry.equals(f.name)) {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx > 0) {
+                decls.add(0, decls.remove(idx));
+                coreModule.decls = decls;
+            }
+        }
+
         String coreJson = MAPPER.writeValueAsString(coreModule);
 
         // Restricted polyglot context — Codex review R-Phase-C-C1. Even
@@ -232,10 +255,15 @@ class CoreIrEvalCli {
         // kept as `_type` so guest struct/enum matching sees it (TS uses __type,
         // the guest's AsterDataValue exposes _type). The tier1 .cases.json files
         // pass structs as plain JSON objects.
+        // Inject collections as the guest's own interop values (AsterListValue /
+        // AsterMapValue) rather than raw host List/Map. A host collection crossing the
+        // HostAccess.EXPLICIT boundary becomes an opaque HostObject the List.*/Map.*
+        // builtins can't see into; the guest-native wrappers are recognized directly by
+        // Builtins.asList/asMap (and expose members for struct/enum pattern matching).
         if (node.isArray()) {
             java.util.List<Object> list = new java.util.ArrayList<>();
             node.forEach(el -> list.add(jsonToHostArg(el)));
-            return list;
+            return new aster.truffle.runtime.interop.AsterListValue(list);
         }
         if (node.isObject()) {
             java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
@@ -243,7 +271,7 @@ class CoreIrEvalCli {
                 String key = "__type".equals(e.getKey()) ? "_type" : e.getKey();
                 map.put(key, jsonToHostArg(e.getValue()));
             });
-            return map;
+            return new aster.truffle.runtime.interop.AsterMapValue(map);
         }
         return node;
     }
