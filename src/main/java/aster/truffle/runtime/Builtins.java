@@ -94,6 +94,16 @@ public final class Builtins {
       return toDouble(args[0]) / divisor;
     }));
 
+    register("intdiv", new BuiltinDef(args -> {
+      checkArity("intdiv", args, 2);
+      // 整除：向零截断，与 TS 解释器一致（interpreter.ts case '//' = Math.trunc）
+      // 及 Java/Go/C 语义：`-7 integer divided by 2 = -3`。在 double 上做除法再
+      // 截断，避免大整数溢出；结果是整数值，返回 long（fitsInInt 收敛回 int）。
+      double divisor = toDouble(args[1]);
+      if (divisor == 0.0) throw new BuiltinException(ErrorMessages.arithmeticDivisionByZero());
+      return (long) (toDouble(args[0]) / divisor);
+    }));
+
     register("mod", new BuiltinDef(args -> {
       checkArity("mod", args, 2);
       // 与 TS 的 `%` 一致：任一为浮点 → 浮点取模（Java `%` 对 double 有定义）。
@@ -817,6 +827,7 @@ public final class Builtins {
       case "-", "minus" -> "sub";
       case "*", "times", "multiplied by" -> "mul";
       case "/", "divide", "divided by" -> "div";
+      case "//", "integer divide", "integer divided by" -> "intdiv";
       case "%", "modulo" -> "mod";
       case "==", "=", "equals", "equals to", "is" -> "eq";
       case "!=", "not equals", "not equal to" -> "ne";
