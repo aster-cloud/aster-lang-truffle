@@ -133,31 +133,47 @@ public abstract class MatchNode extends AsterExpressionNode {
     }
   }
 
-  // Name match: match if s equals the variant name or map with _type == name; else non-null catch-all
+  // Name pattern, two meanings distinguished by case (mirrors the TS interpreter):
+  //   - Capitalized name (enum variant / type, e.g. NotFound) → match by name
+  //     equality; does NOT bind. Without this, a lowercase catch-all arm could
+  //     never be reached when the scrutinee is an enum-as-string, and a
+  //     Capitalized arm would not exclude other variants.
+  //   - lowercase name (binding var, e.g. x / value) → catch-all: matches any
+  //     non-null value and binds it. (A `When null` arm is a separate PatNull.)
   public static final class PatNameNode extends PatternNode {
     private final String name;
     public PatNameNode(String name) { this.name = name; }
+    private boolean isVariant() {
+      return name != null && !name.isEmpty() && Character.isUpperCase(name.charAt(0));
+    }
     @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, Env env) {
       if (AsterConfig.DEBUG) {
         System.err.println("DEBUG: PatNameNode name=" + name + " scrutinee=" + s + " type=" + (s == null ? "null" : s.getClass().getName()));
       }
-      if (s == null) return false;
-      if (s instanceof String) return name.equals(s);
-      if (s instanceof AsterEnumValue enumValue) {
-        return name.equals(enumValue.getVariantName()) || name.equals(enumValue.getEnumName());
-      }
-      if (s instanceof AsterDataValue dataValue) {
-        return name.equals(dataValue.getTypeName());
-      }
-      if (s instanceof java.util.Map) {
-        var m = (java.util.Map<String,Object>) s;
-        Object v = m.get("value");
-        if (v instanceof String && name.equals(v)) return true; // enum variant value
-        Object t = m.get("_type");
-        if (t instanceof String && name.equals(t)) return true; // constructor type fallback
+      if (isVariant()) {
+        if (s == null) return false;
+        if (s instanceof String) return name.equals(s);
+        if (s instanceof AsterEnumValue enumValue) {
+          return name.equals(enumValue.getVariantName()) || name.equals(enumValue.getEnumName());
+        }
+        if (s instanceof AsterDataValue dataValue) {
+          return name.equals(dataValue.getTypeName());
+        }
+        if (s instanceof java.util.Map) {
+          var m = (java.util.Map<String,Object>) s;
+          Object v = m.get("value");
+          if (v instanceof String && name.equals(v)) return true; // enum variant value
+          Object t = m.get("_type");
+          return t instanceof String && name.equals(t); // constructor type fallback
+        }
         return false;
       }
-      return true; // fallback catch-all on non-null values
+      // lowercase: catch-all binding over any non-null value.
+      if (s == null) return false;
+      if (!(name == null || name.isEmpty() || "_".equals(name))) {
+        env.set(name, s);
+      }
+      return true;
     }
   }
 
