@@ -75,8 +75,19 @@ public abstract class MatchNode extends AsterExpressionNode {
     public abstract boolean matchesAndBind(Object s, Env env);
   }
 
+  /**
+   * 一个值在 guest 视角下是否为 null。既包括 Java {@code null}（引擎内部产生的
+   * null），也包括 interop-null——当宿主经 {@code Value.execute(null)} 注入一个
+   * null 参数时，GraalVM 把它包成 {@code isNull()==true} 的 HostObject 而非裸
+   * Java null。两者在 {@code When null} 语义下都应视为 null。
+   */
+  static boolean isGuestNull(Object s) {
+    if (s == null) return true;
+    return com.oracle.truffle.api.interop.InteropLibrary.getUncached().isNull(s);
+  }
+
   public static final class PatNullNode extends PatternNode {
-    @Override public boolean matchesAndBind(Object s, Env env) { return s == null; }
+    @Override public boolean matchesAndBind(Object s, Env env) { return isGuestNull(s); }
   }
 
   // ctor match: match Data 值或旧 Map，按字段顺序依次绑定
@@ -168,8 +179,10 @@ public abstract class MatchNode extends AsterExpressionNode {
         }
         return false;
       }
-      // lowercase: catch-all binding over any non-null value.
-      if (s == null) return false;
+      // lowercase: catch-all binding over any non-null value. interop-null (a
+      // host-injected null) must NOT match here — it belongs to the `When null`
+      // arm, same as a Java null.
+      if (isGuestNull(s)) return false;
       if (!(name == null || name.isEmpty() || "_".equals(name))) {
         env.set(name, s);
       }
