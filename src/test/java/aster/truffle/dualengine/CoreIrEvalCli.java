@@ -227,9 +227,24 @@ class CoreIrEvalCli {
         if (node.isLong()) return node.asLong();
         if (node.isDouble() || node.isFloat()) return node.asDouble();
         if (node.isTextual()) return node.asText();
-        // Fallback: pass the JsonNode as-is. Truffle's host access will
-        // refuse if the language can't handle it, which is reflected in
-        // the per-case error on the runner side.
+        // Arrays → java.util.List; objects (structs) → java.util.Map. Both are
+        // member/element-accessible by the guest. A `__type` key in the JSON is
+        // kept as `_type` so guest struct/enum matching sees it (TS uses __type,
+        // the guest's AsterDataValue exposes _type). The tier1 .cases.json files
+        // pass structs as plain JSON objects.
+        if (node.isArray()) {
+            java.util.List<Object> list = new java.util.ArrayList<>();
+            node.forEach(el -> list.add(jsonToHostArg(el)));
+            return list;
+        }
+        if (node.isObject()) {
+            java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+            node.fields().forEachRemaining(e -> {
+                String key = "__type".equals(e.getKey()) ? "_type" : e.getKey();
+                map.put(key, jsonToHostArg(e.getValue()));
+            });
+            return map;
+        }
         return node;
     }
 
@@ -242,9 +257,32 @@ class CoreIrEvalCli {
             return MAPPER.getNodeFactory().numberNode(v.asDouble());
         }
         if (v.isString()) return MAPPER.getNodeFactory().textNode(v.asString());
-        // Lossy fallback for host objects. The sidecar field tells the
-        // parity runner the original wasn't a JSON primitive so it can
-        // mark the row as "comparable as string only".
+        // Lists → JSON arrays.
+        if (v.hasArrayElements()) {
+            var arr = MAPPER.createArrayNode();
+            long n = v.getArraySize();
+            for (long i = 0; i < n; i++) arr.add(valueToJson(v.getArrayElement(i)));
+            return arr;
+        }
+        // Structs / data values → { "__type": TypeName, ...fields } — the same
+        // shape the TS interpreter emits, so construct-returning samples can be
+        // compared structurally (was a lossy "__display" string before).
+        if (v.hasMembers()) {
+            var keys = v.getMemberKeys();
+            // The Aster type name is exposed as a `_type` member; surface it as
+            // `__type` (TS's key) and drop the internal `_type` from the body.
+            String typeName = keys.contains("_type") && v.getMember("_type").isString()
+                ? v.getMember("_type").asString()
+                : (v.getMetaObject() != null ? v.getMetaObject().getMetaQualifiedName() : "?");
+            ObjectNode out = MAPPER.createObjectNode();
+            out.put("__type", typeName);
+            for (String key : keys) {
+                if ("_type".equals(key)) continue;
+                out.set(key, valueToJson(v.getMember(key)));
+            }
+            return out;
+        }
+        // Truly opaque fallback (should be rare now).
         ObjectNode out = MAPPER.createObjectNode();
         out.put("__type", v.getMetaObject() != null ? v.getMetaObject().getMetaQualifiedName() : "?");
         out.put("__display", v.toString());
