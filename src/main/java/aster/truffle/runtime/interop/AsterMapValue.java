@@ -8,11 +8,20 @@ import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+/**
+ * Guest 互操作映射。除了导出 InteropLibrary（供 Polyglot 边界按成员访问），还
+ * 直接实现 {@code Map<String,Object>}（委托给底层 entries）——这样所有既有的
+ * {@code instanceof Map<?,?>} 消费点（MatchNode 结构/枚举匹配、Maybe/Result/Option
+ * 全套 builtins 读取 {@code _type}）无需改动即可识别它，避免在 30+ 处分支里各加
+ * 一遍对包装类型的特判（消灭特殊情况，而非到处打补丁）。
+ */
 @ExportLibrary(InteropLibrary.class)
-public final class AsterMapValue implements TruffleObject {
+public final class AsterMapValue implements TruffleObject, Map<String, Object> {
   private final Map<String, Object> entries;
 
   public AsterMapValue(Map<String, Object> entries) {
@@ -23,6 +32,20 @@ public final class AsterMapValue implements TruffleObject {
   public Map<String, Object> entries() {
     return entries;
   }
+
+  // --- Map<String,Object> 委托 ---
+  @Override public int size() { return entries.size(); }
+  @Override public boolean isEmpty() { return entries.isEmpty(); }
+  @Override public boolean containsKey(Object key) { return entries.containsKey(key); }
+  @Override public boolean containsValue(Object value) { return entries.containsValue(value); }
+  @Override public Object get(Object key) { return entries.get(key); }
+  @Override public Object put(String key, Object value) { return entries.put(key, value); }
+  @Override public Object remove(Object key) { return entries.remove(key); }
+  @Override public void putAll(Map<? extends String, ?> m) { entries.putAll(m); }
+  @Override public void clear() { entries.clear(); }
+  @Override public Set<String> keySet() { return entries.keySet(); }
+  @Override public Collection<Object> values() { return entries.values(); }
+  @Override public Set<Map.Entry<String, Object>> entrySet() { return entries.entrySet(); }
 
   @ExportMessage
   boolean hasMembers() {
