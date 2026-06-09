@@ -60,67 +60,84 @@ public final class Builtins {
     register("add", new BuiltinDef(args -> {
       checkArity("add", args, 2);
       // `+` 双语义，与 TS 解释器一致（interpreter.ts case '+'）：任一操作数
-      // 是字符串 → 字符串拼接；否则整数相加。修复前强制 toInt 导致
+      // 是字符串 → 字符串拼接；否则数值相加。修复前强制 toInt 导致
       // "Hello, " + name 抛 NumberFormatException（双引擎 eval 分歧）。
       Object a = unwrap(args[0]);
       Object b = unwrap(args[1]);
       if (a instanceof String || b instanceof String) {
         return textValue(args[0]) + textValue(args[1]);
       }
-      return toInt(args[0]) + toInt(args[1]);
+      // 数值相加须支持 int+double 提升：div 现为浮点，`subtotal(int) + tax(double)`
+      // 若强制 toInt 会丢失小数且与 TS（统一 number）分歧。任一为浮点 → double。
+      return numericAdd(args[0], args[1]);
     }));
 
     register("sub", new BuiltinDef(args -> {
       checkArity("sub", args, 2);
-      return toInt(args[0]) - toInt(args[1]);
+      return numericSub(args[0], args[1]);
     }));
 
     register("mul", new BuiltinDef(args -> {
       checkArity("mul", args, 2);
-      return toInt(args[0]) * toInt(args[1]);
+      return numericMul(args[0], args[1]);
     }));
 
     register("div", new BuiltinDef(args -> {
       checkArity("div", args, 2);
-      int divisor = toInt(args[1]);
-      if (divisor == 0) throw new BuiltinException(ErrorMessages.arithmeticDivisionByZero());
-      return toInt(args[0]) / divisor;
+      // `/` 为浮点除法，与 TS 解释器一致（interpreter.ts case '/'）：`7 / 2`
+      // 返回 3.5，而非整数截断的 3。修复前 toInt(a)/toInt(b) 做整数除法导致
+      // 双引擎 eval 分歧。返回 double 即可对齐——CoreIrEvalCli.valueToJson 会
+      // 把整除得到的整数值（如 20/4=5.0）经 fitsInInt 收敛回 `5`，
+      // 与 TS 的 JSON 序列化（5.0 → 5、3.5 → 3.5）逐位一致。
+      double divisor = toDouble(args[1]);
+      if (divisor == 0.0) throw new BuiltinException(ErrorMessages.arithmeticDivisionByZero());
+      return toDouble(args[0]) / divisor;
     }));
 
     register("mod", new BuiltinDef(args -> {
       checkArity("mod", args, 2);
+      // 与 TS 的 `%` 一致：任一为浮点 → 浮点取模（Java `%` 对 double 有定义）。
+      if (isFractional(args[0]) || isFractional(args[1])) {
+        return toDouble(args[0]) % toDouble(args[1]);
+      }
       return toInt(args[0]) % toInt(args[1]);
     }));
 
     // === Comparison Operations (纯函数) ===
+    // 数值比较一律按 double 进行，与 TS 统一 number 语义一致：`0.0 == 0` 为真。
+    // 修复前 eq 用 Objects.equals 比较 Double(0.0) 与 Integer(0) → false（div 改
+    // 浮点后 `remainder equals to 0` 双引擎分歧）；lt/lte/gt/gte 强制 toInt 会丢
+    // 小数。仅当两侧都是数值时走数值比较，否则退回结构相等。
     register("eq", new BuiltinDef(args -> {
       checkArity("eq", args, 2);
-      return Objects.equals(args[0], args[1]);
+      if (isNumber(args[0]) && isNumber(args[1])) return toDouble(args[0]) == toDouble(args[1]);
+      return Objects.equals(unwrap(args[0]), unwrap(args[1]));
     }));
 
     register("ne", new BuiltinDef(args -> {
       checkArity("ne", args, 2);
-      return !Objects.equals(args[0], args[1]);
+      if (isNumber(args[0]) && isNumber(args[1])) return toDouble(args[0]) != toDouble(args[1]);
+      return !Objects.equals(unwrap(args[0]), unwrap(args[1]));
     }));
 
     register("lt", new BuiltinDef(args -> {
       checkArity("lt", args, 2);
-      return toInt(args[0]) < toInt(args[1]);
+      return toDouble(args[0]) < toDouble(args[1]);
     }));
 
     register("lte", new BuiltinDef(args -> {
       checkArity("lte", args, 2);
-      return toInt(args[0]) <= toInt(args[1]);
+      return toDouble(args[0]) <= toDouble(args[1]);
     }));
 
     register("gt", new BuiltinDef(args -> {
       checkArity("gt", args, 2);
-      return toInt(args[0]) > toInt(args[1]);
+      return toDouble(args[0]) > toDouble(args[1]);
     }));
 
     register("gte", new BuiltinDef(args -> {
       checkArity("gte", args, 2);
-      return toInt(args[0]) >= toInt(args[1]);
+      return toDouble(args[0]) >= toDouble(args[1]);
     }));
 
     // === Boolean Operations (纯函数) ===
@@ -857,6 +874,44 @@ public final class Builtins {
     if (value instanceof Number n) return n.intValue();
     if (value instanceof String s) return Integer.parseInt(s);
     throw new BuiltinException(ErrorMessages.typeExpectedGot("Int", typeName(o)));
+  }
+
+  private static double toDouble(Object o) {
+    Object value = unwrap(o);
+    if (value instanceof Number n) return n.doubleValue();
+    if (value instanceof String s) return Double.parseDouble(s);
+    throw new BuiltinException(ErrorMessages.typeExpectedGot("Number", typeName(o)));
+  }
+
+  /**
+   * 数值是否为浮点（Double/Float）。与 TS 统一 number 不同，Java 区分 Int/Double；
+   * 只要任一操作数是浮点，算术结果就应保持浮点，避免 int+double 丢失小数。
+   */
+  private static boolean isFractional(Object o) {
+    Object value = unwrap(o);
+    return value instanceof Double || value instanceof Float;
+  }
+
+  private static boolean isNumber(Object o) {
+    return unwrap(o) instanceof Number;
+  }
+
+  // 数值算术：任一操作数为浮点 → double 结果；否则 int。结果若为整数值，
+  // 由调用方序列化层（CoreIrEvalCli.valueToJson 的 fitsInInt）收敛回 int，
+  // 与 TS 的 JSON 序列化逐位一致。
+  private static Object numericAdd(Object a, Object b) {
+    if (isFractional(a) || isFractional(b)) return toDouble(a) + toDouble(b);
+    return toInt(a) + toInt(b);
+  }
+
+  private static Object numericSub(Object a, Object b) {
+    if (isFractional(a) || isFractional(b)) return toDouble(a) - toDouble(b);
+    return toInt(a) - toInt(b);
+  }
+
+  private static Object numericMul(Object a, Object b) {
+    if (isFractional(a) || isFractional(b)) return toDouble(a) * toDouble(b);
+    return toInt(a) * toInt(b);
   }
 
   private static String textValue(Object value) {

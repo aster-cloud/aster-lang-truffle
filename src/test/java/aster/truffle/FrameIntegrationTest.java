@@ -25,12 +25,9 @@ public class FrameIntegrationTest {
         .allowAllAccess(true)
         .build();
 
-    // 注册常用 builtin 函数
-    aster.truffle.runtime.Builtins.register("add", new aster.truffle.runtime.Builtins.BuiltinDef(args -> {
-      int a = (Integer) args[0];
-      int b = (Integer) args[1];
-      return a + b;
-    }));
+    // 注册测试专用 builtin。不再覆盖内置 `add`：内置 add 现已支持 int/double
+    // 数值提升与字符串拼接，旧的 (Integer) 强转版本会污染全局 REGISTRY，导致
+    // 后续在同一 JVM 跑的浮点除法基准（如 GraalVMJitBenchmark）抛 ClassCastException。
     aster.truffle.runtime.Builtins.register("double", new aster.truffle.runtime.Builtins.BuiltinDef(args -> {
       int n = (Integer) args[0];
       return n * 2;
