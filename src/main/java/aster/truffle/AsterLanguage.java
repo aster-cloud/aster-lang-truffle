@@ -35,10 +35,20 @@ public final class AsterLanguage extends TruffleLanguage<AsterContext> {
   public static final String MIME_JSON = "application/json";
 
   /**
-   * 获取当前线程的 AsterContext (通过 TruffleLanguage API)
+   * 缓存的 ContextReference，替代已 deprecated 的 {@code getCurrentContext(Class)}。
+   * {@code create()} 对同一语言类保证返回同一引用，故作静态常量持有。
+   */
+  private static final ContextReference<AsterContext> CONTEXT_REF =
+      ContextReference.create(AsterLanguage.class);
+
+  /**
+   * 获取当前线程的 AsterContext (通过 TruffleLanguage API)。
+   * <p>传 {@code null} 节点：官方支持的用法（无 PE-constant 节点可用时）。调用方均为
+   * Node，未来若需 PE 优化可改传 {@code this}，但规则引擎单次 eval 短，收益微小，
+   * 故保持无参便捷形态。
    */
   public static AsterContext getContext() {
-    return getCurrentContext(AsterLanguage.class);
+    return CONTEXT_REF.get(null);
   }
 
   @Override
