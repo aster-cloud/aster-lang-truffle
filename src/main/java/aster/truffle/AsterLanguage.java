@@ -35,7 +35,7 @@ public final class AsterLanguage extends TruffleLanguage<AsterContext> {
   public static final String MIME_JSON = "application/json";
 
   /**
-   * 缓存的 ContextReference，替代已 deprecated 的 {@code getCurrentContext(Class)}。
+   * 缓存的 ContextReference —— GraalVM 推荐的当前上下文获取方式。
    * {@code create()} 对同一语言类保证返回同一引用，故作静态常量持有。
    */
   private static final ContextReference<AsterContext> CONTEXT_REF =
