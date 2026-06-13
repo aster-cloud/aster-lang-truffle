@@ -69,9 +69,13 @@ jobs:
       - name: Native Compile
         run: ./gradlew nativeCompile
 
+      # nativeCompile 产出 shared library（Linux `aster.so` / macOS `aster.dylib`）
+      # + C headers，不是独立 executable（Truffle polyglot embedding 用）。旧路径
+      # 硬编码 `aster` → 找不到文件、从不上传。上传整个 nativeCompile 目录（含 .so
+      # + headers），跨 OS 通用。
       - name: Upload Native Binary
         uses: actions/upload-artifact@v7
         with:
           name: aster-native
-          path: build/native/nativeCompile/aster
+          path: build/native/nativeCompile/
           retention-days: 7
