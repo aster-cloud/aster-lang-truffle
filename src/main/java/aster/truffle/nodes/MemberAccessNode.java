@@ -186,6 +186,10 @@ public final class MemberAccessNode extends AsterExpressionNode {
      *       native-image / 严格模块场景下最常见的失败原因，对运维更友好。</li>
      * </ul>
      */
+    // TODO(#14): replace this reflective HostObject/HostProxy field read with an
+    // InteropLibrary-only access path (or register these Graal-internal classes for
+    // native-image), so member access on host-wrapped objects doesn't throw
+    // InaccessibleObjectException under native image. Deferred from PR #14.
     @CompilerDirectives.TruffleBoundary
     private Object unwrapHostObject(Object obj) {
         if (obj == null) return null;

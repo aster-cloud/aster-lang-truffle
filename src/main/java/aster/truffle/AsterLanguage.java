@@ -22,7 +22,7 @@ import com.oracle.truffle.api.source.Source;
  *   <li>自动检测：根据源码内容识别语言</li>
  * </ul>
  */
-@TruffleLanguage.Registration(id = "aster", name = "Aster", version = "0.1")
+@TruffleLanguage.Registration(id = "aster", name = "Aster", version = "1.0.2")
 public final class AsterLanguage extends TruffleLanguage<AsterContext> {
 
   /** 中文 CNL MIME type */

@@ -99,8 +99,15 @@ public final class Builtins {
     register("intdiv", new BuiltinDef(args -> {
       checkArity("intdiv", args, 2);
       // 整除：向零截断，与 TS 解释器一致（interpreter.ts case '//' = Math.trunc）
-      // 及 Java/Go/C 语义：`-7 integer divided by 2 = -3`。在 double 上做除法再
-      // 截断，避免大整数溢出；结果是整数值，返回 long（fitsInInt 收敛回 int）。
+      // 及 Java/Go/C 语义：`-7 integer divided by 2 = -3`。
+      // (#14) 两侧都是整数时直接做 long 除法，避免 double 在 |operand| > 2^53
+      // 时丢失精度（如 9007199254740993 // 2 必须得到 4503599627370496，
+      // 而非 double 路径四舍五入到 9007199254740992 后的 4503599627370496±）。
+      if (!isFractional(args[0]) && !isFractional(args[1])) {
+        long divisor = toLong(args[1]);
+        if (divisor == 0L) throw new BuiltinException(ErrorMessages.arithmeticDivisionByZero());
+        return toLong(args[0]) / divisor; // Java long 除法即向零截断
+      }
       double divisor = toDouble(args[1]);
       if (divisor == 0.0) throw new BuiltinException(ErrorMessages.arithmeticDivisionByZero());
       return (long) (toDouble(args[0]) / divisor);
@@ -759,6 +766,10 @@ public final class Builtins {
     }));
 
     // === IO Operations (需要 IO effect) ===
+    // TODO(#14): these IO.* builtins declare Set.of("IO") effects but unconditionally
+    // throw UnsupportedOperationException, so the effect annotation is dead and failure
+    // is a late runtime exception rather than an effect-check error. Wire to
+    // AsterContext.isEffectAllowed (or remove). Deferred from PR #14.
     register("IO.print", new BuiltinDef(args -> {
       checkArity("IO.print", args, 1);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.print"));
@@ -900,6 +911,13 @@ public final class Builtins {
     Object value = unwrap(o);
     if (value instanceof Number n) return n.intValue();
     if (value instanceof String s) return Integer.parseInt(s);
+    throw new BuiltinException(ErrorMessages.typeExpectedGot("Int", typeName(o)));
+  }
+
+  private static long toLong(Object o) {
+    Object value = unwrap(o);
+    if (value instanceof Number n) return n.longValue();
+    if (value instanceof String s) return Long.parseLong(s);
     throw new BuiltinException(ErrorMessages.typeExpectedGot("Int", typeName(o)));
   }
 
