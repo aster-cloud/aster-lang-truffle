@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "cloud.aster-lang"
-version = "1.0.1"
+version = "1.0.2"
 
 // 版本统一管理 — 升级 GraalVM/Truffle 或 Quarkus 时只改这里。
 // 此前 25.0.1 在 4 处 dependency 重复硬编码，升级容易半成功。

@@ -54,6 +54,14 @@ jobs:
           path: aster-lang-de
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
+      # hi 现在是独立 SPI 包，进了 platform 的 locales bundle —— 与 en/zh/de 一样
+      # 需作为兄弟仓 checkout + 发布到 Maven Local，否则 runtimeClasspath 解析不到。
+      - uses: actions/checkout@v6
+        with:
+          repository: aster-cloud/aster-lang-hi
+          path: aster-lang-hi
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
       - uses: actions/setup-java@v5
         with:
           java-version: '25'
@@ -68,6 +76,7 @@ jobs:
           cd aster-lang-en && ./gradlew publishToMavenLocal -x test && cd ..
           cd aster-lang-zh && ./gradlew publishToMavenLocal -x test && cd ..
           cd aster-lang-de && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-hi && ./gradlew publishToMavenLocal -x test && cd ..
 
       - name: Build & Test
         working-directory: aster-lang-truffle
