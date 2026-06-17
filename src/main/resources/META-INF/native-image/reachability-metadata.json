@@ -1,215 +1,62 @@
 {
+  "comment": "Authoritative native-image reachability metadata. Reflection entries cover (1) Truffle/polyglot infrastructure and (2) EVERY aster.truffle.core.CoreModel nested type that aster.truffle.Loader deserializes via Jackson. The CoreModel list is derived directly from CoreModel.java: the five @JsonTypeInfo sealed interfaces (Decl, Stmt, Expr, Type, Pattern) plus every @JsonSubTypes concrete class and every plain nested holder class (Module, Field, Param, Block, Case, Step, RetryPolicy, Timeout). Jackson needs the no-arg constructor and all declared fields for each. Keep this file as the single source of truth (legacy reflect-config.json removed, #14).",
   "reflection": [
     {
       "type": "aster.truffle.AsterLanguageProvider"
     },
     {
-      "type": "aster.truffle.core.CoreModel$Block",
-      "fields": [
-        {
-          "name": "statements"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
+      "type": "aster.truffle.Runner",
+      "allDeclaredConstructors": true,
+      "allPublicConstructors": true,
+      "allDeclaredMethods": true,
+      "allPublicMethods": true,
+      "allDeclaredFields": true,
+      "allPublicFields": true
     },
     {
-      "type": "aster.truffle.core.CoreModel$Call",
-      "fields": [
-        {
-          "name": "args"
-        },
-        {
-          "name": "target"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
+      "type": "com.fasterxml.jackson.databind.ObjectMapper",
+      "allDeclaredConstructors": true,
+      "allPublicConstructors": true,
+      "allDeclaredMethods": true,
+      "allPublicMethods": true
     },
     {
-      "type": "aster.truffle.core.CoreModel$Decl"
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$Expr"
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$Func",
-      "fields": [
-        {
-          "name": "body"
-        },
-        {
-          "name": "effects"
-        },
-        {
-          "name": "name"
-        },
-        {
-          "name": "params"
-        },
-        {
-          "name": "ret"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$If",
-      "fields": [
-        {
-          "name": "cond"
-        },
-        {
-          "name": "elseBlock"
-        },
-        {
-          "name": "thenBlock"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$IntE",
-      "fields": [
-        {
-          "name": "value"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$Module",
-      "fields": [
-        {
-          "name": "decls"
-        },
-        {
-          "name": "name"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$Name",
-      "fields": [
-        {
-          "name": "name"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$Param",
-      "fields": [
-        {
-          "name": "name"
-        },
-        {
-          "name": "type"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$Return",
-      "fields": [
-        {
-          "name": "expr"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$Stmt"
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$Type"
-    },
-    {
-      "type": "aster.truffle.core.CoreModel$TypeName",
-      "fields": [
-        {
-          "name": "name"
-        }
-      ],
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
-      ]
+      "type": "com.fasterxml.jackson.databind.JsonNode",
+      "allDeclaredConstructors": true,
+      "allPublicConstructors": true,
+      "allDeclaredMethods": true,
+      "allPublicMethods": true
     },
     {
       "type": "com.fasterxml.jackson.databind.ext.Java7SupportImpl",
       "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": []
-        }
+        { "name": "<init>", "parameterTypes": [] }
       ]
+    },
+    {
+      "type": "java.util.HashMap",
+      "allDeclaredConstructors": true,
+      "allPublicConstructors": true,
+      "allDeclaredMethods": true,
+      "allPublicMethods": true
+    },
+    {
+      "type": "java.util.ArrayList",
+      "allDeclaredConstructors": true,
+      "allPublicConstructors": true,
+      "allDeclaredMethods": true,
+      "allPublicMethods": true
     },
     {
       "type": "java.lang.Boolean",
       "jniAccessible": true,
       "methods": [
-        {
-          "name": "getBoolean",
-          "parameterTypes": [
-            "java.lang.String"
-          ]
-        }
+        { "name": "getBoolean", "parameterTypes": ["java.lang.String"] }
       ]
     },
     {
       "type": "java.lang.ClassLoader",
-      "fields": [
-        {
-          "name": "classLoaderValueMap"
-        }
-      ]
+      "fields": [ { "name": "classLoaderValueMap" } ]
     },
     {
       "type": "jdk.internal.misc.Unsafe"
@@ -219,19 +66,11 @@
     },
     {
       "type": "org.graalvm.polyglot.io.IOHelper",
-      "fields": [
-        {
-          "name": "ACCESS"
-        }
-      ]
+      "fields": [ { "name": "ACCESS" } ]
     },
     {
       "type": "org.graalvm.polyglot.management.Management",
-      "fields": [
-        {
-          "name": "ACCESS"
-        }
-      ]
+      "fields": [ { "name": "ACCESS" } ]
     },
     {
       "type": "sun.text.resources.cldr.FormatData"
@@ -244,41 +83,84 @@
     },
     {
       "type": "sun.util.resources.cldr.CalendarData"
-    }
+    },
+
+    { "type": "aster.truffle.core.CoreModel" },
+
+    { "type": "aster.truffle.core.CoreModel$Module", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+
+    { "type": "aster.truffle.core.CoreModel$Decl" },
+    { "type": "aster.truffle.core.CoreModel$Import", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Func", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Enum", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Data", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+
+    { "type": "aster.truffle.core.CoreModel$Field", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Param", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Block", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+
+    { "type": "aster.truffle.core.CoreModel$Stmt" },
+    { "type": "aster.truffle.core.CoreModel$Return", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$If", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Let", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Set", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Start", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Wait", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Match", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Scope", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Case", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Workflow", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Step", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$RetryPolicy", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Timeout", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+
+    { "type": "aster.truffle.core.CoreModel$Expr" },
+    { "type": "aster.truffle.core.CoreModel$StringE", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Bool", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Name", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Call", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$IntE", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$LongE", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$DoubleE", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$NullE", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$AwaitE", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Ok", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Err", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Some", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$NoneE", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Construct", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$FieldInit", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Lambda", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+
+    { "type": "aster.truffle.core.CoreModel$Type" },
+    { "type": "aster.truffle.core.CoreModel$TypeName", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$TypeVar", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$TypeApp", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Maybe", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Option", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$Result", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$ListT", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$MapT", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$FuncType", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$PiiType", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+
+    { "type": "aster.truffle.core.CoreModel$Pattern" },
+    { "type": "aster.truffle.core.CoreModel$PatNull", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$PatCtor", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$PatName", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] },
+    { "type": "aster.truffle.core.CoreModel$PatInt", "allDeclaredFields": true, "methods": [ { "name": "<init>", "parameterTypes": [] } ] }
   ],
   "resources": [
-    {
-      "glob": "META-INF/graalvm/org.graalvm.polyglot/version"
-    },
-    {
-      "glob": "META-INF/graalvm/org.graalvm.truffle/version"
-    },
-    {
-      "glob": "META-INF/resources/engine/libtruffleattach/darwin/aarch64/sha256"
-    },
-    {
-      "glob": "META-INF/services/com.oracle.truffle.api.TruffleRuntimeAccess"
-    },
-    {
-      "glob": "META-INF/services/com.oracle.truffle.api.impl.TruffleLocator"
-    },
-    {
-      "glob": "META-INF/services/com.oracle.truffle.api.instrumentation.provider.TruffleInstrumentProvider"
-    },
-    {
-      "glob": "META-INF/services/com.oracle.truffle.api.library.provider.DefaultExportProvider"
-    },
-    {
-      "glob": "META-INF/services/com.oracle.truffle.api.provider.InternalResourceProvider"
-    },
-    {
-      "glob": "META-INF/services/com.oracle.truffle.api.provider.TruffleLanguageProvider"
-    },
-    {
-      "glob": "META-INF/services/org.graalvm.home.HomeFinder"
-    },
-    {
-      "glob": "META-INF/services/org.graalvm.polyglot.impl.AbstractPolyglotImpl"
-    }
+    { "glob": "META-INF/graalvm/org.graalvm.polyglot/version" },
+    { "glob": "META-INF/graalvm/org.graalvm.truffle/version" },
+    { "glob": "META-INF/resources/engine/libtruffleattach/darwin/aarch64/sha256" },
+    { "glob": "META-INF/services/com.oracle.truffle.api.TruffleRuntimeAccess" },
+    { "glob": "META-INF/services/com.oracle.truffle.api.impl.TruffleLocator" },
+    { "glob": "META-INF/services/com.oracle.truffle.api.instrumentation.provider.TruffleInstrumentProvider" },
+    { "glob": "META-INF/services/com.oracle.truffle.api.library.provider.DefaultExportProvider" },
+    { "glob": "META-INF/services/com.oracle.truffle.api.provider.InternalResourceProvider" },
+    { "glob": "META-INF/services/com.oracle.truffle.api.provider.TruffleLanguageProvider" },
+    { "glob": "META-INF/services/org.graalvm.home.HomeFinder" },
+    { "glob": "META-INF/services/org.graalvm.polyglot.impl.AbstractPolyglotImpl" }
   ]
 }

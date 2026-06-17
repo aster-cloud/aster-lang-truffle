@@ -148,29 +148,34 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   // 由 CoreIrEvalCli.valueToJson 的 fitsInInt 把整数值 double 收敛回 int，
   // 与 TS（统一 number）逐位一致。算术非热点循环，正确性优先于内联。
 
+  // ---------------------------------------------------------------------------
+  // 类型特化快速路径（#14 修复）
+  //
+  // 关键约束：参数节点只能 executeGeneric 一次，绝不能重复求值（参数可能有副作用，
+  // 如 `return`、列表 append 等）。同时，参数求值期间抛出的 ControlFlowException
+  // （如 ReturnNode.ReturnException，它 extends ControlFlowException extends
+  // RuntimeException）必须原样向上传播，绝不能被吞掉。
+  //
+  // 因此这些快速路径**不再**调用 executeInt/executeBoolean/executeString（它们
+  // 内部先 executeGeneric 再 throw UnexpectedResultException——一旦后一个参数
+  // 的求值已经发生，重新跑通用路径就会二次求值），而是显式 executeGeneric 一次、
+  // 缓存结果，再就缓存值做 instanceof 类型判断。类型不匹配时把已求值的参数直接
+  // 交给 Builtins.call（doGenericWithArgs），不重新执行任何参数节点。
+  // ControlFlowException 自然从 executeGeneric 透传，不被任何 catch 拦截。
+  // ---------------------------------------------------------------------------
+
   /**
    * 内联 eq (int == int)
    */
   @Specialization(guards = {"isEq()", "hasTwoArgs()"})
   protected boolean doEqInt(VirtualFrame frame) {
     Profiler.inc("builtin_eq_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a == b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Boolean) {
-        return (boolean) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'eq' expected boolean result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
+    Object a = argNodes[0].executeGeneric(frame);
+    Object b = argNodes[1].executeGeneric(frame);
+    if (a instanceof Integer ai && b instanceof Integer bi) {
+      return ai.intValue() == bi.intValue();
     }
+    return expectBoolean(doGenericWithArgs(a, b));
   }
 
   /**
@@ -179,23 +184,12 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   @Specialization(guards = {"isLt()", "hasTwoArgs()"})
   protected boolean doLtInt(VirtualFrame frame) {
     Profiler.inc("builtin_lt_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a < b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Boolean) {
-        return (boolean) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'lt' expected boolean result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
+    Object a = argNodes[0].executeGeneric(frame);
+    Object b = argNodes[1].executeGeneric(frame);
+    if (a instanceof Integer ai && b instanceof Integer bi) {
+      return ai.intValue() < bi.intValue();
     }
+    return expectBoolean(doGenericWithArgs(a, b));
   }
 
   /**
@@ -204,23 +198,12 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   @Specialization(guards = {"isGt()", "hasTwoArgs()"})
   protected boolean doGtInt(VirtualFrame frame) {
     Profiler.inc("builtin_gt_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a > b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Boolean) {
-        return (boolean) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'gt' expected boolean result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
+    Object a = argNodes[0].executeGeneric(frame);
+    Object b = argNodes[1].executeGeneric(frame);
+    if (a instanceof Integer ai && b instanceof Integer bi) {
+      return ai.intValue() > bi.intValue();
     }
+    return expectBoolean(doGenericWithArgs(a, b));
   }
 
   /**
@@ -229,23 +212,12 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   @Specialization(guards = {"isLte()", "hasTwoArgs()"})
   protected boolean doLteInt(VirtualFrame frame) {
     Profiler.inc("builtin_lte_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a <= b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Boolean) {
-        return (boolean) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'lte' expected boolean result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
+    Object a = argNodes[0].executeGeneric(frame);
+    Object b = argNodes[1].executeGeneric(frame);
+    if (a instanceof Integer ai && b instanceof Integer bi) {
+      return ai.intValue() <= bi.intValue();
     }
+    return expectBoolean(doGenericWithArgs(a, b));
   }
 
   /**
@@ -254,23 +226,12 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   @Specialization(guards = {"isGte()", "hasTwoArgs()"})
   protected boolean doGteInt(VirtualFrame frame) {
     Profiler.inc("builtin_gte_inlined");
-
-    try {
-      int a = argNodes[0].executeInt(frame);
-      int b = argNodes[1].executeInt(frame);
-      return a >= b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Boolean) {
-        return (boolean) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'gte' expected boolean result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
+    Object a = argNodes[0].executeGeneric(frame);
+    Object b = argNodes[1].executeGeneric(frame);
+    if (a instanceof Integer ai && b instanceof Integer bi) {
+      return ai.intValue() >= bi.intValue();
     }
+    return expectBoolean(doGenericWithArgs(a, b));
   }
 
   /**
@@ -279,23 +240,12 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   @Specialization(guards = {"isAnd()", "hasTwoArgs()"})
   protected boolean doAndBoolean(VirtualFrame frame) {
     Profiler.inc("builtin_and_inlined");
-
-    try {
-      boolean a = argNodes[0].executeBoolean(frame);
-      boolean b = argNodes[1].executeBoolean(frame);
-      return a && b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Boolean) {
-        return (boolean) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'and' expected boolean result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
+    Object a = argNodes[0].executeGeneric(frame);
+    Object b = argNodes[1].executeGeneric(frame);
+    if (a instanceof Boolean ab && b instanceof Boolean bb) {
+      return ab && bb;
     }
+    return expectBoolean(doGenericWithArgs(a, b));
   }
 
   /**
@@ -304,23 +254,12 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   @Specialization(guards = {"isOr()", "hasTwoArgs()"})
   protected boolean doOrBoolean(VirtualFrame frame) {
     Profiler.inc("builtin_or_inlined");
-
-    try {
-      boolean a = argNodes[0].executeBoolean(frame);
-      boolean b = argNodes[1].executeBoolean(frame);
-      return a || b;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object arg1 = argNodes[1].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0, arg1});
-      if (result instanceof Boolean) {
-        return (boolean) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'or' expected boolean result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
+    Object a = argNodes[0].executeGeneric(frame);
+    Object b = argNodes[1].executeGeneric(frame);
+    if (a instanceof Boolean ab && b instanceof Boolean bb) {
+      return ab || bb;
     }
+    return expectBoolean(doGenericWithArgs(a, b));
   }
 
   /**
@@ -330,58 +269,42 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   @Specialization(guards = {"isNot()", "hasOneArg()"})
   protected boolean doNotBoolean(VirtualFrame frame) {
     Profiler.inc("builtin_not_inlined");
-
-    try {
-      boolean a = argNodes[0].executeBoolean(frame);
-      return !a;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      Object arg0 = argNodes[0].executeGeneric(frame);
-      Object result = Builtins.call(builtinName, new Object[]{arg0});
-      if (result instanceof Boolean) {
-        return (boolean) result;
-      }
-      throw new RuntimeException(
-          "Builtin 'not' expected boolean result, got: " +
-          (result == null ? "null" : result.getClass().getSimpleName()));
+    Object a = argNodes[0].executeGeneric(frame);
+    if (a instanceof Boolean ab) {
+      return !ab;
     }
+    return expectBoolean(doGenericWithArgs(a));
   }
 
   /**
    * 内联 Text.concat (String + String)
    * 快速路径: 两个参数都是 String，直接拼接
-   * Fallback: UnexpectedResultException 时回退到 Builtins.call（支持 String.valueOf）
+   * Fallback: 非 String 时交给 Builtins.call（支持 String.valueOf），不二次求值参数
    */
   @Specialization(guards = {"isTextConcat()", "hasTwoArgs()"})
   protected String doTextConcat(VirtualFrame frame) {
     Profiler.inc("builtin_text_concat_inlined");
-
-    try {
-      String left = argNodes[0].executeString(frame);
-      String right = argNodes[1].executeString(frame);
+    Object a = argNodes[0].executeGeneric(frame);
+    Object b = argNodes[1].executeGeneric(frame);
+    if (a instanceof String left && b instanceof String right) {
       return left + right;
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      return (String) doGeneric(frame);
     }
+    return (String) doGenericWithArgs(a, b);
   }
 
   /**
    * 内联 Text.length (String.length())
    * 快速路径: 参数是 String，直接返回长度
-   * Fallback: UnexpectedResultException 时回退到 Builtins.call（支持 String.valueOf）
+   * Fallback: 非 String 时交给 Builtins.call（支持 String.valueOf），不二次求值参数
    */
   @Specialization(guards = {"isTextLength()", "hasOneArg()"})
   protected int doTextLength(VirtualFrame frame) {
     Profiler.inc("builtin_text_length_inlined");
-
-    try {
-      String text = argNodes[0].executeString(frame);
+    Object a = argNodes[0].executeGeneric(frame);
+    if (a instanceof String text) {
       return text.length();
-    } catch (Exception e) {
-      // Fallback 到通用路径
-      return (int) doGeneric(frame);
     }
+    return (int) doGenericWithArgs(a);
   }
 
   /**
@@ -722,14 +645,50 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   protected Object doGeneric(VirtualFrame frame) {
     Profiler.inc("builtin_call_generic");
 
-    // 执行参数节点
+    // 执行参数节点（每个参数恰好求值一次；ControlFlowException 自然透传）
     Object[] args = new Object[argNodes.length];
     for (int i = 0; i < argNodes.length; i++) {
       args[i] = argNodes[i].executeGeneric(frame);
     }
 
-    // 直接调用 Builtins.call，不包装异常以保持原始错误消息
+    return callBuiltinChecked(args);
+  }
+
+  /**
+   * 用已经求值好的参数调用 Builtins.call（不重新执行任何参数节点）。
+   * 快速路径类型判断失败时复用，确保副作用参数不会被二次求值。
+   */
+  private Object doGenericWithArgs(Object... args) {
+    Profiler.inc("builtin_call_generic");
+    return callBuiltinChecked(args);
+  }
+
+  /**
+   * 调用 Builtins.call 并区分「不存在该 builtin」与「builtin 合法返回 null」。
+   * 镜像 CallNode.java 的守卫：未知 builtin 在 guest 内显式失败，避免把 null
+   * 透传到 asGuestValue 触发难以诊断的 NPE。BuiltinCallNode 仅在 Builtins.has()
+   * 为真时才由 Loader 构造，故这里 null 只可能是「合法返回 null」——但仍保留
+   * 显式守卫，防御未来注册表变动或运算符规范化的边界。
+   */
+  private Object callBuiltinChecked(Object[] args) {
+    if (!Builtins.has(builtinName)) {
+      // 未知 builtin：显式失败而非返回 null（mirror CallNode:100-106）
+      throw new RuntimeException("Unknown builtin: " + builtinName);
+    }
+    // 合法返回值（含 null，如 Map.get / Option.unwrapOr 的 sentinel）直接返回
     return Builtins.call(builtinName, args);
+  }
+
+  /**
+   * 把通用路径的返回值收敛为 boolean，给比较/逻辑 builtin 的快速路径回退用。
+   */
+  private boolean expectBoolean(Object result) {
+    if (result instanceof Boolean) {
+      return (boolean) result;
+    }
+    throw new RuntimeException(
+        "Builtin '" + builtinName + "' expected boolean result, got: " +
+        (result == null ? "null" : result.getClass().getSimpleName()));
   }
 
   @Override
