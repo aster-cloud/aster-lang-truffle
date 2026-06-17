@@ -766,26 +766,31 @@ public final class Builtins {
     }));
 
     // === IO Operations (需要 IO effect) ===
-    // TODO(#14): these IO.* builtins declare Set.of("IO") effects but unconditionally
-    // throw UnsupportedOperationException, so the effect annotation is dead and failure
-    // is a late runtime exception rather than an effect-check error. Wire to
-    // AsterContext.isEffectAllowed (or remove). Deferred from PR #14.
+    // 每个 IO.* builtin 先做 effect 校验（IO effect 必须在当前 AsterContext 的允许
+    // 列表里，见 AsterContext.isEffectAllowed），未授权时抛出清晰的 guest 错误
+    // （"effect not permitted"），让 effect 注解真正生效——而不是无论是否授权都
+    // 直接抛 UnsupportedOperationException。授权后，由于 Truffle backend 不实现
+    // 真实 IO，再抛 UnsupportedOperationException（effect 校验先于其执行）。
     register("IO.print", new BuiltinDef(args -> {
+      requireEffect("IO.print", "IO");
       checkArity("IO.print", args, 1);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.print"));
     }, Set.of("IO")));
 
     register("IO.readLine", new BuiltinDef(args -> {
+      requireEffect("IO.readLine", "IO");
       checkArity("IO.readLine", args, 0);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.readLine"));
     }, Set.of("IO")));
 
     register("IO.readFile", new BuiltinDef(args -> {
+      requireEffect("IO.readFile", "IO");
       checkArity("IO.readFile", args, 1);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.readFile"));
     }, Set.of("IO")));
 
     register("IO.writeFile", new BuiltinDef(args -> {
+      requireEffect("IO.writeFile", "IO");
       checkArity("IO.writeFile", args, 2);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.writeFile"));
     }, Set.of("IO")));
@@ -884,6 +889,20 @@ public final class Builtins {
     if (args.length < min || args.length > max) {
       throw new BuiltinException(
           ErrorMessages.operationExpectedType(name, min + "-" + max + " args", args.length + " args"));
+    }
+  }
+
+  /**
+   * Effect 守卫：在执行带 effect 的 builtin 前，校验该 effect 是否在当前
+   * {@link aster.truffle.AsterContext} 的允许列表中。未授权时抛出
+   * {@link BuiltinException}（"effect not permitted"），由 CallNode 转为 guest
+   * 运行时错误。这样 effect 注解才真正生效，而非到副作用执行时才晚晚失败。
+   */
+  private static void requireEffect(String operation, String effect) {
+    aster.truffle.AsterContext context = aster.truffle.AsterLanguage.getContext();
+    if (context == null || !context.isEffectAllowed(effect)) {
+      throw new BuiltinException(
+          String.format("%s 需要 '%s' effect，但当前未被授权（effect not permitted）", operation, effect));
     }
   }
 
