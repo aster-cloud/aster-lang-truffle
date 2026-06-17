@@ -1,7 +1,6 @@
 package aster.truffle.nodes;
 
 import aster.truffle.runtime.AsterDataValue;
-import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
@@ -10,18 +9,22 @@ import com.oracle.truffle.api.interop.UnknownKeyException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.nodes.NodeInfo;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.InaccessibleObjectException;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * 成员访问节点
  *
  * 用于访问对象的字段，例如：用户.名字
  * 支持 AsterDataValue、Map 和 Polyglot 互操作对象
+ *
+ * <p>对于宿主（host）包装对象（{@code HostObject}/{@code HostProxy}），统一通过
+ * {@link InteropLibrary} 的标准消息（{@code hasMembers}/{@code readMember}、
+ * {@code hasHashEntries}/{@code readHashValue}、{@code hasArrayElements} 等）访问。
+ * 这要求 polyglot {@code Context} 配置了恰当的 {@code HostAccess}（例如
+ * {@code HostAccess.ALL}、{@code allowAllAccess(true)}，或显式
+ * {@code allowMapAccess/allowListAccess/allowPublicAccess}）。配置好后宿主
+ * {@code Map} 暴露为 hash 条目、宿主 POJO 暴露为可读成员、宿主 {@code List}/数组
+ * 暴露为数组元素——无需任何反射解包。
  */
 @NodeInfo(shortName = "memberAccess")
 public final class MemberAccessNode extends AsterExpressionNode {
@@ -122,13 +125,10 @@ public final class MemberAccessNode extends AsterExpressionNode {
             throw new RuntimeException("无法访问成员 " + member + "：" + e.getMessage(), e);
         }
 
-        // 最后尝试解包 HostObject（仅作为兜底）
-        Object unwrapped = unwrapHostObject(base);
-        if (unwrapped != base) {
-            return accessMember(unwrapped, member);
-        }
-
-        throw new RuntimeException("无法访问成员：对象类型 " + base.getClass().getName() + " 不支持成员访问，成员：" + member);
+        throw new RuntimeException("无法访问成员：对象类型 " + base.getClass().getName()
+            + " 不支持成员访问，成员：" + member
+            + "（若为宿主对象，请确认 polyglot Context 配置了恰当的 HostAccess，"
+            + "使其成员/条目/元素可经 InteropLibrary 访问）");
     }
 
     /**
@@ -167,93 +167,6 @@ public final class MemberAccessNode extends AsterExpressionNode {
             // 解包失败，返回原值
         }
         return value;
-    }
-
-    /**
-     * 尝试解包 Polyglot HostObject 获取底层 Java 对象。
-     *
-     * <p>该路径仅在 InteropLibrary 标准 API（hasMembers/hasHashEntries 等）
-     * 都无法访问目标对象时作为兜底使用。Truffle 内部的 HostObject 类不暴露
-     * 公开 API，故只能反射获取 {@code obj}/{@code delegate} 字段。
-     *
-     * <p>安全收紧：
-     * <ul>
-     *   <li>{@link CompilerDirectives.TruffleBoundary} 标注：阻止反射进入 PE 编译。</li>
-     *   <li>失败异常按类别分类计数（NoSuchField / InaccessibleObject / IllegalAccess）。
-     *       命中 JDK 17+ 模块访问限制时，第一次会以 WARNING 级别记录全栈，
-     *       避免静默吞错；后续命中只递增计数器，避免污染日志。</li>
-     *   <li>JDK 17+ {@link InaccessibleObjectException} 单独识别 —— 这是
-     *       native-image / 严格模块场景下最常见的失败原因，对运维更友好。</li>
-     * </ul>
-     */
-    // TODO(#14): replace this reflective HostObject/HostProxy field read with an
-    // InteropLibrary-only access path (or register these Graal-internal classes for
-    // native-image), so member access on host-wrapped objects doesn't throw
-    // InaccessibleObjectException under native image. Deferred from PR #14.
-    @CompilerDirectives.TruffleBoundary
-    private Object unwrapHostObject(Object obj) {
-        if (obj == null) return null;
-
-        String className = obj.getClass().getName();
-        if (!(className.contains("HostObject") || className.contains("HostProxy"))) {
-            return obj;
-        }
-
-        Field objField = findField(obj.getClass(), "obj");
-        if (objField != null) {
-            Object unwrapped = tryReflectiveRead(objField, obj);
-            if (unwrapped != null) return unwrapped;
-        }
-
-        Field delegateField = findField(obj.getClass(), "delegate");
-        if (delegateField != null) {
-            Object unwrapped = tryReflectiveRead(delegateField, obj);
-            if (unwrapped != null) return unwrapped;
-        }
-
-        return obj;
-    }
-
-    private static Object tryReflectiveRead(Field field, Object obj) {
-        try {
-            field.setAccessible(true);
-            return field.get(obj);
-        } catch (InaccessibleObjectException e) {
-            logUnwrapFailure("inaccessible-object", field, e);
-        } catch (IllegalAccessException e) {
-            logUnwrapFailure("illegal-access", field, e);
-        } catch (SecurityException e) {
-            logUnwrapFailure("security-manager", field, e);
-        } catch (RuntimeException e) {
-            // 仅捕获 RuntimeException（保留 Error 让 JVM 处理）
-            logUnwrapFailure("runtime", field, e);
-        }
-        return null;
-    }
-
-    private static final AtomicInteger UNWRAP_FAILURE_COUNT = new AtomicInteger(0);
-    private static final int UNWRAP_FAILURE_LOG_LIMIT = 5;
-    private static final Logger LOG = Logger.getLogger(MemberAccessNode.class.getName());
-
-    private static void logUnwrapFailure(String reason, Field field, Throwable t) {
-        int n = UNWRAP_FAILURE_COUNT.incrementAndGet();
-        if (n <= UNWRAP_FAILURE_LOG_LIMIT) {
-            LOG.log(Level.WARNING,
-                String.format("HostObject 反射解包失败（%s）field=%s 第%d次（前%d次会记录详细堆栈）",
-                    reason, field.getName(), n, UNWRAP_FAILURE_LOG_LIMIT),
-                t);
-        }
-    }
-
-    private static Field findField(Class<?> clazz, String name) {
-        while (clazz != null) {
-            try {
-                return clazz.getDeclaredField(name);
-            } catch (NoSuchFieldException e) {
-                clazz = clazz.getSuperclass();
-            }
-        }
-        return null;
     }
 
     /**
