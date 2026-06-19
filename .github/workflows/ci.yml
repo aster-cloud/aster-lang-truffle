@@ -36,22 +36,11 @@ jobs:
           path: aster-lang-runtime
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
+      # 语言包源：aster-lang-locales（现役，catalog 驱动）。旧独立 en/zh/de 仓已归档。
       - uses: actions/checkout@v6
         with:
-          repository: aster-cloud/aster-lang-en
-          path: aster-lang-en
-          token: ${{ secrets.CROSS_REPO_TOKEN }}
-
-      - uses: actions/checkout@v6
-        with:
-          repository: aster-cloud/aster-lang-zh
-          path: aster-lang-zh
-          token: ${{ secrets.CROSS_REPO_TOKEN }}
-
-      - uses: actions/checkout@v6
-        with:
-          repository: aster-cloud/aster-lang-de
-          path: aster-lang-de
+          repository: aster-cloud/aster-lang-locales
+          path: aster-lang-locales
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
       # hi 现在是独立 SPI 包，进了 platform 的 locales bundle —— 与 en/zh/de 一样
@@ -73,9 +62,7 @@ jobs:
           cd aster-lang-platform && ./gradlew publishToMavenLocal && cd ..
           cd aster-lang-core && ./gradlew publishToMavenLocal -x test && cd ..
           cd aster-lang-runtime && ./gradlew publishToMavenLocal -x test && cd ..
-          cd aster-lang-en && ./gradlew publishToMavenLocal -x test && cd ..
-          cd aster-lang-zh && ./gradlew publishToMavenLocal -x test && cd ..
-          cd aster-lang-de && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-locales && ./gradlew publishToMavenLocal -x test && cd ..
           cd aster-lang-hi && ./gradlew publishToMavenLocal -x test && cd ..
 
       - name: Build & Test
