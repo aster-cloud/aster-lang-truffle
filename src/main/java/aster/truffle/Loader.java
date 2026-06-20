@@ -510,6 +510,11 @@ public final class Loader {
     if (e instanceof CoreModel.Some sm) return new aster.truffle.nodes.ResultNodes.SomeNode(buildExpr(sm.expr));
     if (e instanceof CoreModel.NoneE) return new aster.truffle.nodes.ResultNodes.NoneNode();
     if (e instanceof CoreModel.Construct cons) return buildConstruct(cons);
+    if (e instanceof CoreModel.IfE ifx) {
+      // ADR 0019 G2b：表达式级 if → IfExprNode（三分支都是表达式节点，求值产出值）。
+      return aster.truffle.nodes.IfExprNode.create(
+          buildExpr(ifx.cond), buildExpr(ifx.thenE), buildExpr(ifx.elseE));
+    }
     return LiteralNode.create(null);
   }
 

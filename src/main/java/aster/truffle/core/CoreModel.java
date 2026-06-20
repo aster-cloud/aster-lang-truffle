@@ -99,9 +99,10 @@ public final class CoreModel {
     @JsonSubTypes.Type(value = NoneE.class, name = "None"),
     @JsonSubTypes.Type(value = Construct.class, name = "Construct"),
     @JsonSubTypes.Type(value = Lambda.class, name = "Lambda"),
-    @JsonSubTypes.Type(value = AwaitE.class, name = "Await")
+    @JsonSubTypes.Type(value = AwaitE.class, name = "Await"),
+    @JsonSubTypes.Type(value = IfE.class, name = "IfExpr")
   })
-  public sealed interface Expr permits StringE, Bool, Name, Call, IntE, LongE, DoubleE, NullE, Ok, Err, Some, NoneE, Construct, Lambda, AwaitE {}
+  public sealed interface Expr permits StringE, Bool, Name, Call, IntE, LongE, DoubleE, NullE, Ok, Err, Some, NoneE, Construct, Lambda, AwaitE, IfE {}
   @JsonTypeName("String") public static final class StringE implements Expr { public String value; }
   @JsonTypeName("Bool") public static final class Bool implements Expr { public boolean value; }
   @JsonTypeName("Name") public static final class Name implements Expr { public String name; }
@@ -118,6 +119,8 @@ public final class CoreModel {
   @JsonTypeName("Construct") public static final class Construct implements Expr { public String typeName; public java.util.List<FieldInit> fields; }
   public static final class FieldInit { public String name; public Expr expr; }
   @JsonTypeName("Lambda") public static final class Lambda implements Expr { public java.util.List<Param> params; public Type ret; public Block body; public java.util.List<String> captures; }
+  // ADR 0019 G2b：表达式级 if（kind="IfExpr"，与 core/ts Core IR 对齐）。
+  @JsonTypeName("IfExpr") public static final class IfE implements Expr { public Expr cond; public Expr thenE; public Expr elseE; }
 
   @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind")
   @JsonSubTypes({
