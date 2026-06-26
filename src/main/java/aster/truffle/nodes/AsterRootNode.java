@@ -56,13 +56,18 @@ public final class AsterRootNode extends RootNode {
 
     bindArgumentsToFrame(frame);
     bindArgumentsToEnv(frame);
+    // 入口函数返回值跨宿主边界：null 须规整为 guest-null（toInteropValue），否则
+    // 裸 null 经 asGuestValue 触发 NPE/契约违例。adapt 仍只做集合/结构归一，保留
+    // 嵌套 raw null（底层 Map/List 内部消费依赖它）。
     try {
       Object result = Exec.exec(body, frame);
       Object adapted = AsterInteropAdapter.adapt(result);
-      return context.getEnv().asGuestValue(adapted);
+      return context.getEnv().asGuestValue(
+          aster.truffle.runtime.interop.InteropValues.toInteropValue(adapted));
     } catch (ReturnNode.ReturnException rex) {
       Object adapted = AsterInteropAdapter.adapt(rex.value);
-      return context.getEnv().asGuestValue(adapted);
+      return context.getEnv().asGuestValue(
+          aster.truffle.runtime.interop.InteropValues.toInteropValue(adapted));
     }
   }
 

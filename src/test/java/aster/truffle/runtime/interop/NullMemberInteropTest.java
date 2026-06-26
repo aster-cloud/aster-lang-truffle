@@ -2,6 +2,9 @@ package aster.truffle.runtime.interop;
 
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Source;
+import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -130,5 +133,33 @@ class NullMemberInteropTest {
     Object sens = interop.readMember(pii, "sensitivity");
     assertNotNull(sens, "null sensitivity 的 readMember 不得返回裸 Java null");
     assertTrue(interop.isNull(sens));
+  }
+
+  @Test
+  @DisplayName("入口函数返回 null：跨宿主边界还原为 isNull()，不 NPE/契约违例")
+  void entryFunctionReturningNullRoundTrips() {
+    // 入口函数直接 Return null（NullE）→ AsterRootNode 经 toInteropValue 规整后
+    // asGuestValue，避免裸 null 触发 NPE。宿主拿到的 Value 应 isNull()==true。
+    String program = """
+        {
+          "name": "test.entry.null",
+          "decls": [{
+            "kind": "Func",
+            "name": "evaluate",
+            "params": [],
+            "ret": {"kind": "TypeName", "name": "Any"},
+            "body": {"statements": [{"kind": "Return", "expr": {"kind": "Null"}}]}
+          }]
+        }
+        """;
+    try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
+      Source source = Source.newBuilder("aster", program, "entry-null.json").build();
+      // 零参入口：eval 直接返回结果值（非可调用函数）。修复前 asGuestValue(裸 null)
+      // 会在此 NPE；修复后 eval 顺利返回一个 isNull() 的 guest 值。
+      Value result = context.eval(source);
+      assertTrue(result.isNull(), "入口返回 null 应在宿主侧表现为 isNull()==true");
+    } catch (java.io.IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 }
