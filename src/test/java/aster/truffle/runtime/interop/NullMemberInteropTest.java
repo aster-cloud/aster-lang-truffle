@@ -99,4 +99,36 @@ class NullMemberInteropTest {
     AsterListValue list = new AsterListValue(Arrays.asList((Object) 1, null, 3));
     assertSame(null, list.elements().get(1));
   }
+
+  @Test
+  @DisplayName("AsterDataValue.readMember 对 null 字段值返回 guest-null（契约）")
+  void dataNullFieldReturnsGuestNull() throws Exception {
+    // Construct 字段表达式可求值为 null → 字段值为 Java null。
+    aster.truffle.runtime.AsterDataValue data = new aster.truffle.runtime.AsterDataValue(
+        "User", new String[]{"name", "age"}, new Object[]{"Alice", null}, null);
+
+    assertTrue(interop.isMemberReadable(data, "age"));
+    Object read = interop.readMember(data, "age");
+    assertNotNull(read, "null 字段的 readMember 不得返回裸 Java null");
+    assertSame(aster.truffle.runtime.interop.AsterNullValue.INSTANCE, read);
+    assertTrue(interop.isNull(read));
+    // 非 null 字段保持原值。
+    assertSame("Alice", interop.readMember(data, "name"));
+  }
+
+  @Test
+  @DisplayName("AsterPiiValue.readMember 对 null value/sensitivity 返回 guest-null（契约）")
+  void piiNullMembersReturnGuestNull() throws Exception {
+    // value 与 sensitivity 均允许为 null。
+    aster.truffle.runtime.AsterPiiValue pii =
+        new aster.truffle.runtime.AsterPiiValue(null, java.util.List.of("email"), null);
+
+    Object val = interop.readMember(pii, "value");
+    assertNotNull(val, "null PII value 的 readMember 不得返回裸 Java null");
+    assertTrue(interop.isNull(val));
+
+    Object sens = interop.readMember(pii, "sensitivity");
+    assertNotNull(sens, "null sensitivity 的 readMember 不得返回裸 Java null");
+    assertTrue(interop.isNull(sens));
+  }
 }
