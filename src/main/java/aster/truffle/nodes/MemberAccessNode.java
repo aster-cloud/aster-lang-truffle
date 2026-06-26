@@ -146,6 +146,12 @@ public final class MemberAccessNode extends AsterExpressionNode {
         }
         // 尝试通过 InteropLibrary 解包
         try {
+            // guest-null（如 AsterNullValue，或宿主注入的 isNull HostObject）解回 Java null，
+            // 与直接走 Map.get 的快路径一致——否则 toBool/String.valueOf/Objects.equals 对
+            // 包装对象与裸 null 行为不一致（成员经 interop 读到 null 值时尤甚）。
+            if (interop.isNull(value)) {
+                return null;
+            }
             if (interop.isString(value)) {
                 return interop.asString(value);
             }

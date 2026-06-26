@@ -101,8 +101,10 @@ public final class AsterPiiValue implements TruffleObject {
 
   @ExportMessage
   Object readMember(String member) throws UnknownIdentifierException {
+    // interop 契约：可读成员不得返回裸 Java null。innerValue 与 sensitivity
+    // 均可为 null（sensitivity 构造时允许 null），经 toInteropValue 规整为 guest-null。
     if (MEMBER_VALUE.equals(member)) {
-      return innerValue;
+      return aster.truffle.runtime.interop.InteropValues.toInteropValue(innerValue);
     }
     if (MEMBER_TAGS.equals(member)) {
       java.util.List<Object> tagObjects = new ArrayList<>(tags.size());
@@ -110,7 +112,7 @@ public final class AsterPiiValue implements TruffleObject {
       return new AsterListValue(tagObjects);
     }
     if (MEMBER_SENSITIVITY.equals(member)) {
-      return sensitivity;
+      return aster.truffle.runtime.interop.InteropValues.toInteropValue(sensitivity);
     }
     throw UnknownIdentifierException.create(member);
   }

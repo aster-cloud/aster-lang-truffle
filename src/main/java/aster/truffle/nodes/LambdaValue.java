@@ -91,7 +91,10 @@ public final class LambdaValue implements TruffleObject {
    */
   @ExportMessage
   Object execute(Object[] args) throws ArityException, UnsupportedTypeException, UnsupportedMessageException {
-    return apply(args, null);
+    // interop execute 是跨边界返回点：入口 lambda 返回 null 时须规整为 guest-null
+    // （否则裸 null 在宿主 ToHostValue/asGuestValue 处违反契约或 NPE）。内部 apply()
+    // 直调路径不经此，仍保留 raw null 供 List.map/Maybe.map 等下游按 == null 消费。
+    return aster.truffle.runtime.interop.InteropValues.toInteropValue(apply(args, null));
   }
 
   // ==================== 内部 API ====================

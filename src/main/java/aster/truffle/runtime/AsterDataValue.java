@@ -110,7 +110,9 @@ public final class AsterDataValue implements TruffleObject {
     if (idx == null) {
       throw UnknownIdentifierException.create(member);
     }
-    return fieldValues[idx];
+    // interop 契约：字段值可为 null（Construct 字段表达式可求值为 null），
+    // 经 toInteropValue 规整为 guest-null，避免裸 null 触发后置断言。
+    return aster.truffle.runtime.interop.InteropValues.toInteropValue(fieldValues[idx]);
   }
 
   @Override
