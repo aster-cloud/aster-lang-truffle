@@ -42,7 +42,10 @@ public final class AsterListValue implements TruffleObject {
     if (!isArrayElementReadable(index)) {
       throw InvalidArrayIndexException.create(index);
     }
-    return elements.get((int) index);
+    Object element = elements.get((int) index);
+    // interop 契约：可读数组元素的返回值不得为裸 Java null（否则后置断言失败）。
+    // 内部 null 元素包成 guest-null 单例，宿主据 isNull() 还原。
+    return element == null ? AsterNullValue.INSTANCE : element;
   }
 
   @ExportMessage

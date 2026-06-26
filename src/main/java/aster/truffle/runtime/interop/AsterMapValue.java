@@ -69,7 +69,10 @@ public final class AsterMapValue implements TruffleObject, Map<String, Object> {
     if (!entries.containsKey(member)) {
       throw UnknownIdentifierException.create(member);
     }
-    return entries.get(member);
+    Object value = entries.get(member);
+    // interop 契约：可读成员的返回值不得为裸 Java null（否则后置断言失败）。
+    // 内部 null（如 Err null 的 value）包成 guest-null 单例，宿主据 isNull() 还原。
+    return value == null ? AsterNullValue.INSTANCE : value;
   }
 
   @ExportMessage
