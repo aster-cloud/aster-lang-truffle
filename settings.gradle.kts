@@ -29,15 +29,17 @@ dependencyResolutionManagement {
 //     }
 // }
 
-// 语言包模块 - 独立项目（通过 SPI 注册到 LexiconRegistry）
-// 仅当兄弟目录存在时启用 composite build（本地开发）；CI 使用 Maven Local
-listOf("aster-lang-en", "aster-lang-zh", "aster-lang-de").forEach { name ->
-    val dir = file("../$name")
-    if (dir.isDirectory) {
-        includeBuild(dir) {
-            dependencySubstitution {
-                substitute(module("cloud.aster-lang:$name")).using(project(":"))
-            }
+// 语言包模块（通过 SPI 注册到 LexiconRegistry）。en/zh/de 已从已归档的
+// aster-lang-{en,zh,de} 迁到多模块仓 aster-lang-locales（坐标
+// cloud.aster-lang:aster-lang-locales-{en,zh,de}）；composite includeBuild 把这三个
+// 坐标替换到 locales 对应 subproject。仅当兄弟目录存在时启用（本地开发）；CI 用 Maven Local。
+val localesDir = file("../aster-lang-locales")
+if (localesDir.isDirectory) {
+    includeBuild(localesDir) {
+        dependencySubstitution {
+            substitute(module("cloud.aster-lang:aster-lang-locales-en")).using(project(":en"))
+            substitute(module("cloud.aster-lang:aster-lang-locales-zh")).using(project(":zh"))
+            substitute(module("cloud.aster-lang:aster-lang-locales-de")).using(project(":de"))
         }
     }
 }
