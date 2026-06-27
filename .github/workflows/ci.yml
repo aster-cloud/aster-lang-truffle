@@ -31,7 +31,7 @@ jobs:
         run: |
           python3 aster-lang-platform/scripts/release-plan/check-artifact.py \
             --plan aster-lang-platform/release-plan.json \
-            --artifact truffle:maven --repo-root .
+            --artifact truffle:maven --repo-root aster-lang-truffle
 
       - uses: actions/checkout@v6
         with:
