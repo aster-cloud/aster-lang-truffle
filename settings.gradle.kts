@@ -16,7 +16,7 @@ dependencyResolutionManagement {
     // 的单一来源。用 asterLibs.* 别名代替散落的 "cloud.aster-lang:...:0.0.1"。
     versionCatalogs {
         create("asterLibs") {
-            from("cloud.aster-lang:aster-lang-platform:1.0.6")
+            from("cloud.aster-lang:aster-lang-platform:1.0.7")
         }
     }
 }
