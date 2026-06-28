@@ -515,6 +515,14 @@ public final class Loader {
       return aster.truffle.nodes.IfExprNode.create(
           buildExpr(ifx.cond), buildExpr(ifx.thenE), buildExpr(ifx.elseE));
     }
+    if (e instanceof CoreModel.ListE list) {
+      // ADR 0024 C0：列表字面量 → ListLiteralNode（逐元素求值成 ArrayList，
+      // 与 List.* builtin 的运行时列表表示一致）。
+      var elems = list.elements == null ? java.util.List.<CoreModel.Expr>of() : list.elements;
+      AsterExpressionNode[] elNodes = new AsterExpressionNode[elems.size()];
+      for (int i = 0; i < elems.size(); i++) elNodes[i] = buildExpr(elems.get(i));
+      return aster.truffle.nodes.ListLiteralNode.create(elNodes);
+    }
     return LiteralNode.create(null);
   }
 
