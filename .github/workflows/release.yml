@@ -41,13 +41,25 @@ jobs:
         with:
           token: ${{ secrets.CROSS_REPO_TOKEN }}
           fetch-depth: 0
+      # catalog-derived version（ADR 0023 §9）：version = asterLibs.findVersion("asterLang")，
+      # 不再 sed 字面量。先 checkout platform 并 publishToMavenLocal，本仓 Gradle 才能解析
+      # catalog 派生的 project version。与 core/hi/locales 同构。
+      - uses: actions/checkout@v6
+        with:
+          repository: aster-cloud/aster-lang-platform
+          path: aster-lang-platform
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - uses: actions/setup-java@v5
+        with: { java-version: '25', distribution: 'temurin' }
+      - name: Bootstrap version catalog to Maven Local
+        run: cd aster-lang-platform && ./gradlew publishToMavenLocal
       - name: Create & push release tag
         env:
           VERSION: ${{ inputs.version }}
         run: |
-          PKG_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' build.gradle.kts | head -n1)
-          if [ "$VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::dispatch version ($VERSION) != build.gradle.kts version ($PKG_VERSION)"
+          RESOLVED=$(./gradlew -q properties | sed -n 's/^version: //p' | head -n1)
+          if [ "$VERSION" != "$RESOLVED" ]; then
+            echo "::error::dispatch version ($VERSION) != Gradle-resolved catalog version ($RESOLVED)"
             exit 1
           fi
           git config user.name "github-actions[bot]"
