@@ -429,6 +429,121 @@ public final class Builtins {
       return accumulator;
     }));
 
+    // === 通用集合 stdlib（ADR 0024 受控扩展：调现成强函数，不在 CNL 手写算法）===
+    // 全部确定性纯函数，双引擎逐位一致（ts interpreter 镜像 + tier1-parity golden）。
+    // 数值序：用 toDouble 比较（与算术/比较运算符一致）；排序**稳定、升序**。
+
+    // List.sum(list)：数值求和（空列表 → 0；任一元素浮点 → double）。
+    register("List.sum", new BuiltinDef(args -> {
+      checkArity("List.sum", args, 1);
+      List<Object> l = requireList("List.sum", args[0]);
+      Object acc = 0;
+      for (Object x : l) acc = numericAdd(acc, x);
+      return acc;
+    }));
+
+    // List.min / List.max(list)：数值极值（空列表抛错——无意义）。
+    register("List.min", new BuiltinDef(args -> {
+      checkArity("List.min", args, 1);
+      List<Object> l = requireNonEmpty("List.min", args[0]);
+      Object best = l.get(0);
+      for (Object x : l) if (toDouble(x) < toDouble(best)) best = x;
+      return best;
+    }));
+    register("List.max", new BuiltinDef(args -> {
+      checkArity("List.max", args, 1);
+      List<Object> l = requireNonEmpty("List.max", args[0]);
+      Object best = l.get(0);
+      for (Object x : l) if (toDouble(x) > toDouble(best)) best = x;
+      return best;
+    }));
+
+    // List.distinct(list)：保序去重（按值相等，unwrap 后 equals）。
+    register("List.distinct", new BuiltinDef(args -> {
+      checkArity("List.distinct", args, 1);
+      List<Object> l = requireList("List.distinct", args[0]);
+      List<Object> out = new ArrayList<>();
+      for (Object x : l) {
+        boolean seen = false;
+        for (Object y : out) if (java.util.Objects.equals(unwrap(x), unwrap(y))) { seen = true; break; }
+        if (!seen) out.add(x);
+      }
+      return out;
+    }));
+
+    // List.range(startInclusive, endExclusive)：[start, end) 整数序列（start>=end → 空）。
+    register("List.range", new BuiltinDef(args -> {
+      checkArity("List.range", args, 2);
+      int start = toInt(args[0]);
+      int end = toInt(args[1]);
+      List<Object> out = new ArrayList<>();
+      for (int i = start; i < end; i++) out.add(i);
+      return out;
+    }));
+
+    // List.sort(list)：数值升序、稳定。
+    register("List.sort", new BuiltinDef(args -> {
+      checkArity("List.sort", args, 1);
+      List<Object> l = requireList("List.sort", args[0]);
+      List<Object> out = new ArrayList<>(l);
+      out.sort((x, y) -> Double.compare(toDouble(x), toDouble(y)));
+      return out;
+    }));
+
+    // List.count(list, pred)：满足谓词的元素数（pred(item) 返回 Bool）。
+    register("List.count", new BuiltinDef(args -> {
+      checkArity("List.count", args, 2);
+      List<Object> l = requireList("List.count", args[0]);
+      LambdaValue pred = requireLambda("List.count", args[1]);
+      int n = 0;
+      for (Object item : l) if (Boolean.TRUE.equals(callLambda1(pred, item))) n++;
+      return n;
+    }));
+
+    // List.sortBy(list, keyFn)：按 keyFn(item) 的数值键升序、稳定。
+    register("List.sortBy", new BuiltinDef(args -> {
+      checkArity("List.sortBy", args, 2);
+      List<Object> l = requireList("List.sortBy", args[0]);
+      LambdaValue keyFn = requireLambda("List.sortBy", args[1]);
+      List<Object> out = new ArrayList<>(l);
+      out.sort((x, y) -> Double.compare(toDouble(callLambda1(keyFn, x)), toDouble(callLambda1(keyFn, y))));
+      return out;
+    }));
+
+    // List.minBy / List.maxBy(list, keyFn)：按 keyFn(item) 数值键取极值元素（空列表抛错）。
+    register("List.minBy", new BuiltinDef(args -> {
+      checkArity("List.minBy", args, 2);
+      List<Object> l = requireNonEmpty("List.minBy", args[0]);
+      LambdaValue keyFn = requireLambda("List.minBy", args[1]);
+      Object best = l.get(0); double bestK = toDouble(callLambda1(keyFn, best));
+      for (Object x : l) { double k = toDouble(callLambda1(keyFn, x)); if (k < bestK) { best = x; bestK = k; } }
+      return best;
+    }));
+    register("List.maxBy", new BuiltinDef(args -> {
+      checkArity("List.maxBy", args, 2);
+      List<Object> l = requireNonEmpty("List.maxBy", args[0]);
+      LambdaValue keyFn = requireLambda("List.maxBy", args[1]);
+      Object best = l.get(0); double bestK = toDouble(callLambda1(keyFn, best));
+      for (Object x : l) { double k = toDouble(callLambda1(keyFn, x)); if (k > bestK) { best = x; bestK = k; } }
+      return best;
+    }));
+
+    // List.groupBy(list, keyFn)：按 keyFn(item) 分组 → Map<key文本, List<item>>。
+    // key 用 textValue 归一为字符串键（与 Map.* 的字符串键一致，双引擎可比）。保序。
+    register("List.groupBy", new BuiltinDef(args -> {
+      checkArity("List.groupBy", args, 2);
+      List<Object> l = requireList("List.groupBy", args[0]);
+      LambdaValue keyFn = requireLambda("List.groupBy", args[1]);
+      java.util.LinkedHashMap<String, Object> groups = new java.util.LinkedHashMap<>();
+      for (Object item : l) {
+        String key = textValue(callLambda1(keyFn, item));
+        @SuppressWarnings("unchecked")
+        List<Object> bucket = (List<Object>) groups.computeIfAbsent(key, k -> new ArrayList<>());
+        bucket.add(item);
+      }
+      return groups;
+    }));
+
     // === Map Operations (纯函数) ===
     register("Map.empty", new BuiltinDef(args -> {
       checkArity("Map.empty", args, 0);
@@ -931,6 +1046,39 @@ public final class Builtins {
     if (value instanceof Number n) return n.intValue();
     if (value instanceof String s) return Integer.parseInt(s);
     throw new BuiltinException(ErrorMessages.typeExpectedGot("Int", typeName(o)));
+  }
+
+  // === 通用集合 stdlib 辅助（ADR 0024 受控扩展）===
+
+  /** 取列表，非列表抛标准类型错。 */
+  private static List<Object> requireList(String op, Object o) {
+    List<Object> l = asList(o);
+    if (l == null) throw new BuiltinException(ErrorMessages.operationExpectedType(op, "List", typeName(o)));
+    return l;
+  }
+
+  /** 取非空列表（min/max/minBy/maxBy 对空列表无意义，明确抛错而非返回哨兵）。 */
+  private static List<Object> requireNonEmpty(String op, Object o) {
+    List<Object> l = requireList(op, o);
+    if (l.isEmpty()) throw new BuiltinException(ErrorMessages.operationExpectedType(op, "non-empty List", "empty List"));
+    return l;
+  }
+
+  /** 取 LambdaValue，非 lambda 抛标准类型错。 */
+  private static LambdaValue requireLambda(String op, Object o) {
+    if (o instanceof LambdaValue lv) return lv;
+    throw new BuiltinException(ErrorMessages.operationExpectedType(op, "Lambda", typeName(o)));
+  }
+
+  /** 以单参调用 lambda（拼接 captures），返回结果。复用既有 captures 调用约定。 */
+  private static Object callLambda1(LambdaValue lambda, Object arg) {
+    com.oracle.truffle.api.CallTarget callTarget = lambda.getCallTarget();
+    if (callTarget == null) throw new BuiltinException(ErrorMessages.lambdaMissingCallTarget("lambda"));
+    Object[] captured = lambda.getCapturedValues();
+    Object[] callArgs = new Object[1 + captured.length];
+    callArgs[0] = arg;
+    System.arraycopy(captured, 0, callArgs, 1, captured.length);
+    return callTarget.call(callArgs);
   }
 
   private static long toLong(Object o) {
