@@ -100,9 +100,10 @@ public final class CoreModel {
     @JsonSubTypes.Type(value = Construct.class, name = "Construct"),
     @JsonSubTypes.Type(value = Lambda.class, name = "Lambda"),
     @JsonSubTypes.Type(value = AwaitE.class, name = "Await"),
-    @JsonSubTypes.Type(value = IfE.class, name = "IfExpr")
+    @JsonSubTypes.Type(value = IfE.class, name = "IfExpr"),
+    @JsonSubTypes.Type(value = ListE.class, name = "ListLit")
   })
-  public sealed interface Expr permits StringE, Bool, Name, Call, IntE, LongE, DoubleE, NullE, Ok, Err, Some, NoneE, Construct, Lambda, AwaitE, IfE {}
+  public sealed interface Expr permits StringE, Bool, Name, Call, IntE, LongE, DoubleE, NullE, Ok, Err, Some, NoneE, Construct, Lambda, AwaitE, IfE, ListE {}
   @JsonTypeName("String") public static final class StringE implements Expr { public String value; }
   @JsonTypeName("Bool") public static final class Bool implements Expr { public boolean value; }
   @JsonTypeName("Name") public static final class Name implements Expr { public String name; }
@@ -121,6 +122,8 @@ public final class CoreModel {
   @JsonTypeName("Lambda") public static final class Lambda implements Expr { public java.util.List<Param> params; public Type ret; public Block body; public java.util.List<String> captures; }
   // ADR 0019 G2b：表达式级 if（kind="IfExpr"，与 core/ts Core IR 对齐）。
   @JsonTypeName("IfExpr") public static final class IfE implements Expr { public Expr cond; public Expr thenE; public Expr elseE; }
+  // ADR 0024 C0：列表字面量（kind="ListLit"，与 core CoreModel.ListE / ts Core.ListLit 对齐）。
+  @JsonTypeName("ListLit") public static final class ListE implements Expr { public java.util.List<Expr> elements; }
 
   @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind")
   @JsonSubTypes({
