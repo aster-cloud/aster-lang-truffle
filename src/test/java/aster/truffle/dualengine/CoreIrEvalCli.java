@@ -279,6 +279,11 @@ class CoreIrEvalCli {
     private JsonNode valueToJson(Value v) {
         if (v == null || v.isNull()) return MAPPER.nullNode();
         if (v.isBoolean()) return MAPPER.getNodeFactory().booleanNode(v.asBoolean());
+        // Decimal（ADR 0025）：运行时是 guest AsterDecimalValue，暴露 isString()=true +
+        // asString()=canonical 十进制串（toPlainString，去尾零）。它走下方 isString 分支输出
+        // JSON **字符串**（如 "107.9"），与 TS decimal.js 的 JSON.stringify（toJSON→字符串）
+        // 逐位一致——eval-parity 比 JSON.stringify 字符串相等。NOT isNumber，刻意避免 asDouble
+        // 丢精度 + 双引擎分歧。
         if (v.isNumber()) {
             if (v.fitsInInt()) return MAPPER.getNodeFactory().numberNode(v.asInt());
             if (v.fitsInLong()) return MAPPER.getNodeFactory().numberNode(v.asLong());

@@ -398,6 +398,13 @@ public final class Loader {
     if (e instanceof CoreModel.IntE i) return LiteralNode.create(Integer.valueOf(i.value));
     if (e instanceof CoreModel.LongE l) return LiteralNode.create(Long.valueOf(l.value));
     if (e instanceof CoreModel.DoubleE d) return LiteralNode.create(Double.valueOf(d.value));
+    // Decimal 字面量（ADR 0025）：value 是 canonical 十进制字符串 → guest AsterDecimalValue
+    // （包装 BigDecimal）。沙箱下不能用裸 BigDecimal（非 TruffleObject 会在 interop 边界抛
+    // ClassCastException）。
+    if (e instanceof CoreModel.DecimalE dec) {
+      return LiteralNode.create(
+          aster.truffle.runtime.interop.AsterDecimalValue.of(new java.math.BigDecimal(dec.value)));
+    }
     if (e instanceof CoreModel.NullE) return LiteralNode.create(null);
     if (e instanceof CoreModel.AwaitE aw) return aster.truffle.nodes.AwaitNode.create(buildExpr(aw.expr));
     if (e instanceof CoreModel.Lambda lam) {
