@@ -481,6 +481,42 @@ public final class Builtins {
       return out;
     }));
 
+    // List.combinations(list, k)：list 的所有 k 元素子集，确定性递增索引字典序
+    // （[0,1,2,3,4],[0,1,2,3,5],...）。与 TS interpreter 逐位一致（纯整数索引推进，
+    // 不依赖语言细节）。DoS 防护：n≤64 + 结果数 C(n,k)≤上限（先算组合数超限即抛，不先
+    // 生成）——多租户沙箱铁律。边界：k<0 抛错；k>n→空；k=0→[[]]。保留元素原值与相对顺序。
+    register("List.combinations", new BuiltinDef(args -> {
+      checkArity("List.combinations", args, 2);
+      List<Object> l = requireList("List.combinations", args[0]);
+      int k = toInt(args[1]);
+      if (k < 0) throw new RuntimeException("List.combinations: k 须为非负整数，got " + k);
+      int n = l.size();
+      final int MAX_N = 64, MAX_RESULT = 5000;
+      if (n > MAX_N) throw new RuntimeException("List.combinations: 列表过长（" + n + " > " + MAX_N + "），拒绝以防组合爆炸");
+      List<Object> out = new ArrayList<>();
+      if (k > n) return out;
+      // 先算 C(n,k)，超限即抛（不先生成，防 DoS）。
+      long count = 1;
+      for (int i = 0; i < k; i++) {
+        count = count * (n - i) / (i + 1);
+        if (count > MAX_RESULT) throw new RuntimeException("List.combinations: 组合数过多（C(" + n + "," + k + ") > " + MAX_RESULT + "）");
+      }
+      if (k == 0) { out.add(new ArrayList<>()); return out; }
+      int[] idx = new int[k];
+      for (int i = 0; i < k; i++) idx[i] = i;
+      for (;;) {
+        List<Object> subset = new ArrayList<>(k);
+        for (int i = 0; i < k; i++) subset.add(l.get(idx[i]));
+        out.add(subset);
+        int i = k - 1;
+        while (i >= 0 && idx[i] == n - k + i) i--;
+        if (i < 0) break;
+        idx[i]++;
+        for (int j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1;
+      }
+      return out;
+    }));
+
     // List.sort(list)：数值升序、稳定。
     register("List.sort", new BuiltinDef(args -> {
       checkArity("List.sort", args, 1);

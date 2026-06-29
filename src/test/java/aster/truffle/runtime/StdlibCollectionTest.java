@@ -26,6 +26,27 @@ class StdlibCollectionTest {
   @Test void rangeEmpty() {
     assertEquals(List.of(), Builtins.call("List.range", new Object[]{5, 5}));
   }
+  // List.combinations(list, k)：确定性递增索引字典序；与 TS interpreter 逐位一致。
+  @Test void combinationsCount() {
+    assertEquals(6, ((List<?>) Builtins.call("List.combinations", new Object[]{list(10,20,30,40), 2})).size());
+    assertEquals(21, ((List<?>) Builtins.call("List.combinations", new Object[]{list(2,3,4,5,6,7,8), 5})).size());
+  }
+  @Test void combinationsOrder() {
+    // [10,20,30] choose 2 → [[10,20],[10,30],[20,30]]（递增索引序）
+    assertEquals(List.of(List.of(10,20), List.of(10,30), List.of(20,30)),
+        Builtins.call("List.combinations", new Object[]{list(10,20,30), 2}));
+  }
+  @Test void combinationsKZero() {
+    assertEquals(List.of(List.of()), Builtins.call("List.combinations", new Object[]{list(1,2,3), 0}));
+  }
+  @Test void combinationsKGreaterThanN() {
+    assertEquals(List.of(), Builtins.call("List.combinations", new Object[]{list(1,2), 5}));
+  }
+  @Test void combinationsTooManyThrows() {
+    // C(40,20) 远超 5000 上限 → 抛错（DoS 防护）
+    assertThrows(Exception.class, () ->
+        Builtins.call("List.combinations", new Object[]{Builtins.call("List.range", new Object[]{0, 40}), 20}));
+  }
   @Test void sortAscending() {
     Object r = Builtins.call("List.sort", new Object[]{list(9,1,5,3)});
     assertEquals(List.of(1,3,5,9), r);
