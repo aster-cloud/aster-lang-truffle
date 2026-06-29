@@ -6,7 +6,13 @@ plugins {
 }
 
 group = "cloud.aster-lang"
-version = "1.0.6"
+
+// Maven 制品版本 = 共享版本目录的 asterLang（JVM 生态单一版本源，ADR 0012/0023 §9）。
+// 不硬编码字面量——字面量是版本漂移的来源。从 catalog 派生让版本永远跟随 ecosystemVersion，
+// 漂移面收敛到 catalog 1 处。与 core/locales/hi 同构（VersionCatalogsExtension 取 handle，
+// 避免与生成的类型安全访问器 asterLibs 含 .core/.runtime 等库别名 冲突）。
+version = extensions.getByType<VersionCatalogsExtension>()
+    .named("asterLibs").findVersion("asterLang").get().requiredVersion
 
 // 版本统一管理 — 升级 GraalVM/Truffle 或 Quarkus 时只改这里。
 // 此前 25.0.1 在 4 处 dependency 重复硬编码，升级容易半成功。
