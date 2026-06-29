@@ -57,6 +57,11 @@ public final class Builtins {
 
   private static final Map<String, BuiltinDef> REGISTRY = new HashMap<>();
 
+  // Date.* epoch-day 边界（0001-01-01 .. 9999-12-31）。声明在 static 注册块之前——
+  // 块内 Date.addDays 引用它们，Java 禁止前向引用后声明的 static 字段。
+  private static final int DATE_MIN_EPOCH = -719162; // 0001-01-01
+  private static final int DATE_MAX_EPOCH = 2932896; // 9999-12-31
+
   static {
     // === Arithmetic Operations (纯函数，无副作用) ===
     register("add", new BuiltinDef(args -> {
@@ -480,6 +485,27 @@ public final class Builtins {
       for (int i = start; i < end; i++) out.add(i);
       return out;
     }));
+
+    // Date.* 合规原语（Stable v1，与 ts interpreter 逐位一致）：内部 epoch-day Int，纯整数
+    // proleptic Gregorian（不用 java.time 的时区/locale 路径，手写 Hinnant days-from-civil）。
+    // 禁 today()/now()——确定性铁律，"今天"必须作输入字段 evaluation_date。年份 0001-9999。
+    register("Date.fromISO", new BuiltinDef(args -> {
+      checkArity("Date.fromISO", args, 1);
+      return dateFromISO(textValue(args[0]));
+    }));
+    register("Date.daysBetween", new BuiltinDef(args -> {
+      checkArity("Date.daysBetween", args, 2);
+      return toInt(args[1]) - toInt(args[0]);
+    }));
+    register("Date.addDays", new BuiltinDef(args -> {
+      checkArity("Date.addDays", args, 2);
+      long r = (long) toInt(args[0]) + (long) toInt(args[1]);
+      if (r < DATE_MIN_EPOCH || r > DATE_MAX_EPOCH) throw new RuntimeException("Date.OutOfRange: epoch-day " + r);
+      return (int) r;
+    }));
+    register("Date.year", new BuiltinDef(args -> { checkArity("Date.year", args, 1); return dateToCivil(toInt(args[0]))[0]; }));
+    register("Date.month", new BuiltinDef(args -> { checkArity("Date.month", args, 1); return dateToCivil(toInt(args[0]))[1]; }));
+    register("Date.day", new BuiltinDef(args -> { checkArity("Date.day", args, 1); return dateToCivil(toInt(args[0]))[2]; }));
 
     // List.combinations(list, k)：list 的所有 k 元素子集，确定性递增索引字典序
     // （[0,1,2,3,4],[0,1,2,3,5],...）。与 TS interpreter 逐位一致（纯整数索引推进，
@@ -1082,6 +1108,56 @@ public final class Builtins {
     if (value instanceof Number n) return n.intValue();
     if (value instanceof String s) return Integer.parseInt(s);
     throw new BuiltinException(ErrorMessages.typeExpectedGot("Int", typeName(o)));
+  }
+
+  // ── Date.* 纯整数 proleptic Gregorian（与 ts interpreter 逐位一致；不用 java.time 路径）。 ──
+  // 注：DATE_MIN_EPOCH/DATE_MAX_EPOCH 常量已上移到 static 注册块之前（static 块的 Date.addDays
+  // 引用它们，Java 禁止 static 初始化器前向引用后声明的 static 字段）。
+  private static boolean isLeapYear(int y) {
+    return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+  }
+
+  /** 严格 YYYY-MM-DD 解析 + 闰年/月日校验 → epoch-day。非法抛 Date.InvalidISODate。 */
+  private static int dateFromISO(String s) {
+    if (s == null || !s.matches("\\d{4}-\\d{2}-\\d{2}")) {
+      throw new RuntimeException("Date.InvalidISODate: " + quoteIso(s));
+    }
+    int y = Integer.parseInt(s.substring(0, 4));
+    int mo = Integer.parseInt(s.substring(5, 7));
+    int d = Integer.parseInt(s.substring(8, 10));
+    if (y < 1 || y > 9999 || mo < 1 || mo > 12 || d < 1) {
+      throw new RuntimeException("Date.InvalidISODate: " + quoteIso(s));
+    }
+    int[] dim = {31, isLeapYear(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (d > dim[mo - 1]) throw new RuntimeException("Date.InvalidISODate: " + quoteIso(s));
+    // Howard Hinnant days-from-civil（纯整数）。
+    int yy = mo <= 2 ? y - 1 : y;
+    int era = Math.floorDiv(yy >= 0 ? yy : yy - 399, 400);
+    int yoe = yy - era * 400;
+    int doy = (153 * (mo + (mo > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+  }
+
+  /** epoch-day → [year, month, day]（civil-from-days，纯整数）。范围外抛 Date.OutOfRange。 */
+  private static int[] dateToCivil(int epochDay) {
+    if (epochDay < DATE_MIN_EPOCH || epochDay > DATE_MAX_EPOCH) {
+      throw new RuntimeException("Date.OutOfRange: epoch-day " + epochDay);
+    }
+    int z = epochDay + 719468;
+    int era = Math.floorDiv(z >= 0 ? z : z - 146096, 146097);
+    int doe = z - era * 146097;
+    int yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    int y = yoe + era * 400;
+    int doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    int mp = (5 * doy + 2) / 153;
+    int d = doy - (153 * mp + 2) / 5 + 1;
+    int m = mp + (mp < 10 ? 3 : -9);
+    return new int[]{m <= 2 ? y + 1 : y, m, d};
+  }
+
+  private static String quoteIso(String s) {
+    return s == null ? "null" : "\"" + s + "\"";
   }
 
   // === 通用集合 stdlib 辅助（ADR 0024 受控扩展）===
