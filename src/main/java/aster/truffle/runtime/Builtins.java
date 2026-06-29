@@ -1,6 +1,7 @@
 package aster.truffle.runtime;
 
 import aster.truffle.nodes.LambdaValue;
+import aster.truffle.runtime.interop.AsterDecimalValue;
 import aster.truffle.runtime.interop.AsterListValue;
 import aster.truffle.runtime.interop.AsterMapValue;
 import com.oracle.truffle.api.CallTarget;
@@ -91,6 +92,11 @@ public final class Builtins {
 
     register("div", new BuiltinDef(args -> {
       checkArity("div", args, 2);
+      // Decimal（ADR 0025）：`/` 对 Decimal 禁用——除法需显式 scale+rounding mode，
+      // 走 Decimal.divide(x, y, scale, mode) builtin（M2）。隐式浮点除法会丢精度。
+      if (isDecimal(args[0]) || isDecimal(args[1])) {
+        throw new BuiltinException("Decimal division not supported with `/`; use Decimal.divide (ADR 0025)");
+      }
       // `/` 为浮点除法，与 TS 解释器一致（interpreter.ts case '/'）：`7 / 2`
       // 返回 3.5，而非整数截断的 3。修复前 toInt(a)/toInt(b) 做整数除法导致
       // 双引擎 eval 分歧。返回 double 即可对齐——CoreIrEvalCli.valueToJson 会
@@ -103,6 +109,9 @@ public final class Builtins {
 
     register("intdiv", new BuiltinDef(args -> {
       checkArity("intdiv", args, 2);
+      if (isDecimal(args[0]) || isDecimal(args[1])) {
+        throw new BuiltinException("Decimal division not supported with `//`; use Decimal.divide (ADR 0025)");
+      }
       // 整除：向零截断，与 TS 解释器一致（interpreter.ts case '//' = Math.trunc）
       // 及 Java/Go/C 语义：`-7 integer divided by 2 = -3`。
       // (#14) 两侧都是整数时直接做 long 除法，避免 double 在 |operand| > 2^53
@@ -120,6 +129,9 @@ public final class Builtins {
 
     register("mod", new BuiltinDef(args -> {
       checkArity("mod", args, 2);
+      if (isDecimal(args[0]) || isDecimal(args[1])) {
+        throw new BuiltinException("Decimal modulo not supported with `%` (ADR 0025)");
+      }
       // 与 TS 的 `%` 一致：任一为浮点 → 浮点取模（Java `%` 对 double 有定义）。
       if (isFractional(args[0]) || isFractional(args[1])) {
         return toDouble(args[0]) % toDouble(args[1]);
@@ -132,35 +144,43 @@ public final class Builtins {
     // 修复前 eq 用 Objects.equals 比较 Double(0.0) 与 Integer(0) → false（div 改
     // 浮点后 `remainder equals to 0` 双引擎分歧）；lt/lte/gt/gte 强制 toInt 会丢
     // 小数。仅当两侧都是数值时走数值比较，否则退回结构相等。
+    // Decimal（ADR 0025）：比较用 BigDecimal.compareTo（值语义，绕开 equals 的 scale
+    // 敏感，使 `1.0m equals to 1.00m` 为真）；Int/Long 精确提升，禁 Double 混算（toDecimal）。
     register("eq", new BuiltinDef(args -> {
       checkArity("eq", args, 2);
+      if (isDecimal(args[0]) || isDecimal(args[1])) return toDecimal(args[0]).compareTo(toDecimal(args[1])) == 0;
       if (isNumber(args[0]) && isNumber(args[1])) return toDouble(args[0]) == toDouble(args[1]);
       return Objects.equals(unwrap(args[0]), unwrap(args[1]));
     }));
 
     register("ne", new BuiltinDef(args -> {
       checkArity("ne", args, 2);
+      if (isDecimal(args[0]) || isDecimal(args[1])) return toDecimal(args[0]).compareTo(toDecimal(args[1])) != 0;
       if (isNumber(args[0]) && isNumber(args[1])) return toDouble(args[0]) != toDouble(args[1]);
       return !Objects.equals(unwrap(args[0]), unwrap(args[1]));
     }));
 
     register("lt", new BuiltinDef(args -> {
       checkArity("lt", args, 2);
+      if (isDecimal(args[0]) || isDecimal(args[1])) return toDecimal(args[0]).compareTo(toDecimal(args[1])) < 0;
       return toDouble(args[0]) < toDouble(args[1]);
     }));
 
     register("lte", new BuiltinDef(args -> {
       checkArity("lte", args, 2);
+      if (isDecimal(args[0]) || isDecimal(args[1])) return toDecimal(args[0]).compareTo(toDecimal(args[1])) <= 0;
       return toDouble(args[0]) <= toDouble(args[1]);
     }));
 
     register("gt", new BuiltinDef(args -> {
       checkArity("gt", args, 2);
+      if (isDecimal(args[0]) || isDecimal(args[1])) return toDecimal(args[0]).compareTo(toDecimal(args[1])) > 0;
       return toDouble(args[0]) > toDouble(args[1]);
     }));
 
     register("gte", new BuiltinDef(args -> {
       checkArity("gte", args, 2);
+      if (isDecimal(args[0]) || isDecimal(args[1])) return toDecimal(args[0]).compareTo(toDecimal(args[1])) >= 0;
       return toDouble(args[0]) >= toDouble(args[1]);
     }));
 
@@ -506,6 +526,25 @@ public final class Builtins {
     register("Date.year", new BuiltinDef(args -> { checkArity("Date.year", args, 1); return dateToCivil(toInt(args[0]))[0]; }));
     register("Date.month", new BuiltinDef(args -> { checkArity("Date.month", args, 1); return dateToCivil(toInt(args[0]))[1]; }));
     register("Date.day", new BuiltinDef(args -> { checkArity("Date.day", args, 1); return dateToCivil(toInt(args[0]))[2]; }));
+
+    // Decimal.* 精确舍入/除法（ADR 0025 M2）。mode 字符串 HALF_UP/HALF_EVEN/DOWN，scale 0..18。
+    // 与 TS decimal.js toDecimalPlaces/dividedBy 逐位一致（含 2.5→2 银行家舍入 + canonical 去尾零）。
+    register("Decimal.round", new BuiltinDef(args -> {
+      checkArity("Decimal.round", args, 3);
+      java.math.BigDecimal x = toDecimal(args[0]);
+      int scale = decimalScale(args[1]);
+      java.math.RoundingMode mode = decimalRoundingMode(args[2]);
+      return wrapDecimal(x.setScale(scale, mode));
+    }));
+    register("Decimal.divide", new BuiltinDef(args -> {
+      checkArity("Decimal.divide", args, 4);
+      java.math.BigDecimal x = toDecimal(args[0]);
+      java.math.BigDecimal y = toDecimal(args[1]);
+      if (y.signum() == 0) throw new BuiltinException("Decimal.divide: division by zero.");
+      int scale = decimalScale(args[2]);
+      java.math.RoundingMode mode = decimalRoundingMode(args[3]);
+      return wrapDecimal(x.divide(y, scale, mode));
+    }));
 
     // List.combinations(list, k)：list 的所有 k 元素子集，确定性递增索引字典序
     // （[0,1,2,3,4],[0,1,2,3,5],...）。与 TS interpreter 逐位一致（纯整数索引推进，
@@ -1220,20 +1259,83 @@ public final class Builtins {
     return unwrap(o) instanceof Number;
   }
 
+  /**
+   * Decimal 一等公民（ADR 0025）：运行时值是 guest {@link AsterDecimalValue}（包装
+   * BigDecimal）。沙箱下不能用裸 BigDecimal（非 TruffleObject）。
+   */
+  private static boolean isDecimal(Object o) {
+    return unwrap(o) instanceof AsterDecimalValue;
+  }
+
+  /**
+   * 把操作数转成 BigDecimal 用于精确运算。AsterDecimalValue → 解包；Int/Long → 精确提升
+   * （BigDecimal.valueOf）；Double/Float → 禁止混算（ADR 0025：Double 是二进制浮点，与
+   * Decimal 混算会引入误差，破坏可证明性），抛 deterministic error。与 TS interpreter 的
+   * toDec 行为逐位一致（TS 用 Number.isInteger 判定）。
+   */
+  private static java.math.BigDecimal toDecimal(Object o) {
+    Object v = unwrap(o);
+    if (v instanceof AsterDecimalValue d) return d.decimal();
+    if (v instanceof Integer i) return java.math.BigDecimal.valueOf(i.longValue());
+    if (v instanceof Long l) return java.math.BigDecimal.valueOf(l);
+    if (v instanceof Double || v instanceof Float) {
+      throw new BuiltinException("Cannot combine Decimal and Double; convert explicitly (ADR 0025)");
+    }
+    throw new BuiltinException(ErrorMessages.typeExpectedGot("Decimal", typeName(o)));
+  }
+
+  /**
+   * 精确运算结果 BigDecimal → guest AsterDecimalValue（canonical 化：去尾零、零归 ZERO，
+   * 避免 "-0"/指数）。保证 `1.20m × 1.080m` 两引擎都得 "1.296"，序列化 toPlainString 相同。
+   */
+  private static AsterDecimalValue wrapDecimal(java.math.BigDecimal d) {
+    return AsterDecimalValue.of(d);
+  }
+
+  /**
+   * 舍入模式字符串 → BigDecimal RoundingMode（ADR 0025 M2）。HALF_UP（远离零）/
+   * HALF_EVEN（银行家，向偶）/ DOWN（截断，朝零）。与 TS decimal.js 同名同义逐位一致。
+   */
+  private static java.math.RoundingMode decimalRoundingMode(Object mode) {
+    String m = textValue(mode);
+    switch (m) {
+      case "HALF_UP": return java.math.RoundingMode.HALF_UP;
+      case "HALF_EVEN": return java.math.RoundingMode.HALF_EVEN;
+      case "DOWN": return java.math.RoundingMode.DOWN;
+      default:
+        throw new BuiltinException(
+            "Decimal: unknown rounding mode \"" + m + "\"; use \"HALF_UP\", \"HALF_EVEN\" or \"DOWN\".");
+    }
+  }
+
+  /** scale 参数校验：必须是 0..18 的整数（v1 上限 scale 18，与 ADR 0025 一致）。 */
+  private static int decimalScale(Object scale) {
+    int n = toInt(scale);
+    if (n < 0 || n > 18) {
+      throw new BuiltinException("Decimal: scale must be an integer in [0, 18], got " + n + ".");
+    }
+    return n;
+  }
+
   // 数值算术：任一操作数为浮点 → double 结果；否则 int。结果若为整数值，
   // 由调用方序列化层（CoreIrEvalCli.valueToJson 的 fitsInInt）收敛回 int，
   // 与 TS 的 JSON 序列化逐位一致。
+  // Decimal（ADR 0025）：任一操作数是 Decimal → 精确加减乘（不舍入），结果包回
+  // AsterDecimalValue。除法/取模对 Decimal 禁用（走 Decimal.divide builtin=M2）。
   private static Object numericAdd(Object a, Object b) {
+    if (isDecimal(a) || isDecimal(b)) return wrapDecimal(toDecimal(a).add(toDecimal(b)));
     if (isFractional(a) || isFractional(b)) return toDouble(a) + toDouble(b);
     return toInt(a) + toInt(b);
   }
 
   private static Object numericSub(Object a, Object b) {
+    if (isDecimal(a) || isDecimal(b)) return wrapDecimal(toDecimal(a).subtract(toDecimal(b)));
     if (isFractional(a) || isFractional(b)) return toDouble(a) - toDouble(b);
     return toInt(a) - toInt(b);
   }
 
   private static Object numericMul(Object a, Object b) {
+    if (isDecimal(a) || isDecimal(b)) return wrapDecimal(toDecimal(a).multiply(toDecimal(b)));
     if (isFractional(a) || isFractional(b)) return toDouble(a) * toDouble(b);
     return toInt(a) * toInt(b);
   }

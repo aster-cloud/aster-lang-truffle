@@ -92,6 +92,7 @@ public final class CoreModel {
     @JsonSubTypes.Type(value = IntE.class, name = "Int"),
     @JsonSubTypes.Type(value = LongE.class, name = "Long"),
     @JsonSubTypes.Type(value = DoubleE.class, name = "Double"),
+    @JsonSubTypes.Type(value = DecimalE.class, name = "Decimal"),
     @JsonSubTypes.Type(value = NullE.class, name = "Null"),
     @JsonSubTypes.Type(value = Ok.class, name = "Ok"),
     @JsonSubTypes.Type(value = Err.class, name = "Err"),
@@ -103,7 +104,7 @@ public final class CoreModel {
     @JsonSubTypes.Type(value = IfE.class, name = "IfExpr"),
     @JsonSubTypes.Type(value = ListE.class, name = "ListLit")
   })
-  public sealed interface Expr permits StringE, Bool, Name, Call, IntE, LongE, DoubleE, NullE, Ok, Err, Some, NoneE, Construct, Lambda, AwaitE, IfE, ListE {}
+  public sealed interface Expr permits StringE, Bool, Name, Call, IntE, LongE, DoubleE, DecimalE, NullE, Ok, Err, Some, NoneE, Construct, Lambda, AwaitE, IfE, ListE {}
   @JsonTypeName("String") public static final class StringE implements Expr { public String value; }
   @JsonTypeName("Bool") public static final class Bool implements Expr { public boolean value; }
   @JsonTypeName("Name") public static final class Name implements Expr { public String name; }
@@ -111,6 +112,8 @@ public final class CoreModel {
   @JsonTypeName("Int") public static final class IntE implements Expr { public int value; }
   @JsonTypeName("Long") public static final class LongE implements Expr { public long value; }
   @JsonTypeName("Double") public static final class DoubleE implements Expr { public double value; }
+  // Decimal 字面量（ADR 0025）：value 是 canonical 十进制字符串（与 TS Core IR 一致），运行时 BigDecimal。
+  @JsonTypeName("Decimal") public static final class DecimalE implements Expr { public String value; }
   @JsonTypeName("Null") public static final class NullE implements Expr {}
   @JsonTypeName("Await") public static final class AwaitE implements Expr { public Expr expr; }
   @JsonTypeName("Ok") public static final class Ok implements Expr { public Expr expr; }
