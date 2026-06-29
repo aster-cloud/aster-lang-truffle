@@ -1116,11 +1116,16 @@ public final class AsyncTaskRegistry {
       if (info.workflowId != null) {
         lastFailedWorkflowId = info.workflowId;
       }
-      info.future.completeExceptionally(error);
+      // 顺序要点（修 flaky）：先同步把传递下游推进到 CANCELLED，**再** completeExceptionally
+      // 唤醒 barrier.join()。否则调度线程从 join 醒来抛异常时，下游可能尚未取消——
+      // 调用方（如 isCancelled 断言）观察到下游仍 PENDING，呈现时序竞态（WorkflowSchedulerTest
+      // testExecuteUntilCompleteWrapsFailure 长期 flaky 的根因）。markCompleted+cancelDownstream
+      // 都是同步确定性操作，完成后再发失败信号 → 下游终态在异常可见前已落定。
       synchronized (graphLock) {
         dependencyGraph.markCompleted(info.taskId);
       }
       cancelDownstreamTasks(info.taskId);
+      info.future.completeExceptionally(error);
     }
     cleanupRetryState(info.taskId);
   }
