@@ -63,6 +63,10 @@ public final class Builtins {
   private static final int DATE_MIN_EPOCH = -719162; // 0001-01-01
   private static final int DATE_MAX_EPOCH = 2932896; // 9999-12-31
 
+  // 红队 P0-B：List.range 生成列表长度上限（防「小标量→巨列表」内存耗尽 DoS）。
+  // 与 aster-lang-ts interpreter 的 MAX_RANGE_SIZE 保持一致，维持双引擎 parity。
+  private static final long MAX_RANGE_SIZE = 1_000_000L;
+
   static {
     // === Arithmetic Operations (纯函数，无副作用) ===
     register("add", new BuiltinDef(args -> {
@@ -497,11 +501,17 @@ public final class Builtins {
     }));
 
     // List.range(startInclusive, endExclusive)：[start, end) 整数序列（start>=end → 空）。
+    // 红队 P0-B：range 是唯一「从标量凭空造大列表」的 builtin，statementLimit 只数 Truffle
+    // 语句不数 native for 循环 → range(0, 2e9) 会 OOM/占死 worker。先按 long 算长度，超上限即抛。
     register("List.range", new BuiltinDef(args -> {
       checkArity("List.range", args, 2);
       int start = toInt(args[0]);
       int end = toInt(args[1]);
-      List<Object> out = new ArrayList<>();
+      long size = (long) end - (long) start; // long 防 int 溢出（end/start 可为 Integer 极值）
+      if (size > MAX_RANGE_SIZE) {
+        throw new RuntimeException("List.range: 长度过大（" + size + " > " + MAX_RANGE_SIZE + "），拒绝以防内存耗尽 DoS");
+      }
+      List<Object> out = new ArrayList<>(size > 0 ? (int) size : 0);
       for (int i = start; i < end; i++) out.add(i);
       return out;
     }));
@@ -646,9 +656,12 @@ public final class Builtins {
     }));
 
     // === Map Operations (纯函数) ===
+    // 红队 P2-I：Map 全链用 LinkedHashMap（插入序），使 Map.keys/values 顺序确定且与 TS
+    // 引擎逐字节一致（TS 用 JS object，Object.keys/values 返回插入序）。HashMap 是哈希序、
+    // 非确定，破坏双引擎 parity 与可复现（Aster 决策必须可回放）。
     register("Map.empty", new BuiltinDef(args -> {
       checkArity("Map.empty", args, 0);
-      return new HashMap<>();
+      return new java.util.LinkedHashMap<>();
     }));
 
     register("Map.get", new BuiltinDef(args -> {
@@ -663,8 +676,9 @@ public final class Builtins {
     register("Map.put", new BuiltinDef(args -> {
       checkArity("Map.put", args, 3);
       if (args[0] instanceof Map<?,?> m) {
+        // LinkedHashMap 拷贝保插入序；新键追加末尾（与 TS `{...m, [k]:v}` 一致）。
         @SuppressWarnings("unchecked")
-        Map<Object,Object> mutable = new HashMap<>((Map<Object,Object>)m);
+        Map<Object,Object> mutable = new java.util.LinkedHashMap<>((Map<Object,Object>)m);
         mutable.put(args[1], args[2]);
         return mutable;
       }
@@ -675,7 +689,7 @@ public final class Builtins {
       checkArity("Map.remove", args, 2);
       if (args[0] instanceof Map<?,?> m) {
         @SuppressWarnings("unchecked")
-        Map<Object,Object> mutable = new HashMap<>((Map<Object,Object>)m);
+        Map<Object,Object> mutable = new java.util.LinkedHashMap<>((Map<Object,Object>)m);
         mutable.remove(args[1]);
         return mutable;
       }
@@ -857,8 +871,9 @@ public final class Builtins {
 
         Object mapped = callTarget.call(callArgs);
 
-        // Return Some(mapped)
-        Map<String, Object> result = new HashMap<>();
+        // Return Some(mapped)。红队 P2-I：LinkedHashMap 固定 _type→value 插入序，
+        // 防 HashMap 键序不定破坏 Map.keys 可复现 / 双引擎 parity。
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("_type", "Some");
         result.put("value", mapped);
         return result;
@@ -899,8 +914,8 @@ public final class Builtins {
 
       Object mapped = callTarget.call(callArgs);
 
-      // Return Ok(mapped)
-      Map<String, Object> result = new HashMap<>();
+      // Return Ok(mapped)。红队 P2-I：LinkedHashMap 固定键序（可复现 / parity）。
+      Map<String, Object> result = new java.util.LinkedHashMap<>();
       result.put("_type", "Ok");
       result.put("value", mapped);
       return result;
@@ -938,8 +953,8 @@ public final class Builtins {
 
       Object mapped = callTarget.call(callArgs);
 
-      // Return Err(mapped)
-      Map<String, Object> result = new HashMap<>();
+      // Return Err(mapped)。红队 P2-I：LinkedHashMap 固定键序（可复现 / parity）。
+      Map<String, Object> result = new java.util.LinkedHashMap<>();
       result.put("_type", "Err");
       result.put("value", mapped);
       return result;
