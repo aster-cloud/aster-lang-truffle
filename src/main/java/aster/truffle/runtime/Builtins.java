@@ -137,10 +137,17 @@ public final class Builtins {
         throw new BuiltinException("Decimal modulo not supported with `%` (ADR 0025)");
       }
       // 与 TS 的 `%` 一致：任一为浮点 → 浮点取模（Java `%` 对 double 有定义）。
+      // #43：除数为 0 抛 guest "division by zero"（与 div/intdiv 一致），不再返回
+      // 静默 NaN 或抛裸 ArithmeticException。整数路径提升到 long（match TS 统一
+      // number；原 toInt 32 位截断会让 |operand| > 2^31 的取模结果错误）。
       if (isFractional(args[0]) || isFractional(args[1])) {
-        return toDouble(args[0]) % toDouble(args[1]);
+        double divisor = toDouble(args[1]);
+        if (divisor == 0.0) throw new BuiltinException(ErrorMessages.arithmeticDivisionByZero());
+        return toDouble(args[0]) % divisor;
       }
-      return toInt(args[0]) % toInt(args[1]);
+      long divisor = toLong(args[1]);
+      if (divisor == 0L) throw new BuiltinException(ErrorMessages.arithmeticDivisionByZero());
+      return toLong(args[0]) % divisor;
     }));
 
     // === Comparison Operations (纯函数) ===
@@ -212,12 +219,14 @@ public final class Builtins {
 
     register("Text.toUpper", new BuiltinDef(args -> {
       checkArity("Text.toUpper", args, 1);
-      return textValue(args[0]).toUpperCase();
+      // #43：显式 Locale.ROOT，避免默认 locale（如 tr_TR 的 i→İ）破坏确定性与 TS parity。
+      return textValue(args[0]).toUpperCase(java.util.Locale.ROOT);
     }));
 
     register("Text.toLower", new BuiltinDef(args -> {
       checkArity("Text.toLower", args, 1);
-      return textValue(args[0]).toLowerCase();
+      // #43：显式 Locale.ROOT，避免默认 locale（如 tr_TR 的 I→ı）破坏确定性与 TS parity。
+      return textValue(args[0]).toLowerCase(java.util.Locale.ROOT);
     }));
 
     register("Text.startsWith", new BuiltinDef(args -> {
@@ -1337,22 +1346,25 @@ public final class Builtins {
   // 与 TS 的 JSON 序列化逐位一致。
   // Decimal（ADR 0025）：任一操作数是 Decimal → 精确加减乘（不舍入），结果包回
   // AsterDecimalValue。除法/取模对 Decimal 禁用（走 Decimal.divide builtin=M2）。
+  // #43：整数算术提升到 long（match TS 统一 number；原 toInt 返回 int，|结果| > 2^31
+  // 时静默溢出回绕，与已修为 long 的 intdiv 不一致）。CoreIrEvalCli.valueToJson 的
+  // fitsInInt 会把可容纳的 long 值收敛回 int，与 TS JSON 序列化逐位一致。
   private static Object numericAdd(Object a, Object b) {
     if (isDecimal(a) || isDecimal(b)) return wrapDecimal(toDecimal(a).add(toDecimal(b)));
     if (isFractional(a) || isFractional(b)) return toDouble(a) + toDouble(b);
-    return toInt(a) + toInt(b);
+    return toLong(a) + toLong(b);
   }
 
   private static Object numericSub(Object a, Object b) {
     if (isDecimal(a) || isDecimal(b)) return wrapDecimal(toDecimal(a).subtract(toDecimal(b)));
     if (isFractional(a) || isFractional(b)) return toDouble(a) - toDouble(b);
-    return toInt(a) - toInt(b);
+    return toLong(a) - toLong(b);
   }
 
   private static Object numericMul(Object a, Object b) {
     if (isDecimal(a) || isDecimal(b)) return wrapDecimal(toDecimal(a).multiply(toDecimal(b)));
     if (isFractional(a) || isFractional(b)) return toDouble(a) * toDouble(b);
-    return toInt(a) * toInt(b);
+    return toLong(a) * toLong(b);
   }
 
   private static String textValue(Object value) {

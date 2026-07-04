@@ -122,19 +122,6 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     return argNodes.length == 2;
   }
 
-  /**
-   * Phase 3C P1-1: 小列表判断（size <= 10）
-   * 用于快速路径守卫，避免小列表使用 InvokeNode 缓存
-   */
-  protected boolean isSmallList(VirtualFrame frame) {
-    if (argNodes.length < 1) {
-      return false;
-    }
-    Object listObj = argNodes[0].executeGeneric(frame);
-    List<Object> list = Builtins.asList(listObj);
-    return list != null && list.size() <= 10;
-  }
-
   @Idempotent
   protected boolean hasOneArg() {
     return argNodes.length == 1;
@@ -355,73 +342,13 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   }
 
   /**
-   * 小列表快速路径：List.map (list, lambda) - Phase 3C P1-1
+   * 内联 List.map (list, lambda) - Phase 3B 性能优化
    *
-   * 当列表大小 <= 10 时使用简化逻辑，直接调用 CallTarget.call()
-   * 避免 InvokeNode 缓存开销，修复小列表 JIT 性能回归。
-   *
-   * 守卫优先级：此特化必须在通用 doListMap 之前，确保小列表优先匹配快速路径。
-   *
-   * @param frame VirtualFrame 提供执行上下文
-   * @return 映射后的列表
-   */
-  @Specialization(guards = {"isListMap()", "hasTwoArgs()", "isSmallList(frame)"})
-  protected List<Object> doListMapSmall(VirtualFrame frame) {
-    Profiler.inc("builtin_list_map_small");
-
-    // 执行参数节点
-    Object listObj = argNodes[0].executeGeneric(frame);
-    Object lambdaObj = argNodes[1].executeGeneric(frame);
-
-    // 类型检查（asList 兼容 guest AsterListValue 与原生 java.util.List）
-    List<Object> list = Builtins.asList(listObj);
-    if (list == null) {
-      throw new RuntimeException(
-        ErrorMessages.operationExpectedType("List.map", "List",
-          listObj == null ? "null" : listObj.getClass().getSimpleName())
-      );
-    }
-
-    if (!(lambdaObj instanceof LambdaValue lambda)) {
-      throw new RuntimeException(
-        "List.map expects lambda as second argument, got: " +
-        (lambdaObj == null ? "null" : lambdaObj.getClass().getSimpleName())
-      );
-    }
-
-    // 循环外提取不变量
-    CallTarget callTarget = lambda.getCallTarget();
-    if (callTarget == null) {
-      throw new RuntimeException("List.map: lambda has no call target");
-    }
-
-    Object[] capturedValues = lambda.getCapturedValues();
-
-    // 小列表快速路径：直接调用 CallTarget.call()，无缓存开销
-    // Phase 3C P1-2: 循环外预分配参数数组，消除每次迭代分配开销
-    List<Object> result = new ArrayList<>(list.size());
-    Object[] packedArgs = new Object[1 + capturedValues.length];
-    for (Object item : list) {
-      packedArgs[0] = item;
-      System.arraycopy(capturedValues, 0, packedArgs, 1, capturedValues.length);
-
-      // 直接调用，避免 InvokeNode 缓存查找开销
-      Object mapped = callTarget.call(packedArgs);
-      result.add(mapped);
-    }
-
-    return result;
-  }
-
-  /**
-   * 内联 List.map (list, lambda) - Phase 3B 性能优化 + Phase 3C P1-1 小列表排除
-   *
-   * 使用 @Cached InvokeNode 替代裸 CallTarget.call()，引入 DirectCallNode 缓存机制，
-   * 消除 76% CallTarget 间接调用开销。循环外提取 capturedValues 消除 8% 重复读取开销。
-   *
-   * Phase 3C P1-1: 现在仅处理大列表（size > 10），小列表由 doListMapSmall 处理
-   *
-   * 优化目标：大列表 (1000 元素) 从 1.309ms 降至 <0.6ms (2-3x 性能提升)
+   * #43 HIGH：删除原 isSmallList(frame) 动态守卫（它在守卫里 executeGeneric(argNodes[0])
+   * 求值列表参数一次，specialization 体内又求值一次 → List.map 的列表参数被求值 2-3 次，
+   * 副作用参数如 return / task 注册 / 列表 append 会重复触发）。改为单一 specialization：
+   * 每个参数节点恰好求值一次，再在体内按 size 分派——小列表 (<=10) 走裸 CallTarget.call()
+   * 免 InvokeNode 缓存开销，大列表走 @Cached InvokeNode 享 DirectCallNode 单态缓存。
    *
    * @param frame VirtualFrame 提供执行上下文
    * @param node Node 绑定当前节点，传递给 InvokeNode
@@ -429,7 +356,7 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
    * @return 映射后的列表
    */
   @SuppressWarnings({"truffle-static-method", "truffle-unused", "truffle-sharing"})
-  @Specialization(guards = {"isListMap()", "hasTwoArgs()", "!isSmallList(frame)"})
+  @Specialization(guards = {"isListMap()", "hasTwoArgs()"})
   protected List<Object> doListMap(
       VirtualFrame frame,
       @Bind("$node") Node node,
@@ -437,7 +364,7 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
 
     Profiler.inc("builtin_list_map_node");
 
-    // 执行参数节点
+    // 参数节点各求值一次（ControlFlowException 自然透传，副作用参数不重复触发）
     Object listObj = argNodes[0].executeGeneric(frame);
     Object lambdaObj = argNodes[1].executeGeneric(frame);
 
@@ -471,7 +398,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
 
     Object[] capturedValues = lambda.getCapturedValues();
 
-    // Map 循环：每次迭代使用 InvokeNode 执行 lambda，享受 DirectCallNode 缓存
+    // size 分派在单一 specialization 体内完成（列表已求值一次）：
+    // 小列表走裸 CallTarget.call 免缓存开销，大列表走 InvokeNode。
+    boolean small = list.size() <= 10;
     List<Object> result = new ArrayList<>(list.size());
     for (Object item : list) {
       // 参数打包顺序：[item, ...captures]，与 CallNode.java:63-68 一致
@@ -479,8 +408,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
       packedArgs[0] = item;
       System.arraycopy(capturedValues, 0, packedArgs, 1, capturedValues.length);
 
-      // 通过 InvokeNode 调用，触发 DirectCallNode 单态缓存 (limit=3)
-      Object mapped = invokeNode.execute(node, callTarget, packedArgs);
+      Object mapped = small
+          ? callTarget.call(packedArgs)
+          : invokeNode.execute(node, callTarget, packedArgs);
       result.add(mapped);
     }
 
@@ -488,75 +418,10 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   }
 
   /**
-   * 小列表快速路径：List.filter (list, predicate) - Phase 3C P1-1
+   * 内联 List.filter (list, predicate) - Phase 3B 性能优化
    *
-   * 当列表大小 <= 10 时使用简化逻辑，直接调用 CallTarget.call()
-   * 避免 InvokeNode 缓存开销，修复小列表 JIT 性能回归。
-   *
-   * 守卫优先级：此特化必须在通用 doListFilter 之前，确保小列表优先匹配快速路径。
-   *
-   * @param frame VirtualFrame 提供执行上下文
-   * @return 过滤后的列表
-   */
-  @Specialization(guards = {"isListFilter()", "hasTwoArgs()", "isSmallList(frame)"})
-  protected List<Object> doListFilterSmall(VirtualFrame frame) {
-    Profiler.inc("builtin_list_filter_small");
-
-    // 执行参数节点
-    Object listObj = argNodes[0].executeGeneric(frame);
-    Object predicateObj = argNodes[1].executeGeneric(frame);
-
-    // 类型检查（asList 兼容 guest AsterListValue 与原生 java.util.List）
-    List<Object> list = Builtins.asList(listObj);
-    if (list == null) {
-      throw new RuntimeException(
-        ErrorMessages.operationExpectedType("List.filter", "List",
-          listObj == null ? "null" : listObj.getClass().getSimpleName())
-      );
-    }
-
-    if (!(predicateObj instanceof LambdaValue predicate)) {
-      throw new RuntimeException(
-        "List.filter expects lambda as second argument, got: " +
-        (predicateObj == null ? "null" : predicateObj.getClass().getSimpleName())
-      );
-    }
-
-    // 循环外提取不变量
-    CallTarget callTarget = predicate.getCallTarget();
-    if (callTarget == null) {
-      throw new RuntimeException("List.filter: predicate has no call target");
-    }
-
-    Object[] capturedValues = predicate.getCapturedValues();
-
-    // 小列表快速路径：直接调用 CallTarget.call()，无缓存开销
-    // Phase 3C P1-2: 循环外预分配参数数组，消除每次迭代分配开销
-    List<Object> result = new ArrayList<>();
-    Object[] packedArgs = new Object[1 + capturedValues.length];
-    for (Object item : list) {
-      packedArgs[0] = item;
-      System.arraycopy(capturedValues, 0, packedArgs, 1, capturedValues.length);
-
-      // 直接调用，避免 InvokeNode 缓存查找开销
-      Object testResult = callTarget.call(packedArgs);
-      if (Boolean.TRUE.equals(testResult)) {
-        result.add(item);
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * 内联 List.filter (list, predicate) - Phase 3B 性能优化 + Phase 3C P1-1 小列表排除
-   *
-   * 使用 @Cached InvokeNode 替代裸 CallTarget.call()，引入 DirectCallNode 缓存机制。
-   * 循环外提取 capturedValues，循环内执行谓词并仅保留 Boolean.TRUE 的元素。
-   *
-   * Phase 3C P1-1: 现在仅处理大列表（size > 10），小列表由 doListFilterSmall 处理
-   *
-   * 优化目标：与 List.map 相同的 DirectCallNode 缓存收益
+   * #43 HIGH：同 doListMap，删除 isSmallList(frame) 动态守卫（避免谓词/列表参数二次求值），
+   * 单一 specialization 内每参数求值一次后按 size 分派（小列表裸调用，大列表 InvokeNode 缓存）。
    *
    * @param frame VirtualFrame 提供执行上下文
    * @param node Node 绑定当前节点，传递给 InvokeNode
@@ -564,7 +429,7 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
    * @return 过滤后的列表
    */
   @SuppressWarnings({"truffle-static-method", "truffle-unused", "truffle-sharing"})
-  @Specialization(guards = {"isListFilter()", "hasTwoArgs()", "!isSmallList(frame)"})
+  @Specialization(guards = {"isListFilter()", "hasTwoArgs()"})
   protected List<Object> doListFilter(
       VirtualFrame frame,
       @Bind("$node") Node node,
@@ -572,7 +437,7 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
 
     Profiler.inc("builtin_list_filter_node");
 
-    // 执行参数节点
+    // 参数节点各求值一次（ControlFlowException 自然透传，副作用参数不重复触发）
     Object listObj = argNodes[0].executeGeneric(frame);
     Object predicateObj = argNodes[1].executeGeneric(frame);
 
@@ -613,7 +478,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
 
     Object[] capturedValues = predicate.getCapturedValues();
 
-    // Filter 循环：每次迭代使用 InvokeNode 执行谓词，仅保留 Boolean.TRUE 的元素
+    // size 分派：小列表 (<=10) 走裸 CallTarget.call 免缓存开销，大列表走 InvokeNode。
+    boolean small = list.size() <= 10;
+    // Filter 循环：仅保留谓词返回 Boolean.TRUE 的元素
     List<Object> result = new ArrayList<>();
     for (Object item : list) {
       // 参数打包顺序：[item, ...captures]，与 CallNode.java:63-68 一致
@@ -621,8 +488,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
       packedArgs[0] = item;
       System.arraycopy(capturedValues, 0, packedArgs, 1, capturedValues.length);
 
-      // 通过 InvokeNode 调用，触发 DirectCallNode 单态缓存 (limit=3)
-      Object predicateResult = invokeNode.execute(node, callTarget, packedArgs);
+      Object predicateResult = small
+          ? callTarget.call(packedArgs)
+          : invokeNode.execute(node, callTarget, packedArgs);
 
       // 谓词判断：使用 Boolean.TRUE.equals() 避免 null 或非 Boolean 类型错误
       if (Boolean.TRUE.equals(predicateResult)) {
@@ -636,12 +504,11 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   /**
    * Fallback: 调用 Builtins.call（通用路径）
    * 处理所有未内联的 builtin 或类型不匹配的情况
-   * Phase 3C P1-1: 添加 doListMapSmall, doListFilterSmall 到 replaces 列表
    */
   @Specialization(replaces = {"doEqInt", "doLtInt", "doGtInt", "doLteInt", "doGteInt",
                                "doAndBoolean", "doOrBoolean", "doNotBoolean",
                                "doTextConcat", "doTextLength", "doListLength", "doListAppend",
-                               "doListMapSmall", "doListMap", "doListFilterSmall", "doListFilter"})
+                               "doListMap", "doListFilter"})
   protected Object doGeneric(VirtualFrame frame) {
     Profiler.inc("builtin_call_generic");
 

@@ -1258,15 +1258,23 @@ public final class AsyncTaskRegistry {
       if (info.workflowId != null) {
         lastFailedWorkflowId = info.workflowId;
       }
-      info.future.obtrudeException(timeoutException);
     }
 
+    // 顺序要点（#43 HIGH，与 handleFinalTaskFailure 的修复对齐）：先同步把
+    // 超时任务标记完成 + 取消传递下游（都是确定性操作），**再** obtrudeException
+    // 唤醒 barrier.join()。否则调用方从 join 醒来观察超时失败时，下游任务可能仍
+    // PENDING，呈现与 testExecuteUntilCompleteWrapsFailure 同源的时序竞态。
     // 标记超时任务为已完成（让依赖图更新）
     synchronized (graphLock) {
       dependencyGraph.markCompleted(taskId);
     }
 
     cancelDownstreamTasks(taskId);
+
+    // 下游终态已落定，再发失败信号唤醒等待方
+    if (info != null) {
+      info.future.obtrudeException(timeoutException);
+    }
 
     // 触发补偿栈（Traditional Saga 模式：超时失败时回滚已完成任务）
     // 仅补偿当前 workflow 的任务，避免跨 workflow 误补偿
