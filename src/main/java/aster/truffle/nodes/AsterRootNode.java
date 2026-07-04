@@ -11,6 +11,7 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 
 import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 public final class AsterRootNode extends RootNode {
@@ -48,11 +49,13 @@ public final class AsterRootNode extends RootNode {
    */
   @Override
   public Object execute(VirtualFrame frame) {
-    // 设置入口函数的 effect 权限
     AsterContext context = AsterLanguage.getContext();
-    if (effects != null && !effects.isEmpty()) {
-      context.setAllowedEffects(new HashSet<>(effects));
-    }
+    // 审计 #43 High：顶层 eval 边界**总是**设置 effect 权限（空 effects → 空集=deny-all），
+    // 不能像旧代码那样"空就跳过 set"。effectPermissions 现为 ThreadLocal——若跳过，同一宿主/
+    // 池线程上一次 eval 遗留的权限会被本次无 effect 的程序继承（fail-open 跨顺序 eval 越权）。
+    // 保存 previous 并在 finally 恢复，保证本次 eval 的权限视图不外泄到线程后续使用。
+    Set<String> previousEffects = context.getAllowedEffects();
+    context.setAllowedEffects(effects == null ? Set.of() : new HashSet<>(effects));
 
     bindArgumentsToFrame(frame);
     bindArgumentsToEnv(frame);
@@ -68,6 +71,9 @@ public final class AsterRootNode extends RootNode {
       Object adapted = AsterInteropAdapter.adapt(rex.value);
       return context.getEnv().asGuestValue(
           aster.truffle.runtime.interop.InteropValues.toInteropValue(adapted));
+    } finally {
+      // 恢复本次 eval 之前的线程权限视图，防止残留跨顺序 eval 泄漏（fail-closed）。
+      context.setAllowedEffects(previousEffects);
     }
   }
 

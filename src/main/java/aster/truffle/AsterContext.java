@@ -95,6 +95,18 @@ public final class AsterContext {
   }
 
   /**
+   * 清除当前线程的 effect 权限（回到 deny-all 初始态）。
+   *
+   * <p>顶层 eval 边界在 finally 里调用，防止 ThreadLocal 残留跨顺序 eval 泄漏权限
+   * （审计 #43 High：同一宿主/池线程先跑带 IO 的程序、再跑无 effect 的程序，若不清理，
+   * 第二次会继承上一次的权限 = fail-open）。不要在 Start/Workflow 的 finally 里无脑
+   * remove——executeNext() 可能 inline 在调用线程，会擦掉其原有 scope；那里用 restore(previous)。
+   */
+  public void clearAllowedEffects() {
+    effectPermissions.remove();
+  }
+
+  /**
    * 延迟初始化异步任务注册表。
    * 使用与 builtinsRef 相同的模式，确保线程安全的单例创建。
    */
