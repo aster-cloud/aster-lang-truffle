@@ -50,7 +50,23 @@ public abstract class AwaitNode extends AsterExpressionNode {
     AsterContext context = AsterLanguage.getContext();
     AsyncTaskRegistry registry = context.getAsyncRegistry();
 
-    // Phase 1: 轮询等待任务完成
+    return pollUntilTerminal(registry, taskId);
+  }
+
+  /**
+   * 轮询单个任务直到进入终态（Phase 1 协作式调度）。
+   *
+   * <p>提取为包级静态方法以便直接回归测试（无需进入 polyglot 上下文）。终态判定：
+   * <ul>
+   *   <li>COMPLETED → 返回结果</li>
+   *   <li>FAILED → 抛 "Async task failed"</li>
+   *   <li>CANCELLED → 抛 "Async task cancelled"（#43 HIGH：CANCELLED 既非 COMPLETED
+   *       也非 FAILED，下游失败 / cancelAll() / 超时会把任务推进到 CANCELLED；若不在
+   *       此处终止，轮询会永久忙等烧核）</li>
+   * </ul>
+   * PENDING/RUNNING 时调用 {@code executeNext()} 推进调度后继续轮询。
+   */
+  static Object pollUntilTerminal(AsyncTaskRegistry registry, String taskId) {
     while (true) {
       TaskState state = registry.getTaskState(taskId);
 
@@ -70,6 +86,11 @@ public abstract class AwaitNode extends AsterExpressionNode {
       if (status == TaskStatus.FAILED) {
         Throwable exception = state.getException();
         throw new RuntimeException("Async task failed: " + taskId, exception);
+      }
+
+      // 任务被取消 - 终态（#43 HIGH）
+      if (status == TaskStatus.CANCELLED) {
+        throw new RuntimeException("Async task cancelled: " + taskId);
       }
 
       // 任务尚未完成 (PENDING 或 RUNNING) - 调度下一个任务并继续等待

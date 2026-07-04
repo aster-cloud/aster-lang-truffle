@@ -55,7 +55,38 @@ public final class WaitNode extends Node {
       taskIds[i] = (String) taskIdObj;
     }
 
-    // Phase 1: 轮询等待所有任务完成
+    // Phase 1: 轮询等待所有任务进入终态（CANCELLED/FAILED 抛错，全部 COMPLETED 才返回）
+    pollUntilAllTerminal(registry, taskIds);
+
+    // 单任务场景直接返回对应结果，多任务保持 taskIdNames 顺序返回结果数组
+    if (taskIds.length == 1) {
+      Object result = registry.getResult(taskIds[0]);
+      if (env != null) {
+        env.set(taskIdNames[0], result);
+      }
+      return result;
+    }
+
+    Object[] results = new Object[taskIds.length];
+    for (int i = 0; i < taskIds.length; i++) {
+      Object result = registry.getResult(taskIds[i]);
+      results[i] = result;
+      if (env != null) {
+        env.set(taskIdNames[i], result);
+      }
+    }
+    return results;
+  }
+
+  /**
+   * 轮询等待所有任务进入终态（Phase 1 协作式调度）。
+   *
+   * <p>提取为包级静态方法以便直接回归测试（无需进入 polyglot 上下文）。任一任务
+   * FAILED → 抛 "Async task failed"；任一任务 CANCELLED → 抛 "Async task cancelled"
+   * （#43 HIGH：CANCELLED 既非 COMPLETED 也非 FAILED，若不在此处终止会永久忙等）。
+   * 全部 COMPLETED 才返回；否则 {@code executeNext()} 推进调度后继续轮询。
+   */
+  static void pollUntilAllTerminal(AsyncTaskRegistry registry, String[] taskIds) {
     while (true) {
       boolean allCompleted = true;
 
@@ -75,6 +106,11 @@ public final class WaitNode extends Node {
           throw new RuntimeException("Async task failed: " + taskId, exception);
         }
 
+        // 任务被取消 - 终态（#43 HIGH）
+        if (status == TaskStatus.CANCELLED) {
+          throw new RuntimeException("Async task cancelled: " + taskId);
+        }
+
         // 任务尚未完成
         if (status != TaskStatus.COMPLETED) {
           allCompleted = false;
@@ -83,24 +119,7 @@ public final class WaitNode extends Node {
 
       // 所有任务都已完成
       if (allCompleted) {
-        // 单任务场景直接返回对应结果，多任务保持 taskIdNames 顺序返回结果数组
-        if (taskIds.length == 1) {
-          Object result = registry.getResult(taskIds[0]);
-          if (env != null) {
-            env.set(taskIdNames[0], result);
-          }
-          return result;
-        }
-
-        Object[] results = new Object[taskIds.length];
-        for (int i = 0; i < taskIds.length; i++) {
-          Object result = registry.getResult(taskIds[i]);
-          results[i] = result;
-          if (env != null) {
-            env.set(taskIdNames[i], result);
-          }
-        }
-        return results;
+        return;
       }
 
       // 调度下一个任务并继续等待

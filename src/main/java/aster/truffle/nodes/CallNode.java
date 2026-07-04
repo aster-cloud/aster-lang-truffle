@@ -83,7 +83,10 @@ public abstract class CallNode extends AsterExpressionNode {
       for (int i = 0; i < args.length; i++) av[i] = Exec.exec(args[i], frame);
       try {
         Object result = aster.truffle.runtime.Builtins.call(name, av);
-        if (result != null) return result;
+        // #43：builtin 确实存在且已调用——合法的 null 结果（如 Map.get 未命中）是
+        // 有效 guest 值，规整为 guest-null 返回，而非落到下面的 "Unknown call
+        // target"（那会把真实的「查无此值」误报成「找不到调用目标」）。
+        return aster.truffle.runtime.interop.InteropValues.toInteropValue(result);
       } catch (aster.truffle.runtime.Builtins.BuiltinException e) {
         // 转换为运行时异常，包含参数信息用于调试
         String argsInfo = "args=[";
