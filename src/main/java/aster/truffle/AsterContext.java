@@ -17,7 +17,17 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class AsterContext {
   private final TruffleLanguage.Env env;
   private final AtomicReference<Builtins> builtinsRef = new AtomicReference<>();
-  private final AtomicReference<Set<String>> effectPermissions = new AtomicReference<>(Set.of());
+  /**
+   * 当前允许的 effect 集合——**thread-local**（审计 #43 High：跨租户沙箱隔离）。
+   *
+   * <p>此前是单个 {@code AtomicReference<Set<String>>}，被同一 context 下所有并发任务共享；
+   * StartNode/WorkflowNode 在异步任务线程里 save/set/restore 它，多个异步步骤在不同线程交错
+   * 时会互相污染权限（放宽 → 越权；收窄 → 误报 "effect not permitted"），且 Builtins.requireEffect
+   * 读的就是这个 racy 全局 = 跨租户沙箱漏洞。改为 ThreadLocal 后每个执行线程持有独立视图，
+   * 异步任务从父线程捕获 effect 集合、只设到自己线程，互不干扰。
+   */
+  private final ThreadLocal<Set<String>> effectPermissions =
+      ThreadLocal.withInitial(Set::of);
   private final AtomicReference<AsyncTaskRegistry> asyncRegistry = new AtomicReference<>();
   private final AtomicLong taskIdGenerator = new AtomicLong(0);
   private final ConfigView configView;
@@ -61,6 +71,7 @@ public final class AsterContext {
    * @param effects 允许的 effect 名称集合（如 "IO", "Async", "CPU"）
    */
   public void setAllowedEffects(Set<String> effects) {
+    // 仅设当前线程的视图（thread-local）——不影响其它并发任务线程。
     effectPermissions.set(Set.copyOf(effects));
   }
 
