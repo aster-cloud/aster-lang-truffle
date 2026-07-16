@@ -42,6 +42,8 @@ public abstract class IfExprNode extends AsterExpressionNode {
   }
 
   private Object executeBranch(boolean condValue, VirtualFrame frame) {
+    // 步骤级 trace（M2.1b）：记内联 if 表达式条件 + 走了哪支。全局关时 PE 折叠为 no-op。
+    aster.truffle.trace.TraceAccess.record("if-expr", "inline if condition", condValue, condValue, 0);
     AsterExpressionNode target = condValue ? thenNode : elseNode;
     if (AsterConfig.DEBUG) {
       System.err.println("DEBUG: ifExpr condition => " + condValue

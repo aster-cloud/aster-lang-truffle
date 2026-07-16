@@ -37,6 +37,10 @@ public final class StartNode extends Node {
       throw new RuntimeException("start requires Async effect");
     }
 
+    // ★步骤级 trace（M2.1b）：start 的任务体在 worker 线程跑（Runnable 提交 registry），收不进
+    // eval 线程 collector → 整条 trace 标 NON_REPLAYABLE（同 workflow，Codex 复审 P0）。关时 PE 折叠。
+    aster.truffle.trace.TraceAccess.markAsyncTainted();
+
     // 捕获 Frame：Truffle Frame 不能直接跨线程传递，需要 materialize
     MaterializedFrame materializedFrame = frame.materialize();
 

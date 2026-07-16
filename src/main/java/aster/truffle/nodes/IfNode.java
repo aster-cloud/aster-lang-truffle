@@ -43,6 +43,9 @@ public abstract class IfNode extends AsterExpressionNode {
   }
 
   private Object executeBranch(boolean condValue, VirtualFrame frame) {
+    // 步骤级 trace（M2.1b）：记条件求值 + 走了哪支。TraceAccess.record 全局关时 PE 折叠为 no-op。
+    // depth 传 0（扁平列表模型，children 恒空；maxSteps 为主上限，maxDepth 为保留次级护栏）。
+    aster.truffle.trace.TraceAccess.record("if", "if condition", condValue, condValue, 0);
     Node target = condValue ? thenNode : elseNode;
     if (target == null) {
       return null;
