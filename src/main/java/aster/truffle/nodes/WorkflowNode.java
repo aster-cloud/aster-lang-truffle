@@ -95,6 +95,10 @@ public final class WorkflowNode extends Node {
     if (!context.isEffectAllowed("Async")) {
       throw new RuntimeException("workflow requires Async effect");
     }
+    // ★步骤级 trace（M2.1b）：workflow 任务体在 executor worker 线程跑决策节点（非 eval 线程，
+    // 收不进 collector），且 await/wait 的 inline 调度让 trace 形状随调度路径漂移。故整条 trace
+    // 标 NON_REPLAYABLE——绝不产不稳定/部分 traceHash（Codex 复审 P0）。全局关时 PE 折叠 no-op。
+    aster.truffle.trace.TraceAccess.markAsyncTainted();
     AsyncTaskRegistry registry = context.getAsyncRegistry();
     // 生成唯一的 workflowId 并获取事件存储（如已配置）
     String workflowId = "wf-" + UUID.randomUUID().toString().substring(0, 8);

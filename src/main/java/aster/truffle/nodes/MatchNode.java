@@ -45,7 +45,8 @@ public abstract class MatchNode extends AsterExpressionNode {
     if (AsterConfig.DEBUG) {
       System.err.println("DEBUG: match scrutinee=" + scrutinee + " type=" + (scrutinee == null ? "null" : scrutinee.getClass().getName()) + " cases=" + cases.length);
     }
-    for (CaseNode c : cases) {
+    for (int i = 0; i < cases.length; i++) {
+      CaseNode c = cases[i];
       if (AsterConfig.DEBUG) {
         System.err.println("DEBUG: trying case pat=" + c.pat.getClass().getSimpleName());
       }
@@ -53,12 +54,18 @@ public abstract class MatchNode extends AsterExpressionNode {
         if (AsterConfig.DEBUG) {
           System.err.println("DEBUG: case matched");
         }
-        return c.execute(frame);
+        Object result = c.execute(frame);
+        // 步骤级 trace（M2.1b）：记命中的 arm 序号 + 其求值结果（matched=true）。全局关时 PE 折叠 no-op。
+        // ★用 recordMatchArm（arm 序号拼接在 slow path，关闭态连字符串 concat 都不出现——Codex 复审）。
+        aster.truffle.trace.TraceAccess.recordMatchArm(i, result, true, 0);
+        return result;
       }
     }
     if (AsterConfig.DEBUG) {
       System.err.println("DEBUG: no case matched, returning null");
     }
+    // 步骤级 trace（M2.1b）：无 arm 命中（matched=false，result=null）——决策路径的关键信息。
+    aster.truffle.trace.TraceAccess.record("match", "match no-arm", null, false, 0);
     return null;
   }
 
