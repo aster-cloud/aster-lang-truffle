@@ -12,6 +12,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# 最小权限（CodeQL actions/missing-workflow-permissions）：本 workflow 仅 checkout
+# + 构建 + 测试，无任何写操作（不推 commit/tag/release、不发镜像、不评论 PR、
+# 不上传 SARIF、不做 OIDC 云登录）。跨仓 checkout 用的是 CROSS_REPO_TOKEN 而非
+# GITHUB_TOKEN，故 GITHUB_TOKEN 只需只读 contents。
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
