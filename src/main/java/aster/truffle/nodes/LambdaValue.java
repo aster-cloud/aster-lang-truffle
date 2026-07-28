@@ -39,7 +39,9 @@ public final class LambdaValue implements TruffleObject {
     this.capturedValues = capturedValues != null ? capturedValues : new Object[0];
     this.callTarget = callTarget;
     this.requiredEffects = requiredEffects != null ? java.util.Set.copyOf(requiredEffects) : java.util.Set.of();
-    PurityAnalyzer.recordEffects(callTarget, this.requiredEffects);
+    // effectsKnown=false：Core IR 的 Lambda 目前不携带 effect 元数据，此处的
+    // requiredEffects 只是构造点硬编码的空集，不能据此判定为纯（issue #53）。
+    PurityAnalyzer.recordEffects(callTarget, this.requiredEffects, false);
   }
 
   /**
@@ -55,7 +57,9 @@ public final class LambdaValue implements TruffleObject {
     this.capturedValues = captures != null ? captures.values().toArray() : new Object[0];
     this.callTarget = callTarget;
     this.requiredEffects = java.util.Set.of();  // 默认无 effect 要求
-    PurityAnalyzer.recordEffects(callTarget, this.requiredEffects);
+    // effectsKnown=false：Core IR 的 Lambda 目前不携带 effect 元数据，此处的
+    // requiredEffects 只是构造点硬编码的空集，不能据此判定为纯（issue #53）。
+    PurityAnalyzer.recordEffects(callTarget, this.requiredEffects, false);
   }
 
   public CallTarget getCallTarget() {

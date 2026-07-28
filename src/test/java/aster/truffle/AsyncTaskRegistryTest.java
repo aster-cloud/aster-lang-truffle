@@ -634,4 +634,69 @@ public class AsyncTaskRegistryTest {
     return (long) method.invoke(null);
   }
 
+  // ── dependsOnFailedTask 记忆化（issue #55）─────────────────────────────
+  // 原递归不记录已访问节点：菱形/网状图上同一节点沿多条路径被重复展开，
+  // 复杂度退化为 O(2^depth)；若依赖图存在环还会无限递归直至 StackOverflowError。
+
+  /** 反射调用私有的 dependsOnFailedTask。 */
+  private boolean callDependsOnFailedTask(AsyncTaskRegistry registry, String taskId, String failedId)
+      throws Exception {
+    Method m = AsyncTaskRegistry.class.getDeclaredMethod(
+        "dependsOnFailedTask", String.class, String.class);
+    m.setAccessible(true);
+    return (boolean) m.invoke(registry, taskId, failedId);
+  }
+
+  @Test
+  void dependsOnFailedTaskHandlesDiamondGraphWithoutBlowup() throws Exception {
+    AsyncTaskRegistry registry = new AsyncTaskRegistry();
+    // 构造 30 层菱形：每层两个节点都依赖上一层的同一个节点，再汇合。
+    // 未记忆化时展开次数随层数指数增长，本用例会挂在超时上而非返回。
+    registry.registerTaskWithDependencies("L0", () -> null, Set.of());
+    String prev = "L0";
+    for (int i = 1; i <= 30; i++) {
+      String a = "A" + i, b = "B" + i, merge = "L" + i;
+      registry.registerTaskWithDependencies(a, () -> null, Set.of(prev));
+      registry.registerTaskWithDependencies(b, () -> null, Set.of(prev));
+      registry.registerTaskWithDependencies(merge, () -> null, Set.of(a, b));
+      prev = merge;
+    }
+
+    long start = System.nanoTime();
+    // 查一个**不存在**的失败任务：必须走完整棵图才能返回 false —— 最坏情况
+    boolean depends = callDependsOnFailedTask(registry, prev, "no-such-task");
+    long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+
+    assertFalse(depends, "不存在的任务不应被判定为依赖");
+    assertTrue(elapsedMs < 2000,
+        "30 层菱形图应在毫秒级完成（记忆化后 O(V+E)）；实际耗时 " + elapsedMs + "ms");
+  }
+
+  @Test
+  void registryRejectsCyclicDependenciesUpFront() {
+    // 记录既有保护：环在**注册期**就被拒，所以 dependsOnFailedTask 实际拿不到环图。
+    // 换言之 #55 的真实风险是**指数级重复遍历**（见上一个用例），而非无限递归；
+    // visited 集合顺带让环也能安全终止，属于纵深防御。
+    AsyncTaskRegistry registry = new AsyncTaskRegistry();
+    registry.registerTaskWithDependencies("C1", () -> null, Set.of("C2"));
+    registry.registerTaskWithDependencies("C2", () -> null, Set.of("C3"));
+
+    assertThrows(IllegalArgumentException.class,
+        () -> registry.registerTaskWithDependencies("C3", () -> null, Set.of("C1")),
+        "成环的注册应被拒绝");
+  }
+
+  @Test
+  void dependsOnFailedTaskStillDetectsRealDependency() throws Exception {
+    // 反向守卫：记忆化剪枝不得漏判真实依赖
+    AsyncTaskRegistry registry = new AsyncTaskRegistry();
+    registry.registerTaskWithDependencies("root", () -> null, Set.of());
+    registry.registerTaskWithDependencies("mid", () -> null, Set.of("root"));
+    registry.registerTaskWithDependencies("leaf", () -> null, Set.of("mid"));
+
+    assertTrue(callDependsOnFailedTask(registry, "leaf", "root"),
+        "间接依赖必须被检出");
+    assertTrue(callDependsOnFailedTask(registry, "mid", "root"),
+        "直接依赖必须被检出");
+  }
 }
