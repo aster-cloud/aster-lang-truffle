@@ -1155,9 +1155,28 @@ public final class AsyncTaskRegistry {
   }
 
   /**
-   * 检查 taskId 是否直接或间接依赖于 failedTaskId
+   * 检查 taskId 是否直接或间接依赖于 failedTaskId。
    */
   private boolean dependsOnFailedTask(String taskId, String failedTaskId) {
+    return dependsOnFailedTask(taskId, failedTaskId, new java.util.HashSet<>());
+  }
+
+  /**
+   * 带 visited 集合的实际实现。
+   *
+   * <p>原递归不记录已访问节点：菱形/网状依赖图上同一节点会被沿不同路径重复展开，
+   * 复杂度退化到 O(2^depth)；依赖图若存在环，还会无限递归直至 StackOverflowError。
+   * 加 visited 后变成标准图遍历 O(V+E)，且环上自然终止。
+   *
+   * <p>语义不变：visited 只用于剪掉"已经判定过 false 的子树"——一旦某条路径返回
+   * true 就立即短路上抛，不会因剪枝漏判。
+   */
+  private boolean dependsOnFailedTask(String taskId, String failedTaskId, java.util.Set<String> visited) {
+    if (!visited.add(taskId)) {
+      // 已访问过（含环）：此前展开必然返回过 false，否则早已短路返回
+      return false;
+    }
+
     TaskInfo info = taskInfos.get(taskId);
     if (info == null || info.dependencies.isEmpty()) {
       return false;
@@ -1170,7 +1189,7 @@ public final class AsyncTaskRegistry {
 
     // 间接依赖：递归检查
     for (String dep : info.dependencies) {
-      if (dependsOnFailedTask(dep, failedTaskId)) {
+      if (dependsOnFailedTask(dep, failedTaskId, visited)) {
         return true;
       }
     }
