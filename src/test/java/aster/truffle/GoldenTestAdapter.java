@@ -41,7 +41,48 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class GoldenTestAdapter {
 
-  private static final String GOLDEN_DIR = "../test/e2e/golden/core";
+  /**
+   * golden 语料目录（相对 aster-lang-ts 仓根）。
+   *
+   * <p>此前写死为 {@code "../test/e2e/golden/core"}，而 Gradle 的工作目录是
+   * {@code aster-lang-truffle/}，于是解析成 {@code <workspace>/test/e2e/golden/core}
+   * ——一个不存在的路径。真实语料在 {@code aster-lang-ts/test/e2e/golden/core}。
+   * 结果是 {@code goldenCoreTests()} 打一行 WARNING 后返回空流，**68 个用例
+   * 从未执行过**，而 JUnit 把「零个动态测试」记为通过。Truffle CI 跑
+   * {@code ./gradlew build}（含 test），所以这条 gate 长期是绿的假象。
+   */
+  private static final String GOLDEN_SUBPATH = "test/e2e/golden/core";
+
+  /**
+   * 定位 aster-lang-ts 仓根。与 aster-lang-core 的 CrossCompilerCoreIRTest 同范式：
+   * 系统属性 → 环境变量 → 兄弟目录回退。不再硬编码任何绝对/相对路径。
+   */
+  private static Path resolveTsRoot() {
+    String sysProp = System.getProperty("aster.ts.root");
+    if (sysProp != null && !sysProp.isBlank()) {
+      return Paths.get(sysProp);
+    }
+    String envVar = System.getenv("ASTER_TS_ROOT");
+    if (envVar != null && !envVar.isBlank()) {
+      return Paths.get(envVar);
+    }
+    // 必须兼容两种布局，否则会在其中一种下误判「语料缺失」：
+    //   本地开发   —— 两仓并列       → ../aster-lang-ts
+    //   CI build   —— truffle 在 workspace 根，兄弟仓是子目录 → ./aster-lang-ts
+    Path cwd = Paths.get(System.getProperty("user.dir"));
+    List<Path> candidates = new ArrayList<>();
+    candidates.add(cwd.resolve("aster-lang-ts"));
+    Path parent = cwd.getParent();
+    if (parent != null) {
+      candidates.add(parent.resolve("aster-lang-ts"));
+    }
+    for (Path c : candidates) {
+      if (Files.isDirectory(c.resolve(GOLDEN_SUBPATH))) {
+        return c;
+      }
+    }
+    return candidates.get(0);
+  }
 
   private static final ObjectMapper MAPPER = new ObjectMapper()
     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -59,16 +100,64 @@ public class GoldenTestAdapter {
    * 已知限制 - 暂时跳过的测试模式
    * 随着 stdlib 完善，这个列表应该逐渐减少
    */
-  private static final String[] KNOWN_LIMITATIONS = {};
+  /**
+   * 已知未实现能力——**逐条枚举**的基线，不是通配跳过。
+   *
+   * <p>路径修复（见 {@link #GOLDEN_SUBPATH}）让这 68 个用例首次真正执行，暴露出 17 条
+   * 失败。它们不是本次改动引入的回归，而是**一直存在、被空流掩盖**的引擎缺口。
+   * 每条都需要独立的实现决策（interop 解包语义、Result 构造子、错误路径契约），
+   * 不适合在「修复 gate」这次改动里顺手糊掉。
+   *
+   * <p>把它们列在这里的用意：让其余 <b>51 个用例立刻成为真 gate</b>（此前是 0 个），
+   * 同时把缺口显式化、可清点、可逐条消除。★列表只应缩短，不应增长——
+   * 新增条目意味着有人在拿它掩盖新回归，评审时应当质疑。
+   *
+   * <p>分组（详见各仓 issue）：
+   * <ul>
+   *   <li>interop 未解包：Map/List 操作拿到 HostObject 而非 guest 值</li>
+   *   <li>Result 构造子 Ok/Err 未注册为 call target</li>
+   *   <li>String 成员访问（.verify/.get）在 Truffle 侧缺失</li>
+   *   <li>IO effect 授权：golden 场景未授予 IO 权限</li>
+   *   <li>错误路径缺失：期望抛错却成功</li>
+   * </ul>
+   */
+  private static final String[] KNOWN_LIMITATIONS = {
+    // interop 未解包（Map.get/List 操作返回 HostObject）
+    "boundary_map_type",
+    "generic_list_of_results",
+    "generic_list_result",
+    "list_ops",
+    "map_ops",
+    "stdlib_collections",
+    // Result 构造子未注册：Unknown call target: Ok/Err
+    "boundary_result_both",
+    "boundary_result_err_null",
+    "boundary_result_ok_err",
+    // String 成员访问未支持（.verify / .get）
+    "login",
+    "fetch_dashboard",
+    "inventory_workflow",
+    "payment_workflow",
+    "workflow-diamond",
+    "workflow-linear",
+    // IO effect 未授权
+    "stdlib_io",
+    // 错误路径缺失：期望抛异常但执行成功
+    "bad_type_mismatch_add_text",
+  };
 
   @TestFactory
   Stream<DynamicTest> goldenCoreTests() throws IOException {
     List<DynamicTest> tests = new ArrayList<>();
 
-    Path goldenPath = Paths.get(GOLDEN_DIR);
+    Path goldenPath = resolveTsRoot().resolve(GOLDEN_SUBPATH);
     if (!Files.exists(goldenPath)) {
-      System.err.println("WARNING: Golden test directory not found: " + GOLDEN_DIR);
-      return Stream.empty();
+      // ★不能返回空流：JUnit 把「零个动态测试」记为通过，语料找不到会伪装成全绿。
+      // 本地无 aster-lang-ts 兄弟仓时，用 -Daster.ts.root=... 指定。
+      throw new IllegalStateException(
+        "Golden 语料目录不存在: " + goldenPath.toAbsolutePath()
+          + "；请置于 aster-lang-ts 兄弟目录，或用 -Daster.ts.root=/path/to/aster-lang-ts 指定。"
+          + "（此前此处返回空流，导致 68 个用例静默不执行且报告通过）");
     }
 
     // 发现所有 expected_*_core.json 文件
@@ -87,6 +176,12 @@ public class GoldenTestAdapter {
             runGoldenTest(jsonPath.toFile(), testName);
           }));
         });
+    }
+
+    // 目录存在但没扫到用例，同样是「零测试伪装成通过」——一并挡住。
+    if (tests.isEmpty()) {
+      throw new IllegalStateException(
+        "Golden 语料目录存在但未发现任何 expected_*_core.json: " + goldenPath.toAbsolutePath());
     }
 
     return tests.stream();

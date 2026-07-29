@@ -56,6 +56,21 @@ public final class AsterLanguage extends TruffleLanguage<AsterContext> {
     return new AsterContext(env);
   }
 
+  /**
+   * 释放 context 持有的原生资源。
+   *
+   * <p>{@link AsterContext#getAsyncRegistry()} 会懒建一个 {@code AsyncTaskRegistry}，
+   * 其中的主执行器是**非守护**固定线程池（大小 = CPU 核数）。此前全仓没有任何地方调用
+   * {@code shutdown()}，也没有 disposeContext 钩子——池化宿主按请求创建 context 时，
+   * 每个 context 都会漏 N 个非守护线程，最终线程耗尽，且非守护线程会阻止 JVM 退出。
+   *
+   * <p>Truffle 保证本方法在 context 关闭时调用，是释放这类资源的规定位置。
+   */
+  @Override
+  protected void disposeContext(AsterContext context) {
+    context.shutdownAsyncRegistry();
+  }
+
   @Override
   protected CallTarget parse(ParsingRequest request) throws Exception {
     Source source = request.getSource();
