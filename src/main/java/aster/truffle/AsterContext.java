@@ -116,7 +116,26 @@ public final class AsterContext {
       return current;
     }
     AsyncTaskRegistry created = new AsyncTaskRegistry();
-    return asyncRegistry.compareAndSet(null, created) ? created : asyncRegistry.get();
+    if (asyncRegistry.compareAndSet(null, created)) {
+      return created;
+    }
+    // CAS 失败：并发线程已装入自己的实例。此处必须关掉自己刚建的那个——
+    // AsyncTaskRegistry 构造即启动一个非守护固定线程池，直接丢弃会永久泄漏
+    // N 个线程（N = CPU 核数），且非守护线程会阻止 JVM 退出。
+    created.shutdown();
+    return asyncRegistry.get();
+  }
+
+  /**
+   * 关闭异步任务注册表（由 {@code AsterLanguage.disposeContext} 调用）。
+   *
+   * <p>没有懒建过 registry 时是 no-op，不会为了关闭而创建。
+   */
+  public void shutdownAsyncRegistry() {
+    AsyncTaskRegistry current = asyncRegistry.getAndSet(null);
+    if (current != null) {
+      current.shutdown();
+    }
   }
 
   /**
