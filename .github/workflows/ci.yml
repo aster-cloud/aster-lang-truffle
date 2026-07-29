@@ -73,6 +73,16 @@ jobs:
           path: aster-lang-hi
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
+      # GoldenTestAdapter 的 Core IR golden 语料在 aster-lang-ts/test/e2e/golden/core
+      # （68 个用例）。本 workflow 此前**从不 checkout 这个仓**，而适配器在语料缺失时
+      # 返回空流 → JUnit 把「零个动态测试」记为通过，整个 golden 层长期是绿的假象。
+      # 适配器现已改为缺语料即抛异常，故这里必须真的把语料拉下来。
+      - uses: actions/checkout@v6
+        with:
+          repository: aster-cloud/aster-lang-ts
+          path: aster-lang-ts
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
       - uses: actions/setup-java@v5
         with:
           java-version: '25'

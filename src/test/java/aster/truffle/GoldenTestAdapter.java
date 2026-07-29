@@ -66,9 +66,22 @@ public class GoldenTestAdapter {
     if (envVar != null && !envVar.isBlank()) {
       return Paths.get(envVar);
     }
+    // 必须兼容两种布局，否则会在其中一种下误判「语料缺失」：
+    //   本地开发   —— 两仓并列       → ../aster-lang-ts
+    //   CI build   —— truffle 在 workspace 根，兄弟仓是子目录 → ./aster-lang-ts
     Path cwd = Paths.get(System.getProperty("user.dir"));
+    List<Path> candidates = new ArrayList<>();
+    candidates.add(cwd.resolve("aster-lang-ts"));
     Path parent = cwd.getParent();
-    return parent == null ? cwd.resolve("aster-lang-ts") : parent.resolve("aster-lang-ts");
+    if (parent != null) {
+      candidates.add(parent.resolve("aster-lang-ts"));
+    }
+    for (Path c : candidates) {
+      if (Files.isDirectory(c.resolve(GOLDEN_SUBPATH))) {
+        return c;
+      }
+    }
+    return candidates.get(0);
   }
 
   private static final ObjectMapper MAPPER = new ObjectMapper()
