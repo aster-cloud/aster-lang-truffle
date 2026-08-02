@@ -5,6 +5,7 @@ import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.stream.Stream;
@@ -28,24 +29,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 public class BenchmarkCorrectnessTest {
 
-  static Stream<GraalVMJitBenchmark.BenchmarkCase> cases() {
+  static Stream<Arguments> caseNames() {
     return Stream.of(
-        GraalVMJitBenchmark.FACTORIAL,
-        GraalVMJitBenchmark.FIBONACCI,
-        GraalVMJitBenchmark.LIST_MAP,
-        GraalVMJitBenchmark.QUICK_SORT,
-        GraalVMJitBenchmark.BINARY_TREE,
-        GraalVMJitBenchmark.STRING_OPS,
-        GraalVMJitBenchmark.FACTORIAL_HEAVY,
-        GraalVMJitBenchmark.FIBONACCI_HEAVY,
-        GraalVMJitBenchmark.LIST_MAP_HEAVY,
-        GraalVMJitBenchmark.ARITHMETIC);
+        Arguments.of(GraalVMJitBenchmark.FACTORIAL.displayName(), GraalVMJitBenchmark.FACTORIAL),
+        Arguments.of(GraalVMJitBenchmark.FIBONACCI.displayName(), GraalVMJitBenchmark.FIBONACCI),
+        Arguments.of(GraalVMJitBenchmark.LIST_MAP.displayName(), GraalVMJitBenchmark.LIST_MAP),
+        Arguments.of(GraalVMJitBenchmark.QUICK_SORT.displayName(), GraalVMJitBenchmark.QUICK_SORT),
+        Arguments.of(GraalVMJitBenchmark.BINARY_TREE.displayName(), GraalVMJitBenchmark.BINARY_TREE),
+        Arguments.of(GraalVMJitBenchmark.STRING_OPS.displayName(), GraalVMJitBenchmark.STRING_OPS),
+        Arguments.of(GraalVMJitBenchmark.FACTORIAL_HEAVY.displayName(), GraalVMJitBenchmark.FACTORIAL_HEAVY),
+        Arguments.of(GraalVMJitBenchmark.FIBONACCI_HEAVY.displayName(), GraalVMJitBenchmark.FIBONACCI_HEAVY),
+        Arguments.of(GraalVMJitBenchmark.LIST_MAP_HEAVY.displayName(), GraalVMJitBenchmark.LIST_MAP_HEAVY),
+        Arguments.of(GraalVMJitBenchmark.ARITHMETIC.displayName(), GraalVMJitBenchmark.ARITHMETIC));
   }
 
+  // ★额外传一个 displayName 作首参而非直接用 case 的 toString：BenchmarkCase 是 record，
+  //   默认 toString 会把整个 JSON fixture 打进用例名，CI 日志完全不可读（实测刷屏数十行）。
   @ParameterizedTest(name = "{0}")
-  @MethodSource("cases")
+  @MethodSource("caseNames")
   @DisplayName("benchmark fixture 求值结果正确（不测耗时）")
-  void evaluatesToExpectedResult(GraalVMJitBenchmark.BenchmarkCase config) {
+  void evaluatesToExpectedResult(String displayName, GraalVMJitBenchmark.BenchmarkCase config) {
     try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
       Source source = Source.newBuilder("aster", config.json(), config.sourceName()).build();
       Value result = context.eval(source);
