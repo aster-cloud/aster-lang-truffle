@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 public class GraalVMJitBenchmark {
 
-  private record BenchmarkCase(
+  record BenchmarkCase(
       String displayName,
       String sourceName,
       String entryFunction,
@@ -37,7 +37,7 @@ public class GraalVMJitBenchmark {
 
   private static final List<BenchmarkResult> RESULTS = new ArrayList<>();
 
-  private static String readBenchmarkJsonUnchecked(String relativePath) {
+  static String readBenchmarkJsonUnchecked(String relativePath) {
     // Extract just the filename from the relative path
     String filename = Path.of(relativePath).getFileName().toString();
 
@@ -77,7 +77,7 @@ public class GraalVMJitBenchmark {
     throw new RuntimeException("未找到基准 JSON 文件: " + relativePath + " (tried classpath and filesystem)");
   }
 
-  private static final BenchmarkCase FACTORIAL = new BenchmarkCase(
+  static final BenchmarkCase FACTORIAL = new BenchmarkCase(
       "Factorial(10)",
       "bench-factorial-jit.json",
       "test",
@@ -162,7 +162,7 @@ public class GraalVMJitBenchmark {
       200    // 降低稳定化次数（原 2000）
   );
 
-  private static final BenchmarkCase FIBONACCI = new BenchmarkCase(
+  static final BenchmarkCase FIBONACCI = new BenchmarkCase(
       "Fibonacci(20)",
       "bench-fib-jit.json",
       "test",
@@ -258,7 +258,7 @@ public class GraalVMJitBenchmark {
       50     // 降低测量次数（原 100）
   );
 
-  private static final BenchmarkCase LIST_MAP = new BenchmarkCase(
+  static final BenchmarkCase LIST_MAP = new BenchmarkCase(
       "List.map ×2 (2 items)",
       "bench-list-map-jit.json",
       "test",
@@ -362,7 +362,7 @@ public class GraalVMJitBenchmark {
       200    // 降低稳定化次数（原 5000）
   );
 
-  private static final BenchmarkCase QUICK_SORT = new BenchmarkCase(
+  static final BenchmarkCase QUICK_SORT = new BenchmarkCase(
       "QuickSort (100 elements)",
       "bench-quicksort-jit.json",
       "test",
@@ -373,7 +373,7 @@ public class GraalVMJitBenchmark {
       200    // 降低稳定化次数（原 4000）- quicksort 每次调用代价高
   );
 
-  private static final BenchmarkCase BINARY_TREE = new BenchmarkCase(
+  static final BenchmarkCase BINARY_TREE = new BenchmarkCase(
       "Binary Tree Traversal (15 nodes)",
       "bench-binary-tree-jit.json",
       "test",
@@ -384,7 +384,7 @@ public class GraalVMJitBenchmark {
       200    // 降低稳定化次数（原 4000）
   );
 
-  private static final BenchmarkCase STRING_OPS = new BenchmarkCase(
+  static final BenchmarkCase STRING_OPS = new BenchmarkCase(
       "String Operations",
       "bench-string-ops-jit.json",
       "test",
@@ -395,7 +395,7 @@ public class GraalVMJitBenchmark {
       200    // 降低稳定化次数（原 5000）
   );
 
-  private static final BenchmarkCase FACTORIAL_HEAVY = new BenchmarkCase(
+  static final BenchmarkCase FACTORIAL_HEAVY = new BenchmarkCase(
       "Factorial(12) Heavy",
       "bench-factorial12-jit.json",
       "test",
@@ -406,7 +406,7 @@ public class GraalVMJitBenchmark {
       200    // 降低稳定化次数（原 6000）
   );
 
-  private static final BenchmarkCase FIBONACCI_HEAVY = new BenchmarkCase(
+  static final BenchmarkCase FIBONACCI_HEAVY = new BenchmarkCase(
       "Fibonacci(20) Heavy",
       "bench-fibonacci20-jit.json",
       "test",
@@ -417,7 +417,7 @@ public class GraalVMJitBenchmark {
       50      // 降低稳定化次数（原 2000）- fib(20) 每次调用代价高
   );
 
-  private static final BenchmarkCase LIST_MAP_HEAVY = new BenchmarkCase(
+  static final BenchmarkCase LIST_MAP_HEAVY = new BenchmarkCase(
       "List.map (1000 items) Heavy",
       "bench-list-map-1000-jit.json",
       "test",
@@ -428,7 +428,7 @@ public class GraalVMJitBenchmark {
       100    // 降低稳定化次数（原 5000）- 1000 items 每次调用代价高
   );
 
-  private static final BenchmarkCase ARITHMETIC = new BenchmarkCase(
+  static final BenchmarkCase ARITHMETIC = new BenchmarkCase(
       "Arithmetic compute(x)",
       "bench-arithmetic-jit.json",
       "test",

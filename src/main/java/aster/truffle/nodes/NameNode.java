@@ -82,9 +82,30 @@ public abstract class NameNode extends AsterExpressionNode {
     if (frame == null) {
       throw new RuntimeException(ErrorMessages.variableNotInitialized(name));
     }
+    // ★本特化是**终点**（无 rewriteOn），故必须能读任意 tag 的槽位，否则一旦到达即硬失败。
+    //   槽位 tag 由**写入方**决定：LetNode/SetNode 的 writeLong/writeInt/... 用 frame.setLong()
+    //   等类型化写入，会把 tag 从声明的 Object 改成对应原始类型。当同一变量在不同执行路径上
+    //   先被原始类型写入、后又需要按 Object 读取（典型：递归函数的返回值绑定，先 readInt 撞
+    //   FrameSlotTypeException → 沿 rewriteOn 链一路升级到本特化），getObject 就会抛异常。
+    //   原实现把它转成 RuntimeException 直接终止求值——这正是 benchmarkBinaryTree 的
+    //   「读取变量失败：leftSum @ slot 4」（见 #60）。
+    //   ★不改写入侧（改成一律 setObject 会让所有原始类型装箱，损失 R32 P0 的类型特化收益）；
+    //   在读取终点按实际 tag 取值即可，原始值在此自动装箱——语义与装箱写入完全一致。
+    return getByActualKind(frame);
+  }
+
+  /**
+   * 按槽位**实际** tag 读取。
+   *
+   * ★不能用 FrameDescriptor.getSlotKind() 判断：实测（#60）该值恒为声明时的 Object，
+   *   而槽位真实持有 int —— 声明 kind 与实际 tag 是两回事，前者不随类型化写入更新。
+   *   故改用 frame.getValue()，它按**实际** tag 取值并对原始类型自动装箱，
+   *   是唯一能读任意 tag 的通用读法。
+   */
+  private Object getByActualKind(VirtualFrame frame) {
     try {
-      return frame.getObject(slotIndex);
-    } catch (FrameSlotTypeException ex) {
+      return frame.getValue(slotIndex);
+    } catch (RuntimeException ex) {
       throw new RuntimeException("读取变量失败：" + name + " @ slot " + slotIndex, ex);
     }
   }
