@@ -304,9 +304,10 @@ public final class Loader {
       if (s instanceof CoreModel.Return r) {
         AsterExpressionNode returnExpr = buildExpr(r.expr);
         returnExpr = maybeWrapForType(returnExpr, currentReturnType());
-        list.add(new ReturnNode(returnExpr));
+        list.add(new ReturnNode(returnExpr, originLine(r.origin)));
       } else if (s instanceof CoreModel.If iff) {
-        list.add(IfNode.create(buildExpr(iff.cond), buildBlock(iff.thenBlock), buildBlock(iff.elseBlock)));
+        list.add(IfNode.create(buildExpr(iff.cond), buildBlock(iff.thenBlock),
+            buildBlock(iff.elseBlock), originLine(iff.origin)));
       } else if (s instanceof CoreModel.Let let) {
         // 优先使用 frame-based LetNode，回退到 Env-based
         AsterExpressionNode valueNode = buildExpr(let.expr);
@@ -555,6 +556,15 @@ public final class Loader {
     return aster.truffle.nodes.MatchNode.create(env, buildExpr(mm.expr), patCases);
   }
 
+  /**
+   * 从 Core IR 的 {@code Origin} 取起始行号（1-based），取不到返回 0。
+   *
+   * <p>用于给步骤级 trace 打标签，使漏斗聚合能区分同类型的不同节点。
+   */
+  private static int originLine(CoreModel.Origin origin) {
+    return (origin != null && origin.start != null) ? origin.start.line : 0;
+  }
+
   private aster.truffle.nodes.MatchNode.PatternNode buildPatternNode(CoreModel.Pattern p) {
     if (p instanceof CoreModel.PatNull) return new aster.truffle.nodes.MatchNode.PatNullNode();
     if (p instanceof CoreModel.PatName pn) return new aster.truffle.nodes.MatchNode.PatNameNode(pn.name);
@@ -579,13 +589,13 @@ public final class Loader {
         if (s instanceof CoreModel.Return r) {
           AsterExpressionNode returnExpr = buildExpr(r.expr);
           returnExpr = maybeWrapForType(returnExpr, currentReturnType());
-          list.add(new ReturnNode(returnExpr));
+          list.add(new ReturnNode(returnExpr, originLine(r.origin)));
         }
         else if (s instanceof CoreModel.Let let) {
           scopeLocals.add(let.name);
           list.add(new LetNodeEnv(let.name, buildExpr(let.expr), scopeEnv));
         }
-        else if (s instanceof CoreModel.If iff) list.add(IfNode.create(buildExpr(iff.cond), buildBlock(iff.thenBlock), buildBlock(iff.elseBlock)));
+        else if (s instanceof CoreModel.If iff) list.add(IfNode.create(buildExpr(iff.cond), buildBlock(iff.thenBlock), buildBlock(iff.elseBlock), originLine(iff.origin)));
         else if (s instanceof CoreModel.Match match) {
           list.add(buildMatch(match));
         }
