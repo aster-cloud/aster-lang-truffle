@@ -521,7 +521,8 @@ public final class Loader {
     if (e instanceof CoreModel.IfE ifx) {
       // ADR 0019 G2b：表达式级 if → IfExprNode（三分支都是表达式节点，求值产出值）。
       return aster.truffle.nodes.IfExprNode.create(
-          buildExpr(ifx.cond), buildExpr(ifx.thenE), buildExpr(ifx.elseE));
+          buildExpr(ifx.cond), buildExpr(ifx.thenE), buildExpr(ifx.elseE),
+          originLine(ifx.origin));
     }
     if (e instanceof CoreModel.ListE list) {
       // ADR 0024 C0：列表字面量 → ListLiteralNode（逐元素求值成 ArrayList，
@@ -553,7 +554,8 @@ public final class Loader {
         patCases.add(new aster.truffle.nodes.MatchNode.CaseNode(pn, body));
       }
     }
-    return aster.truffle.nodes.MatchNode.create(env, buildExpr(mm.expr), patCases);
+    return aster.truffle.nodes.MatchNode.create(env, buildExpr(mm.expr), patCases,
+        originLine(mm.origin));
   }
 
   /**

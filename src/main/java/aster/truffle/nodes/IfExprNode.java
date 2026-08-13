@@ -30,11 +30,6 @@ public abstract class IfExprNode extends AsterExpressionNode {
   }
 
   public static IfExprNode create(AsterExpressionNode cond, AsterExpressionNode thenNode,
-                                  AsterExpressionNode elseNode) {
-    return create(cond, thenNode, elseNode, 0);
-  }
-
-  public static IfExprNode create(AsterExpressionNode cond, AsterExpressionNode thenNode,
                                   AsterExpressionNode elseNode, int sourceLine) {
     return IfExprNodeGen.create(thenNode, elseNode, sourceLine, cond);
   }

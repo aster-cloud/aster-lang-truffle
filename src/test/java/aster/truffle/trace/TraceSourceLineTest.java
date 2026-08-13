@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -73,16 +74,42 @@ class TraceSourceLineTest {
         "★两个不同行的 If 若标签相同，漏斗仍会把它们并成一行（正是被修复的 bug）");
   }
 
-  /** 执行一段真实 Core IR，返回 drain 出来的 trace 标签列表。 */
+  /**
+   * ★{@code Loader} 的**另一条**构造分支（{@code buildScope}）同样要带行号。
+   *
+   * <p>独立审查实测：只还原 {@code buildBlock} 那处（307/309），
+   * 作者原测试与全量 637 条**全部保持绿色**，而真实 trace 已退化成
+   * {@code [if condition, if condition, return value]}——正是本 PR 要修的 bug。
+   * 两条分支必须各有覆盖，任一处被还原都要转红。
+   *
+   * <p>（另：四个无调用方的旧重载已删除，漏改现在会**编译失败**——
+   * 比测试更早、更硬的一道门。）
+   */
+  @Test
+  void scopeBranchAlsoCarriesSourceLines() {
+    List<String> labels = runLabels(scopeProgram());
+
+    assertTrue(labels.contains("if condition @L31"),
+        "★Scope 分支内的 If 必须带行号，实际=" + labels);
+    assertTrue(labels.contains("return value @L32"),
+        "★Scope 分支内的 Return 必须带行号，实际=" + labels);
+  }
+
+  /** 执行默认（两个 If + Return）程序。 */
   private static List<String> runAndCollectLabels() {
+    return runLabels(twoIfsProgram());
+  }
+
+  /** 执行一段真实 Core IR，返回 drain 出来的 trace 标签列表。 */
+  private static List<String> runLabels(String program) {
     TraceAccess.setEnabled(true);
     TraceCollector collector = new TraceCollector(200, 20, 4096);
     TraceAccess.armCurrentThread(collector);
     try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
-      context.eval("aster", twoIfsProgram());
+      context.eval("aster", program);
     }
     List<Map<String, Object>> steps = TraceAccess.drainCurrentThread().steps();
-    assertTrue(steps.size() >= 3, "至少应记录 2 个 if + 1 个 return，实际=" + steps.size());
+    assertFalse(steps.isEmpty(), "★没有记录到任何 trace 步骤——arm/record 链路本身断了");
     return steps.stream()
         .map(s -> String.valueOf(s.get("expression")))
         .collect(Collectors.toList());
@@ -101,6 +128,18 @@ class TraceSourceLineTest {
         + "," + ifStmt(true, 11)
         + ",{\"kind\":\"Return\",\"expr\":{\"kind\":\"Int\",\"value\":1},"
         + origin(12) + "}"
+        + "]}}]}";
+  }
+
+  /** 一个把 If/Return 包在 Scope 里的程序——走 Loader 的 buildScope 分支。 */
+  private static String scopeProgram() {
+    return "{\"name\":\"test.trace.scope\",\"decls\":[{"
+        + "\"kind\":\"Func\",\"name\":\"main\",\"params\":[],\"body\":{\"statements\":["
+        + "{\"kind\":\"Scope\",\"statements\":["
+        + ifStmt(true, 31)
+        + ",{\"kind\":\"Return\",\"expr\":{\"kind\":\"Int\",\"value\":1},"
+        + origin(32) + "}"
+        + "]}"
         + "]}}]}";
   }
 

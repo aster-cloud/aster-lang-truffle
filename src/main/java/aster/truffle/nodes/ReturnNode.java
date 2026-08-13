@@ -20,8 +20,6 @@ public final class ReturnNode extends Node {
    */
   @CompilationFinal private final String traceLabel;
 
-  public ReturnNode(Node expr) { this(expr, 0); }
-
   public ReturnNode(Node expr, int sourceLine) {
     this.expr = expr;
     this.traceLabel = sourceLine > 0 ? "return value @L" + sourceLine : "return value";

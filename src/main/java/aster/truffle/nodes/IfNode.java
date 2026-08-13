@@ -33,10 +33,6 @@ public abstract class IfNode extends AsterExpressionNode {
     this.traceLabel = sourceLine > 0 ? "if condition @L" + sourceLine : "if condition";
   }
 
-  public static IfNode create(AsterExpressionNode cond, Node thenNode, Node elseNode) {
-    return create(cond, thenNode, elseNode, 0);
-  }
-
   public static IfNode create(AsterExpressionNode cond, Node thenNode, Node elseNode, int sourceLine) {
     return IfNodeGen.create(thenNode, elseNode, sourceLine, cond);
   }

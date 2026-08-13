@@ -23,10 +23,6 @@ public abstract class MatchNode extends AsterExpressionNode {
     this.traceLabel = sourceLine > 0 ? "match no-arm @L" + sourceLine : "match no-arm";
   }
 
-  public static MatchNode create(Env env, AsterExpressionNode scrutinee, java.util.List<CaseNode> cases) {
-    return create(env, scrutinee, cases, 0);
-  }
-
   public static MatchNode create(Env env, AsterExpressionNode scrutinee,
                                  java.util.List<CaseNode> cases, int sourceLine) {
     return MatchNodeGen.create(env, cases, sourceLine, scrutinee);
