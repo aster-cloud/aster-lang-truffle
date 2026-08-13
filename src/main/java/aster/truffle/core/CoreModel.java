@@ -71,7 +71,7 @@ public final class CoreModel {
   @JsonTypeName("Set") public static final class Set implements Stmt { public String name; public Expr expr; }
   @JsonTypeName("Start") public static final class Start implements Stmt { public String name; public Expr expr; }
   @JsonTypeName("Wait") public static final class Wait implements Stmt { public java.util.List<String> names; }
-  @JsonTypeName("Match") public static final class Match implements Stmt { public Expr expr; public java.util.List<Case> cases; }
+  @JsonTypeName("Match") public static final class Match implements Stmt { public Expr expr; public java.util.List<Case> cases; public Origin origin; }
   @JsonTypeName("Scope") public static final class Scope implements Stmt { public java.util.List<Stmt> statements; }
   @JsonTypeName("Case") public static final class Case { public Pattern pattern; public Stmt body; }
   @JsonTypeName("workflow")
@@ -141,7 +141,7 @@ public final class CoreModel {
   public static final class FieldInit { public String name; public Expr expr; }
   @JsonTypeName("Lambda") public static final class Lambda implements Expr { public java.util.List<Param> params; public Type ret; public Block body; public java.util.List<String> captures; }
   // ADR 0019 G2b：表达式级 if（kind="IfExpr"，与 core/ts Core IR 对齐）。
-  @JsonTypeName("IfExpr") public static final class IfE implements Expr { public Expr cond; public Expr thenE; public Expr elseE; }
+  @JsonTypeName("IfExpr") public static final class IfE implements Expr { public Expr cond; public Expr thenE; public Expr elseE; public Origin origin; }
   // ADR 0024 C0：列表字面量（kind="ListLit"，与 core CoreModel.ListE / ts Core.ListLit 对齐）。
   @JsonTypeName("ListLit") public static final class ListE implements Expr { public java.util.List<Expr> elements; }
 

@@ -1,31 +1,40 @@
 package aster.truffle.trace;
 
-import aster.truffle.nodes.ReturnNode;
+import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 步骤级 trace 必须带**源码行号**，使条件漏斗能区分同类型的不同节点。
  *
  * <h2>被修复的问题</h2>
  *
- * <p>此前 {@code IfNode}/{@code ReturnNode} 记的是硬编码字面量
+ * <p>{@code IfNode}/{@code ReturnNode} 此前记硬编码字面量
  * （{@code "if condition"} / {@code "return value"}）。cloud 的漏斗聚合键是
  * {@code stepId + expression}，于是一条策略里**所有 If 被并成一行**——
- * 用户看到的是单条 {@code if condition  4/4 (100%)}，
- * 数字正确却毫无意义：那是 4 个**不同条件**的和。
+ * 用户看到单条 {@code if condition 4/4 (100%)}，那其实是 4 个**不同条件**的和。
  *
- * <p>根因链（三层都缺）：
- * <ol>
- *   <li>Core IR 的 {@code If.origin} 一直有值（lowering 已填）</li>
- *   <li>但 truffle 侧的 {@code CoreModel} 是独立的反序列化镜像，
- *       <b>没有 origin 字段</b>；而 mapper 配了
- *       {@code FAIL_ON_UNKNOWN_PROPERTIES=false} → 行号被<b>静默丢弃</b></li>
- *   <li>Loader 构造节点时自然也传不了行号</li>
- * </ol>
+ * <p>根因链：Core IR 的 {@code If.origin} 一直有值，但 truffle 侧的
+ * {@code CoreModel} 是独立反序列化镜像且<b>没有 origin 字段</b>，
+ * 而 mapper 配了 {@code FAIL_ON_UNKNOWN_PROPERTIES=false} → 行号被<b>静默丢弃</b>。
+ *
+ * <h2>★为什么必须走真实 polyglot 执行</h2>
+ *
+ * <p>本测试的第一版是直接 {@code new ReturnNode(expr, 22)} 再反射读私有字段
+ * {@code traceLabel}。那是**假绿**：{@code Loader} 里有<b>两处</b>构造节点的分支，
+ * 把**活跃**那处改回不传行号后，真实 trace 退化成全部同名
+ * （实测 {@code if condition} ×4），而该版测试<b>依旧全绿</b>——
+ * 它压根没有经过 Loader。
+ *
+ * <p>现改为喂真实 Core IR JSON 给 polyglot Context 执行，断言 drain 出来的
+ * trace 标签。这样任何一处 Loader 漏改都会被抓住。
  */
 class TraceSourceLineTest {
 
@@ -35,28 +44,74 @@ class TraceSourceLineTest {
     TraceAccess.setEnabled(false);
   }
 
-  /** 带行号时标签必须区分开；不带行号时回落到原字面量（向后兼容）。 */
+  /**
+   * ★端到端：两个位于不同行的 If + 一个 Return，标签必须各带自己的行号。
+   *
+   * <p>这条同时覆盖 {@code Loader} 的两处构造分支中**实际被执行**的那处——
+   * 漏改任意一处都会让断言失败。
+   */
   @Test
-  void returnNodeLabelCarriesSourceLine() {
-    assertEquals("return value @L22", labelOf(new ReturnNode(null, 22)));
-    assertEquals("return value", labelOf(new ReturnNode(null, 0)),
-        "★行号未知时必须回落到原字面量，不能出现 `@L0`");
+  void traceLabelsCarryDistinctSourceLines() {
+    List<String> labels = runAndCollectLabels();
+
+    assertEquals(
+        List.of("if condition @L7", "if condition @L11", "return value @L12"),
+        labels,
+        "★标签必须逐条带上各自的源码行号；若退化成 `if condition` 说明 "
+            + "Loader 没把 origin 传进节点（本仓踩过：两处构造分支只改了一处）");
   }
 
-  /** ★同一类型的不同行必须产生**不同**标签——这正是漏斗能分组的前提。 */
+  /** 同类型节点的标签必须**互不相同**——这正是漏斗能分组的前提。 */
   @Test
-  void differentLinesProduceDifferentLabels() {
-    assertNotEquals(labelOf(new ReturnNode(null, 15)), labelOf(new ReturnNode(null, 17)),
-        "★两个不同行的 Return 若标签相同，漏斗仍会把它们并成一行");
+  void sameKindDifferentLinesDoNotCollapse() {
+    List<String> ifLabels = runAndCollectLabels().stream()
+        .filter(l -> l.startsWith("if condition"))
+        .collect(Collectors.toList());
+
+    assertEquals(2, ifLabels.size(), "本用例构造了 2 个 If");
+    assertEquals(2, ifLabels.stream().distinct().count(),
+        "★两个不同行的 If 若标签相同，漏斗仍会把它们并成一行（正是被修复的 bug）");
   }
 
-  private static String labelOf(ReturnNode node) {
-    try {
-      var f = ReturnNode.class.getDeclaredField("traceLabel");
-      f.setAccessible(true);
-      return (String) f.get(node);
-    } catch (ReflectiveOperationException e) {
-      throw new AssertionError("traceLabel 字段缺失——标签生成逻辑被改动了", e);
+  /** 执行一段真实 Core IR，返回 drain 出来的 trace 标签列表。 */
+  private static List<String> runAndCollectLabels() {
+    TraceAccess.setEnabled(true);
+    TraceCollector collector = new TraceCollector(200, 20, 4096);
+    TraceAccess.armCurrentThread(collector);
+    try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
+      context.eval("aster", twoIfsProgram());
     }
+    List<Map<String, Object>> steps = TraceAccess.drainCurrentThread().steps();
+    assertTrue(steps.size() >= 3, "至少应记录 2 个 if + 1 个 return，实际=" + steps.size());
+    return steps.stream()
+        .map(s -> String.valueOf(s.get("expression")))
+        .collect(Collectors.toList());
+  }
+
+  /**
+   * 两个 If（第 7、11 行）+ 一个 Return（第 12 行）的 Core IR。
+   *
+   * <p>行号由 {@code origin} 显式给出——本测试验的是「行号有没有被传下去」，
+   * 不是「lowering 算得对不对」（后者由 core 侧测试负责）。
+   */
+  private static String twoIfsProgram() {
+    return "{\"name\":\"test.trace.lines\",\"decls\":[{"
+        + "\"kind\":\"Func\",\"name\":\"main\",\"params\":[],\"body\":{\"statements\":["
+        + ifStmt(false, 7)
+        + "," + ifStmt(true, 11)
+        + ",{\"kind\":\"Return\",\"expr\":{\"kind\":\"Int\",\"value\":1},"
+        + origin(12) + "}"
+        + "]}}]}";
+  }
+
+  private static String ifStmt(boolean cond, int line) {
+    return "{\"kind\":\"If\",\"cond\":{\"kind\":\"Bool\",\"value\":" + cond + "},"
+        + "\"thenBlock\":{\"statements\":[]},\"elseBlock\":null," + origin(line) + "}";
+  }
+
+  private static String origin(int line) {
+    return "\"origin\":{\"file\":null,"
+        + "\"start\":{\"line\":" + line + ",\"col\":3},"
+        + "\"end\":{\"line\":" + line + ",\"col\":30}}";
   }
 }

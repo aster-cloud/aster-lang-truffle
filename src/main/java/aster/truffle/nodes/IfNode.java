@@ -4,6 +4,7 @@ import aster.truffle.runtime.AsterConfig;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.nodes.Node;
 
 /**
@@ -14,21 +15,21 @@ public abstract class IfNode extends AsterExpressionNode {
   @Child private Node thenNode;
   @Child private Node elseNode;
   /**
-   * 条件在源码中的行号（1-based；0=未知）。
+   * 预拼好的 trace 标签，形如 {@code "if condition @L15"}（行号未知时无后缀）。
    *
    * <p>★步骤级 trace 此前记的是硬编码字面量 {@code "if condition"}，
    * 于是一条策略里**所有** If 在漏斗聚合时被并成一行——
    * 4 个不同条件显示成一个 {@code 4/4 (100%)}，数字正确但毫无意义。
    * 带上行号后各条件自成一组（cloud 的聚合键本就是 stepId+expression）。
+   *
+   * <p>在构造期拼好而非每次 record 时拼：AST 节点复用，热路径不应做字符串拼接。
+   * {@code @CompilationFinal} 让 PE 把它当常量折叠（与本仓 BuiltinCallNode 一致）。
    */
-  private final int sourceLine;
-  /** 预拼好的 trace 标签：避免在热路径上做字符串拼接。 */
-  private final String traceLabel;
+  @CompilationFinal private final String traceLabel;
 
   protected IfNode(Node thenNode, Node elseNode, int sourceLine) {
     this.thenNode = thenNode;
     this.elseNode = elseNode;
-    this.sourceLine = sourceLine;
     this.traceLabel = sourceLine > 0 ? "if condition @L" + sourceLine : "if condition";
   }
 

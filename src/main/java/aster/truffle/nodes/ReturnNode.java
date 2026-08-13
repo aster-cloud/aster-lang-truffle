@@ -2,6 +2,7 @@ package aster.truffle.nodes;
 
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ControlFlowException;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.nodes.Node;
 
 public final class ReturnNode extends Node {
@@ -12,20 +13,17 @@ public final class ReturnNode extends Node {
   }
   @Child private Node expr;
   /**
-   * return 语句在源码中的行号（1-based；0=未知）。
+   * 预拼好的 trace 标签，形如 {@code "return value @L22"}（行号未知时无后缀）。
    *
-   * <p>与 {@link IfNode} 同理：此前记的是硬编码 {@code "return value"}，
-   * 一条策略里 5 个不同的 Return 在漏斗里被并成一行。
+   * <p>与 {@link IfNode} 同理：此前记硬编码 {@code "return value"}，
+   * 一条策略里多个不同的 Return 在漏斗里被并成一行。
    */
-  private final int sourceLine;
-  /** 预拼好的 trace 标签，避免热路径拼串。 */
-  private final String traceLabel;
+  @CompilationFinal private final String traceLabel;
 
   public ReturnNode(Node expr) { this(expr, 0); }
 
   public ReturnNode(Node expr, int sourceLine) {
     this.expr = expr;
-    this.sourceLine = sourceLine;
     this.traceLabel = sourceLine > 0 ? "return value @L" + sourceLine : "return value";
   }
   public Object execute(VirtualFrame frame) {
