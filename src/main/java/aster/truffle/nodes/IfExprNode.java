@@ -3,6 +3,7 @@ package aster.truffle.nodes;
 import aster.truffle.runtime.AsterConfig;
 import com.oracle.truffle.api.dsl.NodeChild;
 import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.frame.VirtualFrame;
 
 /**
@@ -18,15 +19,19 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 public abstract class IfExprNode extends AsterExpressionNode {
   @Child private AsterExpressionNode thenNode;
   @Child private AsterExpressionNode elseNode;
+  /** 预拼好的 trace 标签，形如 {@code "inline if condition @L15"}。见 {@link IfNode}。 */
+  @CompilationFinal private final String traceLabel;
 
-  protected IfExprNode(AsterExpressionNode thenNode, AsterExpressionNode elseNode) {
+  protected IfExprNode(AsterExpressionNode thenNode, AsterExpressionNode elseNode, int sourceLine) {
     this.thenNode = thenNode;
     this.elseNode = elseNode;
+    this.traceLabel =
+        sourceLine > 0 ? "inline if condition @L" + sourceLine : "inline if condition";
   }
 
   public static IfExprNode create(AsterExpressionNode cond, AsterExpressionNode thenNode,
-                                  AsterExpressionNode elseNode) {
-    return IfExprNodeGen.create(thenNode, elseNode, cond);
+                                  AsterExpressionNode elseNode, int sourceLine) {
+    return IfExprNodeGen.create(thenNode, elseNode, sourceLine, cond);
   }
 
   @Specialization
@@ -43,7 +48,7 @@ public abstract class IfExprNode extends AsterExpressionNode {
 
   private Object executeBranch(boolean condValue, VirtualFrame frame) {
     // 步骤级 trace（M2.1b）：记内联 if 表达式条件 + 走了哪支。全局关时 PE 折叠为 no-op。
-    aster.truffle.trace.TraceAccess.record("if-expr", "inline if condition", condValue, condValue, 0);
+    aster.truffle.trace.TraceAccess.record("if-expr", traceLabel, condValue, condValue, 0);
     AsterExpressionNode target = condValue ? thenNode : elseNode;
     if (AsterConfig.DEBUG) {
       System.err.println("DEBUG: ifExpr condition => " + condValue

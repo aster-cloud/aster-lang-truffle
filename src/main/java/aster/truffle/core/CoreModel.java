@@ -4,6 +4,23 @@ import com.fasterxml.jackson.annotation.*;
 import java.util.*;
 
 public final class CoreModel {
+  /**
+   * 源码位置（1-based）。字段名必须与 core 侧 {@code aster.core.ir.CoreModel.Position}
+   * 的 JSON 一致，否则反序列化拿不到值。
+   */
+  public static final class Position { public int line; public int col; }
+
+  /**
+   * 源码范围。
+   *
+   * <p>★此前本类**没有** origin 字段，而 Loader 的 ObjectMapper 配了
+   * {@code FAIL_ON_UNKNOWN_PROPERTIES=false}——于是 Core IR JSON 里真实存在的
+   * {@code origin} 被**静默丢弃**，Truffle 侧完全看不到行号。
+   * 步骤级 trace 因此只能记硬编码字面量（{@code "if condition"}），
+   * 导致条件漏斗把一条策略里所有 If 并成一行。
+   */
+  public static final class Origin { public String file; public Position start; public Position end; }
+
   public static final class Module { public String name; public List<Decl> decls; }
 
   @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind")
@@ -48,13 +65,13 @@ public final class CoreModel {
     @JsonSubTypes.Type(value = Workflow.class, name = "workflow")
   })
   public sealed interface Stmt permits Return, If, Match, Scope, Let, Set, Start, Wait, Workflow {}
-  @JsonTypeName("Return") public static final class Return implements Stmt { public Expr expr; }
-  @JsonTypeName("If") public static final class If implements Stmt { public Expr cond; public Block thenBlock; public Block elseBlock; }
+  @JsonTypeName("Return") public static final class Return implements Stmt { public Expr expr; public Origin origin; }
+  @JsonTypeName("If") public static final class If implements Stmt { public Expr cond; public Block thenBlock; public Block elseBlock; public Origin origin; }
   @JsonTypeName("Let") public static final class Let implements Stmt { public String name; public Expr expr; }
   @JsonTypeName("Set") public static final class Set implements Stmt { public String name; public Expr expr; }
   @JsonTypeName("Start") public static final class Start implements Stmt { public String name; public Expr expr; }
   @JsonTypeName("Wait") public static final class Wait implements Stmt { public java.util.List<String> names; }
-  @JsonTypeName("Match") public static final class Match implements Stmt { public Expr expr; public java.util.List<Case> cases; }
+  @JsonTypeName("Match") public static final class Match implements Stmt { public Expr expr; public java.util.List<Case> cases; public Origin origin; }
   @JsonTypeName("Scope") public static final class Scope implements Stmt { public java.util.List<Stmt> statements; }
   @JsonTypeName("Case") public static final class Case { public Pattern pattern; public Stmt body; }
   @JsonTypeName("workflow")
@@ -124,7 +141,7 @@ public final class CoreModel {
   public static final class FieldInit { public String name; public Expr expr; }
   @JsonTypeName("Lambda") public static final class Lambda implements Expr { public java.util.List<Param> params; public Type ret; public Block body; public java.util.List<String> captures; }
   // ADR 0019 G2b：表达式级 if（kind="IfExpr"，与 core/ts Core IR 对齐）。
-  @JsonTypeName("IfExpr") public static final class IfE implements Expr { public Expr cond; public Expr thenE; public Expr elseE; }
+  @JsonTypeName("IfExpr") public static final class IfE implements Expr { public Expr cond; public Expr thenE; public Expr elseE; public Origin origin; }
   // ADR 0024 C0：列表字面量（kind="ListLit"，与 core CoreModel.ListE / ts Core.ListLit 对齐）。
   @JsonTypeName("ListLit") public static final class ListE implements Expr { public java.util.List<Expr> elements; }
 

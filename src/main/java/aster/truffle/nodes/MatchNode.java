@@ -14,13 +14,18 @@ public abstract class MatchNode extends AsterExpressionNode {
   private final Env env;
   @Children private final CaseNode[] cases;
 
-  protected MatchNode(Env env, java.util.List<CaseNode> cases) {
+  /** 预拼好的 trace 标签，形如 {@code "match no-arm @L15"}。见 {@link IfNode}。 */
+  @com.oracle.truffle.api.CompilerDirectives.CompilationFinal private final String traceLabel;
+
+  protected MatchNode(Env env, java.util.List<CaseNode> cases, int sourceLine) {
     this.env = env;
     this.cases = cases.toArray(new CaseNode[0]);
+    this.traceLabel = sourceLine > 0 ? "match no-arm @L" + sourceLine : "match no-arm";
   }
 
-  public static MatchNode create(Env env, AsterExpressionNode scrutinee, java.util.List<CaseNode> cases) {
-    return MatchNodeGen.create(env, cases, scrutinee);
+  public static MatchNode create(Env env, AsterExpressionNode scrutinee,
+                                 java.util.List<CaseNode> cases, int sourceLine) {
+    return MatchNodeGen.create(env, cases, sourceLine, scrutinee);
   }
 
   @Specialization(guards = "isNull(scrutinee)")
@@ -65,7 +70,7 @@ public abstract class MatchNode extends AsterExpressionNode {
       System.err.println("DEBUG: no case matched, returning null");
     }
     // 步骤级 trace（M2.1b）：无 arm 命中（matched=false，result=null）——决策路径的关键信息。
-    aster.truffle.trace.TraceAccess.record("match", "match no-arm", null, false, 0);
+    aster.truffle.trace.TraceAccess.record("match", traceLabel, null, false, 0);
     return null;
   }
 
