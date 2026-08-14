@@ -87,4 +87,60 @@ class MemberAccessInteropTest {
             assertEquals(456, result.asInt(), "obj.value on a host POJO should resolve via interop members");
         }
     }
+
+    /**
+     * 成员不存在时，错误必须指向**真因**（键名对不上），并列出可用成员。
+     *
+     * <p>api#244：此前文案是「对象类型 HostObject 不支持成员访问……请确认 polyglot
+     * Context 配置了恰当的 HostAccess」。用户据此去查引擎配置，而真实原因只是
+     * context 里的键名与规则参数不一致——排查方向被带偏两层。
+     */
+    @Test
+    @DisplayName("api#244: 成员不存在时列出可用键名，而不是指向 HostAccess 配置")
+    void missingMemberErrorListsAvailableKeys() throws IOException {
+        try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
+            Source source = Source.newBuilder("aster", MEMBER_ACCESS_PROGRAM, "member-missing.json").build();
+            Value program = context.eval(source);
+
+            // 规则要 obj.value，调用方却传 {"wrongKey": {...}}——issue 里的真实形状
+            RuntimeException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                RuntimeException.class,
+                () -> program.execute(ProxyObject.fromMap(Map.of("wrongKey", Map.of("age", 30)))));
+
+            String msg = String.valueOf(ex.getMessage());
+            org.junit.jupiter.api.Assertions.assertTrue(msg.contains("wrongKey"),
+                "★必须列出实际可用的键名，用户才能一眼看出自己传错了形状；实际文案：" + msg);
+            org.junit.jupiter.api.Assertions.assertFalse(msg.contains("请确认 polyglot Context 配置"),
+                "★不得再把真因是键名不匹配的错误指向 HostAccess 配置；实际文案：" + msg);
+        }
+    }
+
+    /**
+     * 宿主 POJO 走的是 members 而非 hash 条目——两条枚举路径都要覆盖。
+     *
+     * <p>先前一次尝试只用 {@code getMembers}，对宿主 {@code Map} 拿不到东西而回退；
+     * 只测 Map 又会漏掉 POJO。故两条都钉住。
+     */
+    @Test
+    @DisplayName("api#244: 宿主 POJO 缺成员时同样列出可用成员")
+    void missingMemberOnPojoAlsoListsMembers() throws IOException {
+        try (Context context = Context.newBuilder("aster")
+                .allowHostAccess(HostAccess.ALL)
+                .build()) {
+            Source source = Source.newBuilder("aster", MISSING_MEMBER_PROGRAM, "member-pojo-missing.json").build();
+            Value program = context.eval(source);
+
+            RuntimeException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                RuntimeException.class, () -> program.execute(new HostBean(456)));
+
+            String msg = String.valueOf(ex.getMessage());
+            org.junit.jupiter.api.Assertions.assertTrue(msg.contains("value"),
+                "★POJO 的可用成员应被列出（这里是 value）；实际文案：" + msg);
+        }
+    }
+
+    /** 读一个**不存在**的成员 {@code obj.missing}，用于触发错误路径。 */
+    private static final String MISSING_MEMBER_PROGRAM = MEMBER_ACCESS_PROGRAM
+        .replace("\"name\": \"obj.value\"", "\"name\": \"obj.missing\"")
+        .replace("test.member.access", "test.member.missing");
 }

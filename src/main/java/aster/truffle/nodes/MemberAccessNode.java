@@ -125,10 +125,65 @@ public final class MemberAccessNode extends AsterExpressionNode {
             throw new RuntimeException("无法访问成员 " + member + "：" + e.getMessage(), e);
         }
 
+        // ★先报**真因**：绝大多数情况下不是 HostAccess 没配好，而是调用方传的键名
+        //   对不上。此前这里只提 HostAccess，把排查方向带偏两层——用户看到
+        //   「请确认 polyglot Context 配置」会去查引擎配置，而实际只是 context 里
+        //   写错了一个键名。（api#244）
+        String available = describeAvailableKeys(interop, base);
+        if (available != null) {
+            throw new RuntimeException("无法访问成员：" + member
+                + "。该对象的可用成员为 " + available
+                + "——请检查上下文的键名是否与规则参数一致；"
+                + "若上下文形如 {\"外层键\": {...}}，而规则是 `given x as T`，"
+                + "则整个外层 map 会被当作 x，需要直接传内层对象。");
+        }
+
         throw new RuntimeException("无法访问成员：对象类型 " + base.getClass().getName()
             + " 不支持成员访问，成员：" + member
             + "（若为宿主对象，请确认 polyglot Context 配置了恰当的 HostAccess，"
             + "使其成员/条目/元素可经 InteropLibrary 访问）");
+    }
+
+    /**
+     * 列出对象**实际可用**的键/成员名，用于把「成员访问失败」的错误指向真因。
+     *
+     * <p>为什么走 {@code getHashEntriesIterator} 而不是 {@code getMembers}：宿主
+     * {@code Map} 在 Polyglot 里暴露为 <b>hash 条目</b>而非成员，
+     * {@code hasMembers} 为 false、{@code getMembers} 拿不到东西——先前一次尝试
+     * 正是卡在这里而回退。两条都覆盖才不会漏。
+     *
+     * <p>返回 null 表示无法枚举（此时调用方回退到原本的 HostAccess 文案，
+     * 因为那时确实可能是配置问题）。取前若干个即可，键很多时列全反而没法读。
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static String describeAvailableKeys(InteropLibrary interop, Object base) {
+        final int LIMIT = 12;
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        try {
+            if (interop.hasHashEntries(base)) {
+                Object it = interop.getHashEntriesIterator(base);
+                InteropLibrary itLib = InteropLibrary.getUncached(it);
+                while (itLib.hasIteratorNextElement(it) && keys.size() < LIMIT) {
+                    Object entry = itLib.getIteratorNextElement(it);
+                    InteropLibrary eLib = InteropLibrary.getUncached(entry);
+                    if (eLib.hasArrayElements(entry) && eLib.getArraySize(entry) >= 1) {
+                        keys.add(String.valueOf(eLib.readArrayElement(entry, 0)));
+                    }
+                }
+            } else if (interop.hasMembers(base)) {
+                Object members = interop.getMembers(base);
+                InteropLibrary mLib = InteropLibrary.getUncached(members);
+                long n = Math.min(mLib.getArraySize(members), LIMIT);
+                for (long i = 0; i < n; i++) {
+                    keys.add(String.valueOf(mLib.readArrayElement(members, i)));
+                }
+            }
+        } catch (Exception e) {
+            // 枚举本身失败就退回原文案——这里绝不能再抛，否则把「错误信息不好」
+            // 变成「报错时又炸一次」，比原问题更糟。
+            return null;
+        }
+        return keys.isEmpty() ? null : keys.toString();
     }
 
     /**
