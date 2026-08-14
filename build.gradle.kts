@@ -16,7 +16,7 @@ version = extensions.getByType<VersionCatalogsExtension>()
 
 // 版本统一管理 — 升级 GraalVM/Truffle 或 Quarkus 时只改这里。
 // 此前 25.0.1 在 4 处 dependency 重复硬编码，升级容易半成功。
-val graalvmVersion = "25.0.1"
+val graalvmVersion = "25.0.4"
 val quarkusVersion = "3.32.2"
 val junitVersion = "6.0.0"
 val junitPlatformVersion = "6.0.0"  // JUnit Jupiter 6.x 配套 Platform 走同版本
