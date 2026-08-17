@@ -95,6 +95,35 @@ public class BuiltinsTest {
     assertEquals(10_000_000_000L, ((Number) result).longValue());
   }
 
+  /**
+   * ★Text.equals 此前在 Truffle **完全缺失**（2026-08-17 审计）。
+   *
+   * <p>TS 侧三处齐全（interpreter/emitter/lsp），Truffle 一处没有——同一段 CNL 在
+   * TS 返回布尔判定、在 Truffle 抛 "Unknown call target"。命中处正是语料库里的
+   * **访问控制策略**（{@code Return Text.equals(ownerId, userId)} 即所有权判断本身），
+   * 但该样本标了 evalExempt「只解析从不求值」，所以这条分歧从未在 parity 中暴露。
+   *
+   * <p>语义须与 TS 的 {@code text(x) === text(y)}（text = String(v)）逐字对齐。
+   */
+  @Test
+  public void textEqualsMatchesTsSemantics() {
+    assertEquals(true, Builtins.call("Text.equals", new Object[]{"admin", "admin"}));
+    assertEquals(false, Builtins.call("Text.equals", new Object[]{"admin", "member"}));
+    // 大小写敏感（TS 的 === 亦然）
+    assertEquals(false, Builtins.call("Text.equals", new Object[]{"Admin", "admin"}));
+    // 空串
+    assertEquals(true, Builtins.call("Text.equals", new Object[]{"", ""}));
+  }
+
+  @Test
+  public void textEqualsCoercesNonTextLikeTs() {
+    // TS 用 String(v) 强制转换，故 42 与 "42" 相等；Truffle 的 textValue 亦为
+    // String.valueOf，两侧必须一致——否则同一段 CNL 双引擎结论相反。
+    assertEquals(true, Builtins.call("Text.equals", new Object[]{42L, "42"}));
+    assertEquals(true, Builtins.call("Text.equals", new Object[]{true, "true"}));
+    assertEquals(false, Builtins.call("Text.equals", new Object[]{42L, "43"}));
+  }
+
   @Test
   public void toUpperIsLocaleRootStable() {
     // #43：Text.toUpper 用 Locale.ROOT，与默认 locale（尤其 tr_TR 的 i→İ）无关，

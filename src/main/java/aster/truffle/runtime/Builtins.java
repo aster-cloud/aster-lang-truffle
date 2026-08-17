@@ -217,6 +217,24 @@ public final class Builtins {
       return textValue(args[0]) + textValue(args[1]);
     }));
 
+    // ★2026-08-17 审计：本 builtin 此前在 Truffle **完全缺失**，而 TS 侧三处齐全
+    //   （interpreter.ts:771 / jvm/emitter.ts:140 / lsp/analysis.ts:253）。
+    //
+    //   后果不是「少一个函数」而是双引擎行为分叉：同一段 CNL 在 TS 返回布尔判定，
+    //   在 Truffle 走 CallNode 抛 "Unknown call target"。
+    //   命中处正是语料库里的**访问控制策略** policy_engine.aster：
+    //       Return Text.equals(ownerId, userId).   -- 所有权判断本身
+    //       Return Text.equals(role, "admin").     -- 角色判断
+    //   该样本标了 evalExempt「只解析从不求值」，所以这条分歧从未在 parity 中暴露。
+    //
+    //   语义与 TS 逐字对齐：TS 是 `text(x) === text(y)`，其中 text = String(v)；
+    //   这里用同仓既有的 textValue()（unwrap PII 后 String.valueOf），
+    //   与相邻 Text.* builtin 的强制转换口径完全一致。
+    register("Text.equals", new BuiltinDef(args -> {
+      checkArity("Text.equals", args, 2);
+      return textValue(args[0]).equals(textValue(args[1]));
+    }));
+
     register("Text.toUpper", new BuiltinDef(args -> {
       checkArity("Text.toUpper", args, 1);
       // #43：显式 Locale.ROOT，避免默认 locale（如 tr_TR 的 i→İ）破坏确定性与 TS parity。
