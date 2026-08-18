@@ -347,9 +347,9 @@ public final class Builtins {
 
     register("List.append", new BuiltinDef(args -> {
       checkArity("List.append", args, 2);
-      if (args[0] instanceof List<?> l) {
-        @SuppressWarnings("unchecked")
-        List<Object> mutable = new ArrayList<>((List<Object>)l);
+      List<Object> l = asList(args[0]);
+      if (l != null) {
+        List<Object> mutable = new ArrayList<>(l);
         mutable.add(args[1]);
         return mutable;
       }
@@ -358,12 +358,11 @@ public final class Builtins {
 
     register("List.concat", new BuiltinDef(args -> {
       checkArity("List.concat", args, 2);
-      if (args[0] instanceof List<?> l1 && args[1] instanceof List<?> l2) {
-        @SuppressWarnings("unchecked")
-        List<Object> result = new ArrayList<>((List<Object>)l1);
-        @SuppressWarnings("unchecked")
-        List<Object> l2Cast = (List<Object>)l2;
-        result.addAll(l2Cast);
+      List<Object> l1 = asList(args[0]);
+      List<Object> l2 = asList(args[1]);
+      if (l1 != null && l2 != null) {
+        List<Object> result = new ArrayList<>(l1);
+        result.addAll(l2);
         return result;
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("List.concat", "List, List", typeName(args[0]) + ", " + typeName(args[1])));
@@ -373,7 +372,13 @@ public final class Builtins {
       checkArity("List.contains", args, 2);
       List<Object> l = asList(args[0]);
       if (l != null) {
-        return l.contains(args[1]);
+        // 值相等而非引用相等：guest 载体的同值元素必须命中（与 TS valueEquals 对齐）。
+        for (Object item : l) {
+          if (valueEquals(item, args[1])) {
+            return true;
+          }
+        }
+        return false;
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("List.contains", "List", typeName(args[0])));
     }));
@@ -387,12 +392,11 @@ public final class Builtins {
 
     register("List.slice", new BuiltinDef(args -> {
       checkArity("List.slice", args, 2, 3);
-      if (args[0] instanceof List<?> l) {
+      List<Object> l = asList(args[0]);
+      if (l != null) {
         int start = toInt(args[1]);
         int end = args.length == 3 ? toInt(args[2]) : l.size();
-        @SuppressWarnings("unchecked")
-        List<Object> lCast = (List<Object>)l;
-        return new ArrayList<>(lCast.subList(start, end));
+        return new ArrayList<>(l.subList(start, end));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("List.slice", "List", typeName(args[0])));
     }));
@@ -428,7 +432,8 @@ public final class Builtins {
 
     register("List.filter", new BuiltinDef(args -> {
       checkArity("List.filter", args, 2);
-      if (!(args[0] instanceof List<?> l)) {
+      List<Object> l = asList(args[0]);
+      if (l == null) {
         throw new BuiltinException(ErrorMessages.operationExpectedType("List.filter", "List", typeName(args[0])));
       }
       if (!(args[1] instanceof LambdaValue lambda)) {
@@ -521,7 +526,7 @@ public final class Builtins {
       List<Object> out = new ArrayList<>();
       for (Object x : l) {
         boolean seen = false;
-        for (Object y : out) if (java.util.Objects.equals(unwrap(x), unwrap(y))) { seen = true; break; }
+        for (Object y : out) if (valueEquals(x, y)) { seen = true; break; }
         if (!seen) out.add(x);
       }
       return out;
@@ -695,7 +700,7 @@ public final class Builtins {
       checkArity("Map.get", args, 2);
       Map<String, Object> m = asMap(args[0]);
       if (m != null) {
-        return m.get(String.valueOf(args[1]));
+        return m.get(mapKey(args[1]));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.get", "Map", typeName(args[0])));
     }));
@@ -706,7 +711,7 @@ public final class Builtins {
         // LinkedHashMap 拷贝保插入序；新键追加末尾（与 TS `{...m, [k]:v}` 一致）。
         @SuppressWarnings("unchecked")
         Map<Object,Object> mutable = new java.util.LinkedHashMap<>((Map<Object,Object>)m);
-        mutable.put(args[1], args[2]);
+        mutable.put(mapKey(args[1]), args[2]);
         return mutable;
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.put", "Map", typeName(args[0])));
@@ -717,7 +722,7 @@ public final class Builtins {
       if (args[0] instanceof Map<?,?> m) {
         @SuppressWarnings("unchecked")
         Map<Object,Object> mutable = new java.util.LinkedHashMap<>((Map<Object,Object>)m);
-        mutable.remove(args[1]);
+        mutable.remove(mapKey(args[1]));
         return mutable;
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.remove", "Map", typeName(args[0])));
@@ -727,7 +732,7 @@ public final class Builtins {
       checkArity("Map.contains", args, 2);
       Map<String, Object> m = asMap(args[0]);
       if (m != null) {
-        return m.containsKey(String.valueOf(args[1]));
+        return m.containsKey(mapKey(args[1]));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.contains", "Map", typeName(args[0])));
     }));
@@ -1425,6 +1430,110 @@ public final class Builtins {
       return cast;
     }
     return null;
+  }
+
+  /**
+   * 集合语义的<b>值相等</b>——与 TS {@code interpreter.ts} 的 {@code valueEquals} 对齐。
+   *
+   * <p>此前 Java 侧用 {@code Objects.equals} / {@code List.contains}，即 Java 的
+   * {@code equals}。而 {@code AsterListValue} / {@code AsterMapValue} /
+   * {@code AsterDataValue} <b>都没有覆写 equals</b>，落回引用相等。于是同样的值，
+   * 换个载体结论就不同：
+   *
+   * <pre>
+   *   List.contains([[1, 2]], [1, 2])   // 原生嵌套 → true；guest 嵌套 → false
+   *   List.distinct([[1], [1]])         // TS → [[1]]；Java（guest 载体）→ [[1], [1]]
+   * </pre>
+   *
+   * <p>对合规引擎而言「同一个值去重不掉 / 查不到」会直接改变判定结果，且不报错。
+   * TS 侧一直是深度结构相等（数组逐元素、对象逐键、Decimal 按值），故归一到 TS。
+   *
+   * <p>先 unwrap 再比较：PII 包装与否不应改变值相等性。
+   */
+  public static boolean valueEquals(Object a, Object b) {
+    Object x = unwrap(a);
+    Object y = unwrap(b);
+    if (x == y) {
+      return true;
+    }
+    if (x == null || y == null) {
+      return false;
+    }
+    // 列表：逐元素递归（原生 List 与 guest AsterListValue 一视同仁）
+    List<Object> xl = asList(x);
+    List<Object> yl = asList(y);
+    if (xl != null && yl != null) {
+      if (xl.size() != yl.size()) {
+        return false;
+      }
+      for (int i = 0; i < xl.size(); i++) {
+        if (!valueEquals(xl.get(i), yl.get(i))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (xl != null || yl != null) {
+      return false; // 一侧是列表另一侧不是
+    }
+    // 映射：逐键递归
+    Map<String, Object> xm = asMap(x);
+    Map<String, Object> ym = asMap(y);
+    if (xm != null && ym != null) {
+      if (xm.size() != ym.size()) {
+        return false;
+      }
+      for (Map.Entry<String, Object> e : xm.entrySet()) {
+        if (!ym.containsKey(e.getKey()) || !valueEquals(e.getValue(), ym.get(e.getKey()))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (xm != null || ym != null) {
+      return false;
+    }
+    // 结构体：类型名 + 逐字段递归
+    if (x instanceof AsterDataValue xd && y instanceof AsterDataValue yd) {
+      if (!java.util.Objects.equals(xd.getTypeName(), yd.getTypeName())
+          || xd.fieldCount() != yd.fieldCount()) {
+        return false;
+      }
+      for (int i = 0; i < xd.fieldCount(); i++) {
+        if (!java.util.Objects.equals(xd.fieldName(i), yd.fieldName(i))
+            || !valueEquals(xd.fieldValue(i), yd.fieldValue(i))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return java.util.Objects.equals(x, y);
+  }
+
+  /**
+   * Map 键归一化：<b>唯一</b>的键规则，get/put/remove/contains 四处必须共用。
+   *
+   * <p>Aster 的 Map 键是文本键（{@code asMap} 一直按 {@code Map<String,Object>} 处理，
+   * TS 侧则用 JS object / GuestMap，键天然是字符串）。TS 在 get/put/remove/contains
+   * 四处<b>一致地</b>做 {@code String(k)}；Java 此前只在 get/contains 归一，
+   * put/remove 存的是原始对象——于是非文本键上：
+   *
+   * <pre>
+   *   Let m be Map.put(Map.empty(), 1, "one").
+   *   Return Map.get(m, 1).      // TS → "one"；Java → null（键存成 Integer 1，查的是 "1"）
+   * </pre>
+   *
+   * <p>即「刚写进去就读不出来」，且<b>不报错</b>——Map 看上去凭空丢数据。
+   * 归一到 TS 的行为（而非反过来让 TS 保留原始键），因为 TS 侧的 GuestMap
+   * 底层就是字符串键，改 TS 才是破坏性变更。
+   *
+   * <p>先 {@code unwrap} 再取字符串：Truffle 有运行期 PII 包装（{@code AsterPiiValue}），
+   * TS 侧则没有——PII 在 TS 是纯编译期概念，到 {@code String(k)} 的值本就是裸值。
+   * 故不 unwrap 会让包装值按包装器的 toString 成键，反而与 TS 分叉；
+   * unwrap 才是与 TS 对齐的那一侧。同时也避免同一逻辑键因包装与否落到两个槽位。
+   */
+  public static Object mapKey(Object key) {
+    return String.valueOf(unwrap(key));
   }
 
   /**
