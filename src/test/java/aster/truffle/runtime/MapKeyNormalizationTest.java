@@ -139,6 +139,23 @@ class MapKeyNormalizationTest {
   }
 
   @Test
+  void hugeNegativeKeysDoNotCollapse() {
+    // ★终审发现（F-4）：`Math.abs` 守卫此前无测试 —— 去掉它（`d <= MAX`）后
+    //   全量仍绿，而实测后果是负数大键**塌陷成同一槽位**：
+    //     mapKey(-1e300) = mapKey(-Double.MAX_VALUE) = -9223372036854775808（Long.MIN_VALUE）
+    //   两个截然不同的键静默覆盖 —— 正是本 PR 存在的理由那一类 bug。
+    //   已有的 -1e15/-2^53 负向断言都在阈值**内**，走归一分支，探不到下界保护。
+    assertEquals("-1.0E300", Builtins.mapKey(-1e300),
+        "超下界的负数不得被 longValue() 饱和成 Long.MIN_VALUE");
+    assertTrue(!Builtins.mapKey(-1e300).equals(Builtins.mapKey(-Double.MAX_VALUE)),
+        "两个不同的超界负数键不得塌陷成同一槽位");
+    // Float 分支同理
+    assertTrue(!Builtins.mapKey(Float.valueOf(-3.4e38f))
+            .equals(Builtins.mapKey(Float.valueOf(-1.0e38f))),
+        "Float 的超界负数键同样不得塌陷");
+  }
+
+  @Test
   void floatKeyIsNormalizedToo() {
     // ★复评发现（F-2）：新增的两条测试只用 Double 字面量，
     //   删掉整个 Float 分支全绿 —— 代码行为正确但没被钉住。

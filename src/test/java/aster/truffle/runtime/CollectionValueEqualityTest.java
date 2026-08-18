@@ -126,6 +126,15 @@ class CollectionValueEqualityTest {
     assertTrue(Builtins.valueEquals(9007199254740993L, 9007199254740993L),
         "同一个大 long 仍须相等");
 
+    // ★终审发现（F-5）：isFractional 的 Float 分支无测试 —— 去掉它后全量仍绿，
+    //   而实测 valueEquals(1.5f, 1) 会变成 true（走 long 比较，1.5f 截断成 1）。
+    //   上面的断言只用了 Long/Double，Float 到达路径确实没覆盖。
+    //   （引擎内无路径产生 Float，仅可能经宿主 interop 注入，故属防御性覆盖。）
+    assertFalse(Builtins.valueEquals(Float.valueOf(1.5f), 1),
+        "Float 的小数值不得因走 long 比较而与整数判等");
+    assertTrue(Builtins.valueEquals(Float.valueOf(1.0f), 1),
+        "Float 的整数值仍应与整数相等");
+
     // 端到端：真实可达路径必须一致
     Object range = Builtins.call("List.range", new Object[]{0, 3});
     Object sumLong = Builtins.call("List.sum", new Object[]{List.of(1, 1)});
