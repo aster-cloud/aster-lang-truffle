@@ -1548,6 +1548,24 @@ public final class Builtins {
       }
       return true;
     }
+    // ★数值按**值**相等，跨 Java 数值类型（2026-08-18 对抗性审查发现）。
+    //
+    //   TS 只有一种 number，`1 === 1` 恒真；Java 却区分 Integer/Long/Double。
+    //   实测可达路径：`List.range` 产 Integer，而算术 `numericAdd` 走 toLong 产 Long
+    //   → `List.contains(List.range(0,3), 1+1)` 在 Java 是 **false**、TS 是 true；
+    //   `List.distinct` 同理会把同一个 2 留下两份。
+    //   这是既有分歧，但把 contains 改用 valueEquals 时若不一并处理，
+    //   等于把它原样带进新路径并伪装成「已对齐 TS」。
+    //
+    //   Decimal 不在此列：它是精确十进制类型，与 Double 混算本就被显式禁止
+    //   （见 numericAdd 的 ADR 0025 注释），故仍走 equals 保持类型区分。
+    if (x instanceof Number nx && y instanceof Number ny
+        && !isDecimal(x) && !isDecimal(y)) {
+      if (isFractional(x) || isFractional(y)) {
+        return nx.doubleValue() == ny.doubleValue();
+      }
+      return nx.longValue() == ny.longValue();
+    }
     return java.util.Objects.equals(x, y);
   }
 
@@ -1574,7 +1592,27 @@ public final class Builtins {
    * unwrap 才是与 TS 对齐的那一侧。同时也避免同一逻辑键因包装与否落到两个槽位。
    */
   public static Object mapKey(Object key) {
-    return String.valueOf(unwrap(key));
+    Object k = unwrap(key);
+    // ★整数值的浮点必须与整数落到同一个键（2026-08-18 对抗性审查发现）。
+    //
+    //   Java 的 String.valueOf(1.0) = "1.0"，而 JS 的 String(1.0) = "1"。
+    //   仅用 String.valueOf 会让 `Map.put(m, 1.0, v)` 存成键 "1.0"、
+    //   `Map.get(m, 1)` 查 "1" → **null**，即本次修复声称要消灭的
+    //   「刚写进去就读不出来」在浮点键上原样残留。TS 侧因 JS 只有一种 number，
+    //   1 与 1.0 天然同键，两侧于是分叉。
+    //
+    //   故整数值的 Double/Float 先降成 long 再取字符串；非整数值（2.5）、
+    //   NaN/Infinity 保持 String.valueOf——后者与 JS 的 "NaN"/"Infinity" 一致。
+    if (k instanceof Double d) {
+      if (!d.isNaN() && !d.isInfinite() && d == Math.rint(d) && Math.abs(d) < 1e15) {
+        return String.valueOf(d.longValue());
+      }
+    } else if (k instanceof Float f) {
+      if (!f.isNaN() && !f.isInfinite() && f == Math.rint(f) && Math.abs(f) < 1e15) {
+        return String.valueOf(f.longValue());
+      }
+    }
+    return String.valueOf(k);
   }
 
   /**

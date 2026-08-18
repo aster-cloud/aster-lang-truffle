@@ -4,9 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import aster.truffle.nodes.LambdaValue;
 import aster.truffle.runtime.interop.AsterListValue;
+import com.oracle.truffle.api.CallTarget;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -105,6 +108,56 @@ class GuestListAcceptanceTest {
     List<Object> a = new ArrayList<>(List.of(1));
     Builtins.call("List.concat", new Object[]{a, List.of(2)});
     assertEquals(List.of(1), a, "List.concat 不得修改入参");
+  }
+
+  /** 构造一个只做纯计算的 LambdaValue（供 filter/map/reduce 用）。 */
+  private static LambdaValue lambdaOf(java.util.function.Function<Object[], Object> fn) {
+    CallTarget target = new CallTarget() {
+      @Override
+      public Object call(Object... args) {
+        return fn.apply(args);
+      }
+    };
+    return new LambdaValue(List.of("x"), Map.of(), target);
+  }
+
+  @Test
+  void filterAcceptsGuestList() {
+    // ★对抗性审查（2026-08-18）实测出的假绿：把 List.filter 从 asList 退回裸
+    //   instanceof（即拒绝 guest 列表），**全量 733 个测试仍然全绿**。
+    //   根因是本类此前只覆盖了 append/concat/slice —— 唯独漏掉 filter，
+    //   因为它需要构造 LambdaValue，当时图省事跳过了。
+    //   「四处统一改用 asList」这句话里的第四处，从来没被测过。
+    LambdaValue keepOdd = lambdaOf(a -> ((Number) a[0]).intValue() % 2 == 1);
+    assertEquals(List.of(1, 3),
+        Builtins.call("List.filter", new Object[]{guest(1, 2, 3), keepOdd}),
+        "List.filter 必须接受 guest 列表");
+    // 原生路径不得被破坏
+    assertEquals(List.of(1, 3),
+        Builtins.call("List.filter", new Object[]{List.of(1, 2, 3), keepOdd}));
+  }
+
+  @Test
+  void mapAndReduceAcceptGuestList() {
+    // map/reduce 本就用 asList，此处把它们一并锁死，防将来有人"顺手"改回 instanceof。
+    LambdaValue twice = lambdaOf(a -> ((Number) a[0]).intValue() * 2);
+    assertEquals(List.of(2, 4, 6),
+        Builtins.call("List.map", new Object[]{guest(1, 2, 3), twice}),
+        "List.map 必须接受 guest 列表");
+
+    LambdaValue add = lambdaOf(a -> ((Number) a[0]).intValue() + ((Number) a[1]).intValue());
+    assertEquals(6,
+        Builtins.call("List.reduce", new Object[]{guest(1, 2, 3), 0, add}),
+        "List.reduce 必须接受 guest 列表");
+  }
+
+  @Test
+  void filterStillRejectsNonList() {
+    // 反向断言：接受 guest 不等于什么都放行。
+    LambdaValue any = lambdaOf(a -> Boolean.TRUE);
+    assertThrows(Exception.class,
+        () -> Builtins.call("List.filter", new Object[]{"not a list", any}),
+        "非列表必须仍被拒绝");
   }
 
   @Test

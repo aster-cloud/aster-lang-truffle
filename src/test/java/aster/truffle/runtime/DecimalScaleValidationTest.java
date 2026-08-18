@@ -74,6 +74,25 @@ class DecimalScaleValidationTest {
   }
 
   @Test
+  void errorMessageRendersIntegerValuedDoubleWithoutTrailingZero() {
+    // ★对抗性审查（2026-08-18）实测出的假绿：把 formatScale 的整数 Double 分支
+    //   改成死代码后全量 742 测试仍全绿 —— 因为唯一断言消息内容的用例用的是 2.7，
+    //   而 2.7 走的是不经过该分支的 String.valueOf 路径。
+    //   TS 侧 JSON.stringify(19) 得 "19"，Java 若输出 "19.0" 即消息分叉。
+    Builtins.BuiltinException ex = assertThrows(Builtins.BuiltinException.class,
+        () -> round(19.0), "19.0 超出 [0,18] 必须被拒");
+    assertTrue(ex.getMessage().contains("got 19."),
+        "整数值 Double 应渲染成 19（与 TS JSON.stringify 一致），实际：" + ex.getMessage());
+    assertTrue(!ex.getMessage().contains("19.0"),
+        "不得出现 Java 的 19.0 形式，实际：" + ex.getMessage());
+
+    Builtins.BuiltinException neg = assertThrows(Builtins.BuiltinException.class,
+        () -> round(-1.0));
+    assertTrue(neg.getMessage().contains("got -1."),
+        "负整数值 Double 同样应去掉 .0，实际：" + neg.getMessage());
+  }
+
+  @Test
   void nonNumericScaleIsRejected() {
     assertThrows(Builtins.BuiltinException.class, () -> round("abc"), "非数字字符串必须被拒");
     assertThrows(Builtins.BuiltinException.class, () -> round(java.util.List.of(2)), "列表必须被拒");
