@@ -34,17 +34,24 @@ class EnvConcurrencyTest {
   /** 并发写同一继承变量：暴露裸 HashMap 无同步。 */
   @Test
   void concurrentWritesToInheritedVariableDoNotLoseUpdates() throws Exception {
-    final int threads = 8;
-    final int writesPerThread = 2000;
+    final int threads = 4;
+    final int writesPerThread = 3000;
 
-    // 父作用域先声明变量 → 子作用域的写会冒泡到父，全部落在同一个 HashMap 上，
-    // 这正是并发 start 任务共享 Env 时的形态。
+    // ★这条用例的原始写法是**结构性假绿**（2026-08-18 对抗性审查实测）：
+    //   它在并发段开始前就把全部键 set 好，之后每个线程只写**已存在**的键。
+    //   键集恒定 ⇒ HashMap 从不扩容 ⇒ 结构损坏窗口根本不存在；
+    //   put 已存在的键只改 Node.value（单次引用写，JMM 下无撕裂）。
+    //   实证：把 Env 还原成 HashMap 后该用例 30/30 全绿——它检不出自己声称要检的东西。
+    //
+    //   改为**持续新增键**（触发扩容）+ 每个线程直写 parent（压到同一张表）
+    //   + 读侧同时校验全部已写键与 getAllKeys()。
+    //   审查者实测该形态在 HashMap 上 6/6 变红、CHM 上 6/6 全绿。
     Env parent = new Env();
-    for (int i = 0; i < threads; i++) {
-      parent.set("shared" + i, 0);
-    }
+    Env child = parent.createChild();
+    // 一个自始至终存在的稳定键：结构被破坏时它会读成 null。
+    parent.set("stable", "kept");
 
-    ExecutorService pool = Executors.newFixedThreadPool(threads);
+    ExecutorService pool = Executors.newFixedThreadPool(threads + 1);
     CountDownLatch start = new CountDownLatch(1);
     AtomicReference<Throwable> failure = new AtomicReference<>();
     AtomicInteger done = new AtomicInteger();
@@ -53,13 +60,11 @@ class EnvConcurrencyTest {
       for (int t = 0; t < threads; t++) {
         final int id = t;
         pool.submit(() -> {
-          Env child = parent.createChild();
           try {
             start.await();
             for (int i = 0; i < writesPerThread; i++) {
-              // 每个线程只写"自己"的键：没有逻辑上的写-写冲突，
-              // 唯一的共享点是底层那一个 HashMap。
-              child.set("shared" + id, i);
+              // 直写 parent 且键持续新增 → 反复触发 HashMap 扩容。
+              parent.set("p" + id + "_" + i, i);
             }
           } catch (Throwable e) {
             failure.compareAndSet(null, e);
@@ -68,21 +73,47 @@ class EnvConcurrencyTest {
           }
         });
       }
+      // 读侧：与写并发地遍历链（getAllKeys 会递归 collectKeys），
+      // HashMap 并发扩容时这里会抛 ConcurrentModificationException。
+      pool.submit(() -> {
+        try {
+          start.await();
+          for (int i = 0; i < writesPerThread; i++) {
+            if (child.get("stable") == null) {
+              failure.compareAndSet(null,
+                  new AssertionError("并发扩容期间稳定键读到 null——Env 结构被破坏"));
+              return;
+            }
+            child.getAllKeys();
+          }
+        } catch (Throwable e) {
+          failure.compareAndSet(null, e);
+        } finally {
+          done.incrementAndGet();
+        }
+      });
       start.countDown();
       pool.shutdown();
-      assertTrue(pool.awaitTermination(60, TimeUnit.SECONDS), "并发写未在超时内结束");
+      assertTrue(pool.awaitTermination(120, TimeUnit.SECONDS), "并发读写未在超时内结束");
     } finally {
       pool.shutdownNow();
     }
 
-    assertEquals(threads, done.get(), "所有线程都应跑完");
-    assertEquals(null, failure.get(), "并发写不应抛异常，实际：" + failure.get());
+    assertEquals(threads + 1, done.get(), "所有线程都应跑完");
+    assertEquals(null, failure.get(), "并发读写不应抛异常，实际：" + failure.get());
 
-    // 每个键都必须存在且是该线程写入的最后一个值。
-    // HashMap 并发扩容丢条目时，这里会读到 null。
+    // 全部写入的键都必须还在：HashMap 并发扩容丢条目时这里会读到 null。
+    for (int t = 0; t < threads; t++) {
+      for (int i = 0; i < writesPerThread; i++) {
+        assertEquals(i, parent.get("p" + t + "_" + i),
+            "键 p" + t + "_" + i + " 丢失或被破坏——Env 底层表并发写损坏");
+      }
+    }
+    assertEquals(writesPerThread * threads + 1, parent.getAllKeys().size(),
+        "键总数不符——有条目在并发扩容中丢失");
     for (int i = 0; i < threads; i++) {
-      assertEquals(writesPerThread - 1, parent.get("shared" + i),
-          "键 shared" + i + " 的最终值丢失或被破坏——Env 的 HashMap 并发写损坏");
+      assertEquals("kept", parent.get("stable"),
+          "稳定键必须始终可读");
     }
   }
 
@@ -171,5 +202,67 @@ class EnvConcurrencyTest {
     }
 
     assertEquals(null, failure.get(), "并发读写不应观察到破损状态，实际：" + failure.get());
+  }
+
+  /**
+   * 子作用域存 null 必须<b>遮蔽</b>父作用域的值（哨兵语义的第二半）。
+   *
+   * <p>★对抗性审查（2026-08-18）用变异测试找出的**存活变异体**：把 {@code get} 的
+   * {@code if (v != null) return v == NULL ? null : v;} 改成
+   * {@code if (v != null && v != NULL) return v;}（遇哨兵继续回溯父作用域），
+   * 全量 <b>363 个测试全绿</b>——整个套件对这条语义零覆盖。
+   *
+   * <p>哨兵引入的正是这类风险：原来子作用域里存的 Java {@code null} 天然遮蔽父值；
+   * 换成哨兵后若解包逻辑写错，子作用域的「显式置空」会静默回退成父作用域的旧值。
+   * 对决策引擎而言这等于<b>一个本该被清空的变量又变回有值</b>。
+   */
+  @Test
+  void childNullShadowsParentValue() {
+    Env parent = new Env();
+    parent.set("v", 1);
+
+    Env child = parent.createChild();
+    assertEquals(1, child.get("v"), "未遮蔽前子作用域应看到父值");
+
+    // 让 child 自己拥有该键并置为 null：Env.set 的冒泡语义会写到 parent
+    // （因为 parent 已有该键），故这里用一个 child 独有的键验证遮蔽语义。
+    Env fresh = parent.createChild();
+    fresh.set("onlyChild", null);
+    assertEquals(null, fresh.get("onlyChild"), "子作用域存 null 应读回 null");
+    assertTrue(fresh.contains("onlyChild"), "存 null 的键在子作用域应视为存在");
+    assertTrue(!parent.contains("onlyChild"), "子作用域新建的键不得泄漏到父作用域");
+
+    // ★关键构造：**外层必须持有该键的非 null 值**，中间层再存 null。
+    //   否则「遇哨兵继续回溯」这个变异回溯到外层也读不到值，同样返回 null，
+    //   两种实现给出相同答案 → 用例无鉴别力（我第一版就是这么写的，实测变异存活）。
+    //
+    //   注意 Env.set 的冒泡语义：若父链已有该键，子作用域的 set 会写到父上。
+    //   所以中间层要"自己持有"该键必须绕过 set —— 用 createChild 后先在
+    //   parent 建键、再让 mid 通过**直接写自己的 map**是不可能的（无此 API）。
+    //   故改用两条独立链路验证：
+    //     链路①（下方 shadowRoot）：root 有值 → child 存 null → child 读必须是 null。
+    //       child.set 会冒泡写到 root，所以这里验证的是"冒泡后 root 存了哨兵，
+    //       读回来必须是 null 而不是回溯失败"。
+    Env shadowRoot = new Env();
+    shadowRoot.set("s", 42);
+    Env shadowChild = shadowRoot.createChild();
+    shadowChild.set("s", null);        // 冒泡到 root，root 存哨兵
+    assertEquals(null, shadowChild.get("s"),
+        "置 null 后必须读回 null——哨兵不得被当成\"未命中\"而继续回溯到旧值");
+    assertEquals(null, shadowRoot.get("s"),
+        "root 自身读同一个哨兵也必须是 null");
+    assertTrue(shadowChild.contains("s"), "置 null 后该键仍应视为存在");
+
+    // 链路②：更强的一条——让**父链上层有非 null 值、下层有哨兵**，
+    //   这样"遇哨兵回溯"会读到上层的旧值，与正确行为（null）可区分。
+    //   构造法：先让 leaf 自己拥有该键（父链都没有 → set 落在 leaf 自己的 map），
+    //   再往 root 写同名键（此时 leaf 已有，不影响）。
+    Env root2 = new Env();
+    Env leaf2 = root2.createChild();
+    leaf2.set("t", null);              // 父链无此键 → 哨兵落在 leaf2 自己的 map
+    root2.set("t", 7);                 // root2 独立持有非 null 值
+    assertEquals(null, leaf2.get("t"),
+        "leaf 自身的哨兵必须遮蔽 root 的值 7——遇哨兵继续回溯就会错读成 7");
+    assertEquals(7, root2.get("t"), "root 自身的值不受影响");
   }
 }
