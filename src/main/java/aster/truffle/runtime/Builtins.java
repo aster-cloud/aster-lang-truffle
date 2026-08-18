@@ -347,9 +347,9 @@ public final class Builtins {
 
     register("List.append", new BuiltinDef(args -> {
       checkArity("List.append", args, 2);
-      if (args[0] instanceof List<?> l) {
-        @SuppressWarnings("unchecked")
-        List<Object> mutable = new ArrayList<>((List<Object>)l);
+      List<Object> l = asList(args[0]);
+      if (l != null) {
+        List<Object> mutable = new ArrayList<>(l);
         mutable.add(args[1]);
         return mutable;
       }
@@ -358,12 +358,11 @@ public final class Builtins {
 
     register("List.concat", new BuiltinDef(args -> {
       checkArity("List.concat", args, 2);
-      if (args[0] instanceof List<?> l1 && args[1] instanceof List<?> l2) {
-        @SuppressWarnings("unchecked")
-        List<Object> result = new ArrayList<>((List<Object>)l1);
-        @SuppressWarnings("unchecked")
-        List<Object> l2Cast = (List<Object>)l2;
-        result.addAll(l2Cast);
+      List<Object> l1 = asList(args[0]);
+      List<Object> l2 = asList(args[1]);
+      if (l1 != null && l2 != null) {
+        List<Object> result = new ArrayList<>(l1);
+        result.addAll(l2);
         return result;
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("List.concat", "List, List", typeName(args[0]) + ", " + typeName(args[1])));
@@ -373,7 +372,13 @@ public final class Builtins {
       checkArity("List.contains", args, 2);
       List<Object> l = asList(args[0]);
       if (l != null) {
-        return l.contains(args[1]);
+        // 值相等而非引用相等：guest 载体的同值元素必须命中（与 TS valueEquals 对齐）。
+        for (Object item : l) {
+          if (valueEquals(item, args[1])) {
+            return true;
+          }
+        }
+        return false;
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("List.contains", "List", typeName(args[0])));
     }));
@@ -387,12 +392,11 @@ public final class Builtins {
 
     register("List.slice", new BuiltinDef(args -> {
       checkArity("List.slice", args, 2, 3);
-      if (args[0] instanceof List<?> l) {
+      List<Object> l = asList(args[0]);
+      if (l != null) {
         int start = toInt(args[1]);
         int end = args.length == 3 ? toInt(args[2]) : l.size();
-        @SuppressWarnings("unchecked")
-        List<Object> lCast = (List<Object>)l;
-        return new ArrayList<>(lCast.subList(start, end));
+        return new ArrayList<>(l.subList(start, end));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("List.slice", "List", typeName(args[0])));
     }));
@@ -428,7 +432,8 @@ public final class Builtins {
 
     register("List.filter", new BuiltinDef(args -> {
       checkArity("List.filter", args, 2);
-      if (!(args[0] instanceof List<?> l)) {
+      List<Object> l = asList(args[0]);
+      if (l == null) {
         throw new BuiltinException(ErrorMessages.operationExpectedType("List.filter", "List", typeName(args[0])));
       }
       if (!(args[1] instanceof LambdaValue lambda)) {
@@ -521,7 +526,7 @@ public final class Builtins {
       List<Object> out = new ArrayList<>();
       for (Object x : l) {
         boolean seen = false;
-        for (Object y : out) if (java.util.Objects.equals(unwrap(x), unwrap(y))) { seen = true; break; }
+        for (Object y : out) if (valueEquals(x, y)) { seen = true; break; }
         if (!seen) out.add(x);
       }
       return out;
@@ -695,7 +700,7 @@ public final class Builtins {
       checkArity("Map.get", args, 2);
       Map<String, Object> m = asMap(args[0]);
       if (m != null) {
-        return m.get(String.valueOf(args[1]));
+        return m.get(mapKey(args[1]));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.get", "Map", typeName(args[0])));
     }));
@@ -706,7 +711,7 @@ public final class Builtins {
         // LinkedHashMap 拷贝保插入序；新键追加末尾（与 TS `{...m, [k]:v}` 一致）。
         @SuppressWarnings("unchecked")
         Map<Object,Object> mutable = new java.util.LinkedHashMap<>((Map<Object,Object>)m);
-        mutable.put(args[1], args[2]);
+        mutable.put(mapKey(args[1]), args[2]);
         return mutable;
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.put", "Map", typeName(args[0])));
@@ -717,7 +722,7 @@ public final class Builtins {
       if (args[0] instanceof Map<?,?> m) {
         @SuppressWarnings("unchecked")
         Map<Object,Object> mutable = new java.util.LinkedHashMap<>((Map<Object,Object>)m);
-        mutable.remove(args[1]);
+        mutable.remove(mapKey(args[1]));
         return mutable;
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.remove", "Map", typeName(args[0])));
@@ -727,7 +732,7 @@ public final class Builtins {
       checkArity("Map.contains", args, 2);
       Map<String, Object> m = asMap(args[0]);
       if (m != null) {
-        return m.containsKey(String.valueOf(args[1]));
+        return m.containsKey(mapKey(args[1]));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.contains", "Map", typeName(args[0])));
     }));
@@ -1365,12 +1370,53 @@ public final class Builtins {
   }
 
   /** scale 参数校验：必须是 0..18 的整数（v1 上限 scale 18，与 ADR 0025 一致）。 */
+  /**
+   * 校验并取出 Decimal 的 scale——与 TS {@code interpreter.ts} 的 {@code decimalScale} 对齐。
+   *
+   * <p>此前用 {@code toInt(scale)}，而 {@code toInt} 走 {@code Number.intValue()}：
+   * {@code 2.7} 被<b>静默截断</b>成 {@code 2}，于是 {@code Decimal.round(x, 2.7, ...)}
+   * 在 Java 上安静地按 2 位舍入，在 TS 上直接报错——错误消息里那句
+   * "scale must be an integer" 描述的行为<b>并未真正被强制</b>。
+   *
+   * <p>对合规引擎而言，舍入精度写错应当<b>响亮地失败</b>，而不是被悄悄改写成另一个精度。
+   */
   private static int decimalScale(Object scale) {
-    int n = toInt(scale);
-    if (n < 0 || n > 18) {
-      throw new BuiltinException("Decimal: scale must be an integer in [0, 18], got " + n + ".");
+    Object value = unwrap(scale);
+    double d;
+    if (value instanceof Number n) {
+      d = n.doubleValue();
+    } else if (value instanceof String s) {
+      // 保留原有的数字字符串路径（此前走 Integer.parseInt），TS 侧 Number("2") 同样接受。
+      try {
+        d = Double.parseDouble(s.trim());
+      } catch (NumberFormatException e) {
+        throw new BuiltinException(
+            "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
+      }
+    } else {
+      throw new BuiltinException(
+          "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
     }
-    return n;
+    if (d != Math.floor(d) || Double.isInfinite(d) || Double.isNaN(d)) {
+      throw new BuiltinException(
+          "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
+    }
+    if (d < 0 || d > 18) {
+      throw new BuiltinException(
+          "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
+    }
+    return (int) d;
+  }
+
+  /** scale 错误消息里的值渲染：整数值不带 .0，与 TS 的 JSON.stringify(scale) 对齐。 */
+  private static String formatScale(Object value) {
+    if (value instanceof Double dv && dv == Math.floor(dv) && !dv.isInfinite()) {
+      return String.valueOf(dv.longValue());
+    }
+    if (value instanceof Float fv && fv == Math.floor(fv) && !fv.isInfinite()) {
+      return String.valueOf(fv.longValue());
+    }
+    return String.valueOf(value);
   }
 
   // 数值算术：任一操作数为浮点 → double 结果；否则 int。结果若为整数值，
@@ -1425,6 +1471,160 @@ public final class Builtins {
       return cast;
     }
     return null;
+  }
+
+  /**
+   * 集合语义的<b>值相等</b>——与 TS {@code interpreter.ts} 的 {@code valueEquals} 对齐。
+   *
+   * <p>此前 Java 侧用 {@code Objects.equals} / {@code List.contains}，即 Java 的
+   * {@code equals}。而 {@code AsterListValue} / {@code AsterMapValue} /
+   * {@code AsterDataValue} <b>都没有覆写 equals</b>，落回引用相等。于是同样的值，
+   * 换个载体结论就不同：
+   *
+   * <pre>
+   *   List.contains([[1, 2]], [1, 2])   // 原生嵌套 → true；guest 嵌套 → false
+   *   List.distinct([[1], [1]])         // TS → [[1]]；Java（guest 载体）→ [[1], [1]]
+   * </pre>
+   *
+   * <p>对合规引擎而言「同一个值去重不掉 / 查不到」会直接改变判定结果，且不报错。
+   * TS 侧一直是深度结构相等（数组逐元素、对象逐键、Decimal 按值），故归一到 TS。
+   *
+   * <p>先 unwrap 再比较：PII 包装与否不应改变值相等性。
+   */
+  public static boolean valueEquals(Object a, Object b) {
+    Object x = unwrap(a);
+    Object y = unwrap(b);
+    if (x == y) {
+      return true;
+    }
+    if (x == null || y == null) {
+      return false;
+    }
+    // 列表：逐元素递归（原生 List 与 guest AsterListValue 一视同仁）
+    List<Object> xl = asList(x);
+    List<Object> yl = asList(y);
+    if (xl != null && yl != null) {
+      if (xl.size() != yl.size()) {
+        return false;
+      }
+      for (int i = 0; i < xl.size(); i++) {
+        if (!valueEquals(xl.get(i), yl.get(i))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (xl != null || yl != null) {
+      return false; // 一侧是列表另一侧不是
+    }
+    // 映射：逐键递归
+    Map<String, Object> xm = asMap(x);
+    Map<String, Object> ym = asMap(y);
+    if (xm != null && ym != null) {
+      if (xm.size() != ym.size()) {
+        return false;
+      }
+      for (Map.Entry<String, Object> e : xm.entrySet()) {
+        if (!ym.containsKey(e.getKey()) || !valueEquals(e.getValue(), ym.get(e.getKey()))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (xm != null || ym != null) {
+      return false;
+    }
+    // 结构体：类型名 + 逐字段递归
+    if (x instanceof AsterDataValue xd && y instanceof AsterDataValue yd) {
+      if (!java.util.Objects.equals(xd.getTypeName(), yd.getTypeName())
+          || xd.fieldCount() != yd.fieldCount()) {
+        return false;
+      }
+      for (int i = 0; i < xd.fieldCount(); i++) {
+        if (!java.util.Objects.equals(xd.fieldName(i), yd.fieldName(i))
+            || !valueEquals(xd.fieldValue(i), yd.fieldValue(i))) {
+          return false;
+        }
+      }
+      return true;
+    }
+    // ★数值按**值**相等，跨 Java 数值类型（2026-08-18 对抗性审查发现）。
+    //
+    //   TS 只有一种 number，`1 === 1` 恒真；Java 却区分 Integer/Long/Double。
+    //   实测可达路径：`List.range` 产 Integer，而算术 `numericAdd` 走 toLong 产 Long
+    //   → `List.contains(List.range(0,3), 1+1)` 在 Java 是 **false**、TS 是 true；
+    //   `List.distinct` 同理会把同一个 2 留下两份。
+    //   这是既有分歧，但把 contains 改用 valueEquals 时若不一并处理，
+    //   等于把它原样带进新路径并伪装成「已对齐 TS」。
+    //
+    //   Decimal 不在此列：它是精确十进制类型，与 Double 混算本就被显式禁止
+    //   （见 numericAdd 的 ADR 0025 注释），故仍走 equals 保持类型区分。
+    if (x instanceof Number nx && y instanceof Number ny
+        && !isDecimal(x) && !isDecimal(y)) {
+      if (isFractional(x) || isFractional(y)) {
+        return nx.doubleValue() == ny.doubleValue();
+      }
+      return nx.longValue() == ny.longValue();
+    }
+    return java.util.Objects.equals(x, y);
+  }
+
+  /**
+   * Map 键归一化：<b>唯一</b>的键规则，get/put/remove/contains 四处必须共用。
+   *
+   * <p>Aster 的 Map 键是文本键（{@code asMap} 一直按 {@code Map<String,Object>} 处理，
+   * TS 侧则用 JS object / GuestMap，键天然是字符串）。TS 在 get/put/remove/contains
+   * 四处<b>一致地</b>做 {@code String(k)}；Java 此前只在 get/contains 归一，
+   * put/remove 存的是原始对象——于是非文本键上：
+   *
+   * <pre>
+   *   Let m be Map.put(Map.empty(), 1, "one").
+   *   Return Map.get(m, 1).      // TS → "one"；Java → null（键存成 Integer 1，查的是 "1"）
+   * </pre>
+   *
+   * <p>即「刚写进去就读不出来」，且<b>不报错</b>——Map 看上去凭空丢数据。
+   * 归一到 TS 的行为（而非反过来让 TS 保留原始键），因为 TS 侧的 GuestMap
+   * 底层就是字符串键，改 TS 才是破坏性变更。
+   *
+   * <p>先 {@code unwrap} 再取字符串：Truffle 有运行期 PII 包装（{@code AsterPiiValue}），
+   * TS 侧则没有——PII 在 TS 是纯编译期概念，到 {@code String(k)} 的值本就是裸值。
+   * 故不 unwrap 会让包装值按包装器的 toString 成键，反而与 TS 分叉；
+   * unwrap 才是与 TS 对齐的那一侧。同时也避免同一逻辑键因包装与否落到两个槽位。
+   */
+  /** JS 的 Number.MAX_SAFE_INTEGER（2^53）：超出后 double 无法精确表示整数。 */
+  private static final double MAX_SAFE_INTEGER = 9007199254740992.0;
+
+  public static Object mapKey(Object key) {
+    Object k = unwrap(key);
+    // ★整数值的浮点必须与整数落到同一个键（2026-08-18 对抗性审查发现）。
+    //
+    //   Java 的 String.valueOf(1.0) = "1.0"，而 JS 的 String(1.0) = "1"。
+    //   仅用 String.valueOf 会让 `Map.put(m, 1.0, v)` 存成键 "1.0"、
+    //   `Map.get(m, 1)` 查 "1" → **null**，即本次修复声称要消灭的
+    //   「刚写进去就读不出来」在浮点键上原样残留。TS 侧因 JS 只有一种 number，
+    //   1 与 1.0 天然同键，两侧于是分叉。
+    //
+    //   故整数值的 Double/Float 先降成 long 再取字符串；非整数值（2.5）、
+    //   NaN/Infinity 保持 String.valueOf——后者与 JS 的 "NaN"/"Infinity" 一致。
+    //
+    //   ★上界取 JS 的 MAX_SAFE_INTEGER（2^53 = 9007199254740992）——复评发现
+    //   此前拍的 1e15 保守了 6 个数量级：实测 mapKey(1e15) 得 "1.0E15"，
+    //   而 JS String(1e15)="1000000000000000"，于是 [1e15, 2^53] 区间仍与 TS 分叉
+    //   （与本 PR 上一轮被退回的理由是同一条，只是分叉点右移）。
+    //   超过 2^53 后 double 本就无法精确表示整数，long 转换会失真，故止于此；
+    //   JS 直到 1e21 才转科学计数法，[2^53, 1e21) 的格式差异另开 issue 跟踪。
+    if (k instanceof Double d) {
+      if (!d.isNaN() && !d.isInfinite() && d == Math.rint(d)
+          && Math.abs(d) <= MAX_SAFE_INTEGER) {
+        return String.valueOf(d.longValue());
+      }
+    } else if (k instanceof Float f) {
+      if (!f.isNaN() && !f.isInfinite() && f == Math.rint(f)
+          && Math.abs(f) <= MAX_SAFE_INTEGER) {
+        return String.valueOf(f.longValue());
+      }
+    }
+    return String.valueOf(k);
   }
 
   /**
