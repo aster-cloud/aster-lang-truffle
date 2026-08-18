@@ -1370,12 +1370,53 @@ public final class Builtins {
   }
 
   /** scale 参数校验：必须是 0..18 的整数（v1 上限 scale 18，与 ADR 0025 一致）。 */
+  /**
+   * 校验并取出 Decimal 的 scale——与 TS {@code interpreter.ts} 的 {@code decimalScale} 对齐。
+   *
+   * <p>此前用 {@code toInt(scale)}，而 {@code toInt} 走 {@code Number.intValue()}：
+   * {@code 2.7} 被<b>静默截断</b>成 {@code 2}，于是 {@code Decimal.round(x, 2.7, ...)}
+   * 在 Java 上安静地按 2 位舍入，在 TS 上直接报错——错误消息里那句
+   * "scale must be an integer" 描述的行为<b>并未真正被强制</b>。
+   *
+   * <p>对合规引擎而言，舍入精度写错应当<b>响亮地失败</b>，而不是被悄悄改写成另一个精度。
+   */
   private static int decimalScale(Object scale) {
-    int n = toInt(scale);
-    if (n < 0 || n > 18) {
-      throw new BuiltinException("Decimal: scale must be an integer in [0, 18], got " + n + ".");
+    Object value = unwrap(scale);
+    double d;
+    if (value instanceof Number n) {
+      d = n.doubleValue();
+    } else if (value instanceof String s) {
+      // 保留原有的数字字符串路径（此前走 Integer.parseInt），TS 侧 Number("2") 同样接受。
+      try {
+        d = Double.parseDouble(s.trim());
+      } catch (NumberFormatException e) {
+        throw new BuiltinException(
+            "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
+      }
+    } else {
+      throw new BuiltinException(
+          "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
     }
-    return n;
+    if (d != Math.floor(d) || Double.isInfinite(d) || Double.isNaN(d)) {
+      throw new BuiltinException(
+          "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
+    }
+    if (d < 0 || d > 18) {
+      throw new BuiltinException(
+          "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
+    }
+    return (int) d;
+  }
+
+  /** scale 错误消息里的值渲染：整数值不带 .0，与 TS 的 JSON.stringify(scale) 对齐。 */
+  private static String formatScale(Object value) {
+    if (value instanceof Double dv && dv == Math.floor(dv) && !dv.isInfinite()) {
+      return String.valueOf(dv.longValue());
+    }
+    if (value instanceof Float fv && fv == Math.floor(fv) && !fv.isInfinite()) {
+      return String.valueOf(fv.longValue());
+    }
+    return String.valueOf(value);
   }
 
   // 数值算术：任一操作数为浮点 → double 结果；否则 int。结果若为整数值，
