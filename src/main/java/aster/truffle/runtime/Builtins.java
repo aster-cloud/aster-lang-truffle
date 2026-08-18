@@ -1175,7 +1175,21 @@ public final class Builtins {
         operation);
   }
 
-  private static boolean toBool(Object o) {
+  /**
+   * 真值判定的<b>唯一</b>实现（2026-08-17 审计后收敛）。
+   *
+   * <p>此前 {@code Exec.toBool} 是第二份拷贝，且与本实现在三处不一致：
+   * 不 unwrap PII（导致包装的 {@code false} 走 {@code o != null} 恒为真，
+   * 静默反转控制流）、把字符串 {@code "false"} 判为假（TS 判真）、
+   * {@code toLowerCase()} 未指定 Locale（土耳其 I 问题）。
+   *
+   * <p>后果是 Truffle **内部**就不自洽：{@code If} 走 Exec 那份，
+   * {@code and/or/not} 走本份。现由 Exec 委托到这里，公开可见性即为此。
+   *
+   * <p>语义与 TS 的 {@code isTruthy} 逐条对齐：
+   * null→false · boolean 原值 · number≠0 · string 非空 · 其余 true。
+   */
+  public static boolean toBool(Object o) {
     Object value = unwrap(o);
     if (value instanceof Boolean b) return b;
     if (value == null) return false;
