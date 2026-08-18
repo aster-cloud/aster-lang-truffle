@@ -118,6 +118,14 @@ class CollectionValueEqualityTest {
     assertFalse(Builtins.valueEquals(1, 2L), "值不同仍不得相等");
     assertFalse(Builtins.valueEquals(1, 1.5), "1 与 1.5 不得相等");
 
+    // ★复评发现（F-3）：此前只钉住「一律 long」这一个方向（被 1 vs 1.5 捕获），
+    //   「一律 double」方向全绿 —— 而后者会让 2^53 以上的相邻整数判等，
+    //   distinct 把两笔不同金额合并（以分为单位的金融场景可达）。
+    assertFalse(Builtins.valueEquals(9007199254740993L, 9007199254740992L),
+        "超过 2^53 的相邻 long 不得因走 double 比较而判等");
+    assertTrue(Builtins.valueEquals(9007199254740993L, 9007199254740993L),
+        "同一个大 long 仍须相等");
+
     // 端到端：真实可达路径必须一致
     Object range = Builtins.call("List.range", new Object[]{0, 3});
     Object sumLong = Builtins.call("List.sum", new Object[]{List.of(1, 1)});

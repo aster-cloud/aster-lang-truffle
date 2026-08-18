@@ -115,6 +115,41 @@ class MapKeyNormalizationTest {
   }
 
   @Test
+  void largeIntegerValuedDoubleMatchesJsString() {
+    // ★复评发现（F-1）：此前阈值拍成 1e15，比 JS 保守 6 个数量级 ——
+    //   实测 mapKey(1e15) 得 "1.0E15"，而 JS String(1e15)="1000000000000000"，
+    //   于是 [1e15, 2^53] 区间**仍与 TS 分叉**（与本 PR 上一轮被退回的理由同型，
+    //   只是分叉点右移）。且该阈值当时完全无测试：改成 1e9 也全绿。
+    //   上界改为 JS 的 MAX_SAFE_INTEGER（2^53），此处把边界钉死。
+    assertEquals("1000000000000000", Builtins.mapKey(1e15),
+        "1e15 必须与 JS String(1e15) 一致");
+    assertEquals("9007199254740992", Builtins.mapKey(9007199254740992.0),
+        "2^53（MAX_SAFE_INTEGER）是上界，含端点");
+    assertEquals("-1000000000000000", Builtins.mapKey(-1e15), "负数同样归一");
+    assertEquals("-9007199254740992", Builtins.mapKey(-9007199254740992.0), "负向边界同样含端点");
+
+    // ★如实记录**残余分叉**（不掩盖）：超过 2^53 后 double 无法精确表示整数，
+    //   降 long 会失真，故保守回落 String.valueOf。此时与 JS 仍有格式差异：
+    //     1e16  →  Java "1.0E16"    JS "10000000000000000"
+    //   JS 直到 1e21 才转科学计数法。该区间的对齐需要先决定「超安全整数的键
+    //   如何表示」这一语义问题（两侧都无法精确表示该值），已另开 issue，
+    //   不在本 PR 内假装覆盖。此处把**当前真实行为**钉住，防止无声漂移。
+    assertEquals("1.0E16", Builtins.mapKey(1e16),
+        "超 2^53 当前回落 String.valueOf —— 与 JS 的 \"10000000000000000\" 仍分叉（已记 issue）");
+  }
+
+  @Test
+  void floatKeyIsNormalizedToo() {
+    // ★复评发现（F-2）：新增的两条测试只用 Double 字面量，
+    //   删掉整个 Float 分支全绿 —— 代码行为正确但没被钉住。
+    assertEquals("1", Builtins.mapKey(Float.valueOf(1.0f)), "Float 整数值同样归一");
+    assertEquals("2.5", Builtins.mapKey(Float.valueOf(2.5f)), "Float 非整数值保留小数形式");
+
+    Object m = put(empty(), Float.valueOf(1.0f), "f");
+    assertEquals("f", get(m, 1), "Float 键与整数键必须落到同一槽位");
+  }
+
+  @Test
   void nonIntegerFloatKeyKeepsDecimalForm() {
     // ★反向断言：不得把所有浮点一律截成整数。2.5 必须保持 "2.5"（TS String(2.5)="2.5"）。
     Object m = put(empty(), 2.5, "half");

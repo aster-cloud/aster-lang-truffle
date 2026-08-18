@@ -1591,6 +1591,9 @@ public final class Builtins {
    * 故不 unwrap 会让包装值按包装器的 toString 成键，反而与 TS 分叉；
    * unwrap 才是与 TS 对齐的那一侧。同时也避免同一逻辑键因包装与否落到两个槽位。
    */
+  /** JS 的 Number.MAX_SAFE_INTEGER（2^53）：超出后 double 无法精确表示整数。 */
+  private static final double MAX_SAFE_INTEGER = 9007199254740992.0;
+
   public static Object mapKey(Object key) {
     Object k = unwrap(key);
     // ★整数值的浮点必须与整数落到同一个键（2026-08-18 对抗性审查发现）。
@@ -1603,12 +1606,21 @@ public final class Builtins {
     //
     //   故整数值的 Double/Float 先降成 long 再取字符串；非整数值（2.5）、
     //   NaN/Infinity 保持 String.valueOf——后者与 JS 的 "NaN"/"Infinity" 一致。
+    //
+    //   ★上界取 JS 的 MAX_SAFE_INTEGER（2^53 = 9007199254740992）——复评发现
+    //   此前拍的 1e15 保守了 6 个数量级：实测 mapKey(1e15) 得 "1.0E15"，
+    //   而 JS String(1e15)="1000000000000000"，于是 [1e15, 2^53] 区间仍与 TS 分叉
+    //   （与本 PR 上一轮被退回的理由是同一条，只是分叉点右移）。
+    //   超过 2^53 后 double 本就无法精确表示整数，long 转换会失真，故止于此；
+    //   JS 直到 1e21 才转科学计数法，[2^53, 1e21) 的格式差异另开 issue 跟踪。
     if (k instanceof Double d) {
-      if (!d.isNaN() && !d.isInfinite() && d == Math.rint(d) && Math.abs(d) < 1e15) {
+      if (!d.isNaN() && !d.isInfinite() && d == Math.rint(d)
+          && Math.abs(d) <= MAX_SAFE_INTEGER) {
         return String.valueOf(d.longValue());
       }
     } else if (k instanceof Float f) {
-      if (!f.isNaN() && !f.isInfinite() && f == Math.rint(f) && Math.abs(f) < 1e15) {
+      if (!f.isNaN() && !f.isInfinite() && f == Math.rint(f)
+          && Math.abs(f) <= MAX_SAFE_INTEGER) {
         return String.valueOf(f.longValue());
       }
     }
