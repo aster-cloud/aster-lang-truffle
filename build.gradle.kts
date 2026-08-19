@@ -14,9 +14,14 @@ group = "cloud.aster-lang"
 version = extensions.getByType<VersionCatalogsExtension>()
     .named("asterLibs").findVersion("asterLang").get().requiredVersion
 
-// 版本统一管理 — 升级 GraalVM/Truffle 或 Quarkus 时只改这里。
+// 版本统一管理 — 升级 Quarkus 时只改这里。
 // 此前 25.0.1 在 4 处 dependency 重复硬编码，升级容易半成功。
-val graalvmVersion = "25.0.4"
+//
+// ★GraalVM/Truffle 已移出本文件，改由 aster-lang-platform 版本目录统一
+//   （asterLibs.graalvm.*，aster-api#193）。原因：本仓与 aster-api 各自硬编码时，
+//   曾出现 api 内部 25.0.3/25.0.4 混用 + 本仓落后到 25.0.1 的跨仓 drift；
+//   而 GraalVM 组件混搭的症状是 NoClassDefFoundError →
+//   ExceptionInInitializerError at Engine.java:559，且**逐个升看起来都绿**。
 val quarkusVersion = "3.32.2"
 val junitVersion = "6.0.0"
 val junitPlatformVersion = "6.0.0"  // JUnit Jupiter 6.x 配套 Platform 走同版本
@@ -51,9 +56,9 @@ dependencies {
     runtimeOnly(asterLibs.bundles.locales)  // en + zh + de
 
     // GraalVM Truffle 框架
-    implementation("org.graalvm.truffle:truffle-api:$graalvmVersion")
-    annotationProcessor("org.graalvm.truffle:truffle-dsl-processor:$graalvmVersion")
-    implementation("org.graalvm.sdk:graal-sdk:$graalvmVersion")
+    implementation(asterLibs.graalvm.truffle.api)
+    annotationProcessor(asterLibs.graalvm.truffle.dsl.processor)
+    implementation(asterLibs.graalvm.sdk)
 
     // JSON 序列化（与 aster-lang-core 保持一致）
     implementation("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")
@@ -63,10 +68,10 @@ dependencies {
 
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
-    testImplementation("org.graalvm.truffle:truffle-api:$graalvmVersion")
-    testRuntimeOnly("org.graalvm.truffle:truffle-runtime:$graalvmVersion")
-    testRuntimeOnly("org.graalvm.truffle:truffle-compiler:$graalvmVersion")
-    testRuntimeOnly("org.graalvm.compiler:compiler:$graalvmVersion")
+    testImplementation(asterLibs.graalvm.truffle.api)
+    testRuntimeOnly(asterLibs.graalvm.truffle.runtime)
+    testRuntimeOnly(asterLibs.graalvm.truffle.compiler)
+    testRuntimeOnly(asterLibs.graalvm.compiler)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitPlatformVersion")
 }
 
