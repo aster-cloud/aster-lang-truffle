@@ -121,6 +121,22 @@ jobs:
           path: aster-lang-platform
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
+      # ★golden 语料（GoldenTestAdapter）—— 68 个用例的输入在 aster-lang-ts
+      #   的 test/e2e/golden/core，必须以**兄弟目录**形式存在。
+      #
+      #   2026-08-19 发版列车实测：本 workflow 此前不 checkout ts，于是
+      #   `./gradlew build` 在 :test 阶段抛
+      #     IllegalStateException: Golden 语料目录不存在: .../aster-lang-ts/test/e2e/golden/core
+      #   导致整条 layer 3 发布失败（342 个用例已 PASSED，唯此一条 initializationError）。
+      #
+      #   ★该异常是**有意的 fail-closed**：此前此处返回空流，68 个用例静默不执行
+      #     却报告通过。故正确修法是补上兄弟仓，而不是放宽那道守卫。
+      - uses: actions/checkout@v6
+        with:
+          repository: aster-cloud/aster-lang-ts
+          path: aster-lang-ts
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
       - uses: actions/setup-java@v5
         with:
           java-version: '25'
