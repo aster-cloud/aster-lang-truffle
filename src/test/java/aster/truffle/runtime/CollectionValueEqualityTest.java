@@ -2,6 +2,7 @@ package aster.truffle.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import aster.truffle.runtime.interop.AsterListValue;
@@ -210,6 +211,33 @@ class CollectionValueEqualityTest {
         ((List<?>) Builtins.call("List.distinct",
             new Object[]{List.of(applicant, struct("Applicant", f, 1))})).size(),
         "同类型同值的结构体必须被去重");
+  }
+
+  @Test
+  void cyclicStructureThrowsDomainErrorNotStackOverflow() {
+    // ★issue #74：实测自引用列表 a=[1,a] 比较会抛 StackOverflowError。
+    //   它是 Error 不是 Exception，会穿透 builtin 的异常处理直达调用栈顶。
+    //   加深度上限后应抛域内 BuiltinException，与其它 builtin 错误同等处理。
+    List<Object> a = new ArrayList<>();
+    a.add(1);
+    a.add(a);
+    List<Object> b = new ArrayList<>();
+    b.add(1);
+    b.add(b);
+
+    Builtins.BuiltinException ex = assertThrows(Builtins.BuiltinException.class,
+        () -> Builtins.valueEquals(a, b),
+        "环形结构必须抛域内异常，而不是 StackOverflowError");
+    assertTrue(ex.getMessage().contains("环形"), "错误消息应指出疑似环形结构，实际：" + ex.getMessage());
+
+    // ★反向断言：正常深度的嵌套不得被误伤（上限 100 层，这里用 50 层）
+    Object deepA = 1;
+    Object deepB = 1;
+    for (int i = 0; i < 50; i++) {
+      deepA = List.of(deepA);
+      deepB = List.of(deepB);
+    }
+    assertTrue(Builtins.valueEquals(deepA, deepB), "50 层嵌套应正常比较，不得触发深度上限");
   }
 
   @Test

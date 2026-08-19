@@ -93,6 +93,23 @@ class DecimalScaleValidationTest {
   }
 
   @Test
+  void javaTypeSuffixStringsAreRejected() {
+    // ★issue #74：Double.parseDouble 会吃掉 Java 的类型后缀，
+    //   此前 "2d" / "2f" 被**静默接受为 2**，而 TS 的 Number("2d") 得 NaN → 拒绝。
+    //   与本方法「响亮失败」的立意相悖，也是一处双引擎分叉。
+    assertThrows(Builtins.BuiltinException.class, () -> round("2d"), "Java 类型后缀 d 必须被拒");
+    assertThrows(Builtins.BuiltinException.class, () -> round("2f"), "Java 类型后缀 f 必须被拒");
+    assertThrows(Builtins.BuiltinException.class, () -> round("2D"));
+    assertThrows(Builtins.BuiltinException.class, () -> round("0x1p3"), "十六进制浮点必须被拒");
+
+    // ★反向断言：TS 的 Number() 接受的形态不得被误伤
+    assertEquals("1.23", String.valueOf(round("2")));
+    assertEquals("1.23", String.valueOf(round(" 2 ")), "首尾空白 TS 侧同样接受");
+    assertEquals("1.23", String.valueOf(round("+2")), "正号 TS 侧同样接受");
+    assertEquals("1.23", String.valueOf(round("2.0")), "整数值小数形式同样接受");
+  }
+
+  @Test
   void nonNumericScaleIsRejected() {
     assertThrows(Builtins.BuiltinException.class, () -> round("abc"), "非数字字符串必须被拒");
     assertThrows(Builtins.BuiltinException.class, () -> round(java.util.List.of(2)), "列表必须被拒");
