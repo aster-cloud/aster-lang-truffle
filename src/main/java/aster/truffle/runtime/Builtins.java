@@ -1387,8 +1387,18 @@ public final class Builtins {
       d = n.doubleValue();
     } else if (value instanceof String s) {
       // 保留原有的数字字符串路径（此前走 Integer.parseInt），TS 侧 Number("2") 同样接受。
+      //
+      // ★但必须先用严格数字正则筛一道（issue #74）：Double.parseDouble 会吃掉
+      //   Java 的类型后缀（"2d"/"2f"/"2D"）与 "0x1p3" 之类十六进制浮点，
+      //   而 TS 的 Number("2d") 得 NaN → 拒绝。实测此前 Java 把 "2d" 静默接受为 2，
+      //   与本方法「响亮失败」的立意相悖，也与 TS 分叉。
+      String t = s.trim();
+      if (!t.matches("[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?")) {
+        throw new BuiltinException(
+            "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
+      }
       try {
-        d = Double.parseDouble(s.trim());
+        d = Double.parseDouble(t);
       } catch (NumberFormatException e) {
         throw new BuiltinException(
             "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
@@ -1492,6 +1502,20 @@ public final class Builtins {
    * <p>先 unwrap 再比较：PII 包装与否不应改变值相等性。
    */
   public static boolean valueEquals(Object a, Object b) {
+    return valueEquals(a, b, 0);
+  }
+
+  /** 递归深度上限：防自引用/环形结构把 StackOverflowError（Error，非 Exception）抛穿 builtin。 */
+  private static final int VALUE_EQUALS_MAX_DEPTH = 100;
+
+  private static boolean valueEquals(Object a, Object b, int depth) {
+    if (depth > VALUE_EQUALS_MAX_DEPTH) {
+      // ★issue #74：实测自引用列表 a=[1,a] 比较会抛 StackOverflowError。
+      //   它是 Error 不是 Exception，会穿透 builtin 的异常处理直达调用栈顶。
+      //   改为抛域内 BuiltinException，让它像其它 builtin 错误一样被处理。
+      throw new BuiltinException(
+          "valueEquals: 比较深度超过 " + VALUE_EQUALS_MAX_DEPTH + " 层（疑似环形结构）");
+    }
     Object x = unwrap(a);
     Object y = unwrap(b);
     if (x == y) {
@@ -1508,7 +1532,7 @@ public final class Builtins {
         return false;
       }
       for (int i = 0; i < xl.size(); i++) {
-        if (!valueEquals(xl.get(i), yl.get(i))) {
+        if (!valueEquals(xl.get(i), yl.get(i), depth + 1)) {
           return false;
         }
       }
@@ -1525,7 +1549,8 @@ public final class Builtins {
         return false;
       }
       for (Map.Entry<String, Object> e : xm.entrySet()) {
-        if (!ym.containsKey(e.getKey()) || !valueEquals(e.getValue(), ym.get(e.getKey()))) {
+        if (!ym.containsKey(e.getKey())
+            || !valueEquals(e.getValue(), ym.get(e.getKey()), depth + 1)) {
           return false;
         }
       }
@@ -1542,7 +1567,7 @@ public final class Builtins {
       }
       for (int i = 0; i < xd.fieldCount(); i++) {
         if (!java.util.Objects.equals(xd.fieldName(i), yd.fieldName(i))
-            || !valueEquals(xd.fieldValue(i), yd.fieldValue(i))) {
+            || !valueEquals(xd.fieldValue(i), yd.fieldValue(i), depth + 1)) {
           return false;
         }
       }
