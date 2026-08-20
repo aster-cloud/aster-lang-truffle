@@ -44,7 +44,7 @@ jobs:
       # catalog-derived version（ADR 0023 §9）：version = asterLibs.findVersion("asterLang")，
       # 不再 sed 字面量。先 checkout platform 并 publishToMavenLocal，本仓 Gradle 才能解析
       # catalog 派生的 project version。与 core/hi/locales 同构。
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-platform
           path: aster-lang-platform
@@ -86,13 +86,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-core
           path: aster-lang-core
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-runtime
           path: aster-lang-runtime
@@ -100,14 +100,14 @@ jobs:
 
       # 语言包源：aster-lang-locales（现役多模块，产 en/zh/de 制品，catalog 驱动）。
       # 旧独立 aster-lang-en/zh/de 仓已归档（pin core:1.0.2，不随生态级联）。
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-locales
           path: aster-lang-locales
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
       # hi 是独立 SPI 包，进了 locales bundle —— 与 en/zh/de 同样需要本地发布。
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-hi
           path: aster-lang-hi
@@ -115,7 +115,7 @@ jobs:
 
       # 共享版本目录（aster-lang-platform，ADR 0012）—— core/truffle settings
       # 依赖它，必须先发布到 Maven Local，否则下游构建解析不到 asterLibs。
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-platform
           path: aster-lang-platform
@@ -131,7 +131,7 @@ jobs:
       #
       #   ★该异常是**有意的 fail-closed**：此前此处返回空流，68 个用例静默不执行
       #     却报告通过。故正确修法是补上兄弟仓，而不是放宽那道守卫。
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-ts
           path: aster-lang-ts
