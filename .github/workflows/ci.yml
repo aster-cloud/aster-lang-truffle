@@ -31,7 +31,7 @@ jobs:
       # same way as every other aster-lang dep below, so the catalog
       # import in settings.gradle resolves without a GitHub Packages
       # round-trip.
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-platform
           path: aster-lang-platform
@@ -46,20 +46,20 @@ jobs:
             --plan aster-lang-platform/release-plan.json \
             --artifact truffle:maven --repo-root aster-lang-truffle
 
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-core
           path: aster-lang-core
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-runtime
           path: aster-lang-runtime
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
       # 语言包源：aster-lang-locales（现役，catalog 驱动）。旧独立 en/zh/de 仓已归档。
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-locales
           path: aster-lang-locales
@@ -67,7 +67,7 @@ jobs:
 
       # hi 现在是独立 SPI 包，进了 platform 的 locales bundle —— 与 en/zh/de 一样
       # 需作为兄弟仓 checkout + 发布到 Maven Local，否则 runtimeClasspath 解析不到。
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-hi
           path: aster-lang-hi
@@ -77,7 +77,7 @@ jobs:
       # （68 个用例）。本 workflow 此前**从不 checkout 这个仓**，而适配器在语料缺失时
       # 返回空流 → JUnit 把「零个动态测试」记为通过，整个 golden 层长期是绿的假象。
       # 适配器现已改为缺语料即抛异常，故这里必须真的把语料拉下来。
-      - uses: actions/checkout@v6
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
         with:
           repository: aster-cloud/aster-lang-ts
           path: aster-lang-ts
