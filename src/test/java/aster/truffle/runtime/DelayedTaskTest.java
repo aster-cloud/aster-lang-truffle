@@ -96,27 +96,67 @@ public class DelayedTaskTest {
     CountDownLatch startLatch = new CountDownLatch(1);
     CountDownLatch doneLatch = new CountDownLatch(threads);
 
+    // ★不要吞掉 worker 的异常/中断（truffle#70）。
+    //
+    // 旧写法在 catch(InterruptedException) 里只 Thread.interrupt()，却在 finally 里
+    // 照常 doneLatch.countDown()：worker 若在 startLatch.await() 处被中断，会**整批
+    // 跳过 20 次调度**，而主线程的 latch 断言依然通过，最终只表现为「队列少了 40 个」。
+    // CI 上那次 expected 120 / was 80 正是这个形状——恰好两个 worker 的整批。
+    // 本地已用最小复现验证：cancel 掉两个 worker 后 doneLatch 仍为 true、计数正好 80。
+    //
+    // 于是失败被归错了对象：看起来像「延迟队列并发丢任务」，实为「worker 没跑」。
+    // 改为收集 Future 并逐个 get()——worker 里的任何异常都会在这里原样抛出。
+    java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
     for (int i = 0; i < threads; i++) {
       final int threadIndex = i;
-      executor.submit(() -> {
+      futures.add(executor.submit(() -> {
         try {
           startLatch.await();
-          for (int j = 0; j < perThread; j++) {
-            registry.scheduleRetry("wf-" + threadIndex + "-" + j, 1_000L, j + 1, "reason");
-          }
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
+          // 中断即视为该 worker 失败，向上抛给 Future.get()，不再静默跳过整批。
+          throw new IllegalStateException("worker " + threadIndex + " 在 startLatch 处被中断", e);
         } finally {
           doneLatch.countDown();
         }
-      });
+        for (int j = 0; j < perThread; j++) {
+          registry.scheduleRetry("wf-" + threadIndex + "-" + j, 1_000L, j + 1, "reason");
+        }
+      }));
     }
 
     startLatch.countDown();
     assertTrue(doneLatch.await(5, TimeUnit.SECONDS), "并发调度应在超时前完成");
     executor.shutdown();
-    executor.awaitTermination(1, TimeUnit.SECONDS);
+    assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS), "worker 应在超时前全部结束");
 
+    // 逐个 get()：worker 内的异常在此暴露，而不是被算成「队列少了几个」。
+    for (java.util.concurrent.Future<?> f : futures) {
+      f.get(5, TimeUnit.SECONDS);
+    }
+
+    // 断言「每个 (threadIndex, j) 组合都在」而非只比总数——总数相等也可能是
+    // 一批丢失、另一批重复。逐项核对能直接看出丢的是整批还是零散。
+    java.util.Set<String> ids = new java.util.HashSet<>();
+    ReentrantLock lock = getDelayQueueLock();
+    lock.lock();
+    try {
+      for (DelayedTask t : getDelayQueue()) {
+        ids.add(t.workflowId);
+      }
+    } finally {
+      lock.unlock();
+    }
+    java.util.List<String> missing = new java.util.ArrayList<>();
+    for (int i = 0; i < threads; i++) {
+      for (int j = 0; j < perThread; j++) {
+        String id = "wf-" + i + "-" + j;
+        if (!ids.contains(id)) missing.add(id);
+      }
+    }
+    assertTrue(missing.isEmpty(),
+        "延迟队列缺少这些任务（前若干个）：" + missing.subList(0, Math.min(10, missing.size()))
+            + "；共缺 " + missing.size() + " 个");
     assertEquals(threads * perThread, getQueueSize(), "延迟队列应包含全部并发调度的任务");
   }
 
