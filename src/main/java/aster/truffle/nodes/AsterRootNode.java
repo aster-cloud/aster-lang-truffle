@@ -57,8 +57,19 @@ public final class AsterRootNode extends RootNode {
     Set<String> previousEffects = context.getAllowedEffects();
     context.setAllowedEffects(effects == null ? Set.of() : new HashSet<>(effects));
 
+    // ★参数只绑到**帧**，不再写进共享的 globalEnv（#73）。
+    //
+    // 旧代码两条都做。但 globalEnv 是**每个程序一份、跨所有执行共享**的，把实参写进去
+    // 等于让「这次调用的输入」变成全局状态——两次执行会互相覆盖。对合规决策引擎，
+    // 这类污染是**静默给出错误答案**（一次决策用到另一次调用的输入），比抛异常更危险。
+    //
+    // 之所以此前没出事，是因为那条写入对参数而言根本是**死写**：
+    //   Loader.buildSimpleName 只在名字**不在槽位表**里时才退回 NameNodeEnv，
+    //   而 AsterRootNode.initFrame 给每个参数都建了槽位 → 参数永远走 frame，
+    //   读不到 Env 里那份副本。实测移除后 762 个测试无一功能性失败。
+    //
+    // 保留 bindArgumentsToFrame 即可；Env 仍用于函数/全局名字的解析（那是它的正当职责）。
     bindArgumentsToFrame(frame);
-    bindArgumentsToEnv(frame);
     // 入口函数返回值跨宿主边界：null 须规整为 guest-null（toInteropValue），否则
     // 裸 null 经 asGuestValue 触发 NPE/契约违例。adapt 仍只做集合/结构归一，保留
     // 嵌套 raw null（底层 Map/List 内部消费依赖它）。
@@ -87,16 +98,6 @@ public final class AsterRootNode extends RootNode {
     int count = Math.min(params.size(), args != null ? args.length : 0);
     for (int i = 0; i < count; i++) {
       frame.setObject(i, args[i]);
-    }
-  }
-
-  private void bindArgumentsToEnv(VirtualFrame frame) {
-    if (params == null || params.isEmpty()) return;
-    Object[] args = frame.getArguments();
-    int count = Math.min(params.size(), args != null ? args.length : 0);
-    for (int i = 0; i < count; i++) {
-      CoreModel.Param param = params.get(i);
-      globalEnv.set(param.name, args[i]);
     }
   }
 
