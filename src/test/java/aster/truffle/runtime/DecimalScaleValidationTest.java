@@ -126,4 +126,27 @@ class DecimalScaleValidationTest {
             new Object[]{dec("1"), dec("3"), 2, "HALF_EVEN"})),
         "整数 scale 的除法路径不得被破坏");
   }
+
+  /**
+   * scale 的数字校验正则必须**线性**匹配，不得因病态输入灾难性回溯（ReDoS）。
+   *
+   * <p>原先写法 {@code (\d+\.?\d*|\.\d+)} 的两个分支对 "000…0" 存在歧义，
+   * 遇到「大量 0 + 一个非法字符」会指数级回溯——实测 2 万个 '0' 需 **101 秒**
+   * （TS 侧同一模式被 CodeQL 判 high: js/polynomial-redos）。
+   * scale 可由宿主传入，属**不可控输入**，必须线性。
+   *
+   * <p>本用例给 2 万字符的病态输入设 5 秒上限：修好后实测 ~7ms，
+   * 回退到旧正则则会远超上限而失败。
+   */
+  @Test
+  void pathologicalScaleStringRejectedQuickly() {
+    String pathological = "0".repeat(20_000) + "!";
+    long start = System.nanoTime();
+    assertThrows(Builtins.BuiltinException.class, () -> round(pathological),
+        "病态输入仍应被拒（行为不变）");
+    long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+    org.junit.jupiter.api.Assertions.assertTrue(elapsedMs < 5_000,
+        "★scale 正则必须线性匹配：2 万字符耗时 " + elapsedMs + "ms（上限 5000ms）。"
+            + "超限说明正则又退回了会灾难性回溯的写法。");
+  }
 }

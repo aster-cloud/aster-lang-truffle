@@ -1393,7 +1393,12 @@ public final class Builtins {
       //   而 TS 的 Number("2d") 得 NaN → 拒绝。实测此前 Java 把 "2d" 静默接受为 2，
       //   与本方法「响亮失败」的立意相悖，也与 TS 分叉。
       String t = s.trim();
-      if (!t.matches("[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?")) {
+      // ★无歧义写法（非捕获组 + 整数/小数分支不重叠），避免 ReDoS：
+      //   原先的 (\d+\.?\d*|\.\d+) 对 "000…0!" 会灾难性回溯——
+      //   实测 2 万个 '0' 需 **101 秒**（TS 侧同一模式被 CodeQL 判 high：
+      //   js/polynomial-redos）。scale 可由宿主传入，属不可控输入。
+      //   改写后语义完全一致，2 万字符降到毫秒级。
+      if (!t.matches("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?")) {
         throw new BuiltinException(
             "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
       }
