@@ -143,4 +143,68 @@ class MemberAccessInteropTest {
     private static final String MISSING_MEMBER_PROGRAM = MEMBER_ACCESS_PROGRAM
         .replace("\"name\": \"obj.value\"", "\"name\": \"obj.missing\"")
         .replace("test.member.access", "test.member.missing");
+
+    /** {@code func calc(amount) { return amount + amount }}——参数直接参与算术，走 builtin 类型检查。 */
+    private static final String ARITHMETIC_PROGRAM = """
+        {
+          "name": "test.scalar.arith",
+          "decls": [
+            {
+              "kind": "Func",
+              "name": "calc",
+              "params": [{ "name": "amount", "type": { "kind": "TypeName", "name": "Int" } }],
+              "ret": { "kind": "TypeName", "name": "Int" },
+              "effects": [],
+              "body": {
+                "kind": "Block",
+                "statements": [{
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Call",
+                    "target": { "kind": "Name", "name": "+" },
+                    "args": [
+                      { "kind": "Name", "name": "amount" },
+                      { "kind": "Name", "name": "amount" }
+                    ]
+                  }
+                }]
+              }
+            }
+          ]
+        }
+        """;
+
+    /**
+     * **标量**参数拿到整个 map 时，错误必须可读且指向真因。
+     *
+     * <p>这是 api#244 的另一条分支：规则是 {@code given amount as Int}，调用方传
+     * {@code {"wrongKey": ...}} —— 单参数规则把整个 context 当作那一个参数
+     * （NamedContextMapper 的正常行为），于是算术 builtin 拿到一个 Map。
+     *
+     * <p>此前文案是「类型不匹配：期望 Number，实际 <b>HostObject</b>」+
+     * 「检查数据来源或转换逻辑」：<b>HostObject</b> 是 GraalVM 内部类名，对用户毫无
+     * 意义；提示又让人去查数据本身，而真因只是键名写错了一个字。
+     *
+     * <p>成员访问那条分支已由上面两个用例覆盖；本用例专钉标量分支，两者代码路径不同。
+     */
+    @Test
+    @DisplayName("api#244: 标量参数收到 map 时报可读类型名与键名提示，不吐 HostObject")
+    void scalarParamGivenMapReportsReadableTypeAndHint() throws IOException {
+        try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
+            Source source = Source.newBuilder("aster", ARITHMETIC_PROGRAM, "scalar-arith.json").build();
+            Value program = context.eval(source);
+
+            RuntimeException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                RuntimeException.class,
+                () -> program.execute(ProxyObject.fromMap(Map.of("wrongKey", 200))));
+
+            String msg = String.valueOf(ex.getMessage());
+            org.junit.jupiter.api.Assertions.assertFalse(msg.contains("HostObject"),
+                "★不得把 GraalVM 内部类名 HostObject 暴露给用户；实际文案：" + msg);
+            org.junit.jupiter.api.Assertions.assertTrue(msg.contains("Map"),
+                "★应报出用户可理解的类型名 Map；实际文案：" + msg);
+            org.junit.jupiter.api.Assertions.assertTrue(msg.contains("键名"),
+                "★应提示真因是 context 键名与参数名对不上；实际文案：" + msg);
+        }
+    }
 }

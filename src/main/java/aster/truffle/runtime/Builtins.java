@@ -1684,6 +1684,41 @@ public final class Builtins {
       if (t instanceof String s) return s;
       return "Map";
     }
+    // ★宿主 Map 经 Polyglot 传进来是 HostObject 包装，上面的 instanceof Map 抓不到，
+    //   于是错误信息会写成「实际 HostObject」——那是 GraalVM 的内部类名，对用户
+    //   毫无意义，且把排查方向引向引擎配置。最常见的真因其实是：context 的键名与
+    //   规则参数名对不上，整个 map 被当作那一个标量参数传了进来（api#244）。
+    //
+    //   与 MemberAccessNode.describeAvailableKeys 同一认知：宿主 Map 在 Polyglot 里
+    //   暴露为 **hash 条目**而非成员，故必须查 hasHashEntries；只看 hasMembers 会漏。
+    String interopName = interopTypeName(o);
+    if (interopName != null) return interopName;
     return o.getClass().getSimpleName();
+  }
+
+  /**
+   * 用 InteropLibrary 判定 guest/宿主对象的**用户可理解**类型名。
+   *
+   * <p>只在 {@link #typeName} 的常规分支都不命中时兜底。返回 null 表示识别不出，
+   * 此时调用方回退到类名。
+   *
+   * <p>本方法**绝不抛异常**：它只在构造错误消息的路径上被调用，若它自己炸了，
+   * 就会把「错误信息不好读」升级成「报错时又炸一次」，比原问题更糟。
+   */
+  @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+  private static String interopTypeName(Object o) {
+    try {
+      com.oracle.truffle.api.interop.InteropLibrary interop =
+          com.oracle.truffle.api.interop.InteropLibrary.getUncached(o);
+      if (interop.hasHashEntries(o) || interop.hasMembers(o)) return "Map";
+      if (interop.hasArrayElements(o)) return "List";
+      if (interop.isString(o)) return "Text";
+      if (interop.isNumber(o)) return "Number";
+      if (interop.isBoolean(o)) return "Bool";
+      if (interop.isNull(o)) return "null";
+    } catch (Exception | LinkageError ignored) {
+      // 识别失败就回退类名——见上方「绝不抛异常」。
+    }
+    return null;
   }
 }

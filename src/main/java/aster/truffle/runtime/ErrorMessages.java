@@ -80,6 +80,18 @@ public final class ErrorMessages {
   public static String typeExpectedGot(String expected, String actual) {
     String english = "Expected " + expected + ", got " + actual;
     String message = bilingual("类型不匹配：期望 " + expected + "，实际 " + actual, english);
+    // ★「期望标量、实际 Map」几乎总是同一个真因：context 的键名与规则参数名对不上，
+    //   于是整个外层 map 被当作那一个参数传了进来（单参数规则的正常映射行为，
+    //   见 NamedContextMapper）。泛泛的「检查数据来源」会让人去查数据本身，
+    //   而实际只要改一个键名。故此处给出**指向真因**的提示（api#244）。
+    if ("Map".equals(actual) && !"Map".equals(expected)) {
+      return withHint(message,
+          "上下文的键名可能与规则参数名对不上——单参数规则会把整个 context 当作那一个参数。"
+              + "请确认 context 的键与 `given` 后的参数名一致",
+          "The context key may not match the rule's parameter name — a single-parameter rule "
+              + "receives the whole context as that parameter. Check that the context key matches "
+              + "the name after `given`");
+    }
     return withHint(message, "检查数据来源或转换逻辑，确保类型一致", "Review data source or conversion to ensure types match");
   }
 
