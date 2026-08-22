@@ -2,6 +2,7 @@ package aster.truffle.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -207,5 +208,51 @@ class MapKeyNormalizationTest {
         "插入序必须保持（可回放性依赖它）");
     assertTrue(((Map<Object, Object>) m) instanceof java.util.LinkedHashMap);
     assertFalse(((Map<Object, Object>) m).isEmpty());
+  }
+
+  /**
+   * null 键必须被**显式拒绝**，而不是塌陷成字符串 "null"（ADR 0035 档位 A / #74 第 1 项）。
+   *
+   * <p>此前 {@code String.valueOf(null)} 得 "null"，于是
+   * {@code Map.put(m, null, a)} 与 {@code Map.put(m, "null", b)} 落到同一个槽位，
+   * 后者静默覆盖前者、size 仍为 1 —— **两个不同的逻辑键被悄悄合并**。
+   * 对合规决策引擎，静默丢数据比抛错危险得多。
+   */
+  @Test
+  void nullKeyIsRejectedOnEveryKeyedOperation() {
+    // 四个带键的 builtin 共用 mapKey，逐个钉住——避免将来某个绕过归一化。
+    assertThrows(Builtins.BuiltinException.class, () -> put(empty(), null, "v"),
+        "Map.put 的 null 键必须被拒");
+    assertThrows(Builtins.BuiltinException.class,
+        () -> Builtins.call("Map.get", new Object[]{empty(), null}),
+        "Map.get 的 null 键必须被拒");
+    assertThrows(Builtins.BuiltinException.class,
+        () -> Builtins.call("Map.remove", new Object[]{empty(), null}),
+        "Map.remove 的 null 键必须被拒");
+    assertThrows(Builtins.BuiltinException.class,
+        () -> Builtins.call("Map.contains", new Object[]{empty(), null}),
+        "Map.contains 的 null 键必须被拒");
+  }
+
+  /** guest 侧 {@code isNull()==true} 的互操作对象同样是 null 键，不能只拦裸 null。 */
+  @Test
+  void guestNullKeyIsAlsoRejected() {
+    Object guestNull = aster.truffle.runtime.interop.InteropValues.toInteropValue(null);
+    assertThrows(Builtins.BuiltinException.class, () -> put(empty(), guestNull, "v"),
+        "★guest null（AsterNullValue）同样必须被拒，否则宿主注入的 null 仍会塌陷");
+  }
+
+  /**
+   * ★字符串 "null" 本身是**合法键**，不得被误伤。
+   *
+   * <p>这条是上面拒绝逻辑的反向保险：若实现写成「把 null 与 \"null\" 一起拒」，
+   * 就从「静默合并」变成「误杀合法键」，同样是回归。
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  void literalNullStringRemainsUsable() {
+    Object m = put(empty(), "null", "v");
+    assertEquals(1, ((Map<Object, Object>) m).size(), "字符串 \"null\" 是合法键");
+    assertEquals("v", Builtins.call("Map.get", new Object[]{m, "null"}));
   }
 }

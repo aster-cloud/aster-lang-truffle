@@ -1624,8 +1624,45 @@ public final class Builtins {
   /** JS 的 Number.MAX_SAFE_INTEGER（2^53）：超出后 double 无法精确表示整数。 */
   private static final double MAX_SAFE_INTEGER = 9007199254740992.0;
 
+  /**
+   * 是否为 null 键：宿主裸 null，或 guest 侧 {@code isNull()==true} 的互操作对象。
+   *
+   * <p>与 {@code MatchNode.isGuestNull} 同源判据——只问「是不是 null」，
+   * 不认具体类，故 {@code AsterNullValue} 之外的实现同样被覆盖。
+   *
+   * <p>本方法**不抛异常**：它在构造错误路径上被调用，自己炸了会把
+   * 「拒绝 null 键」变成「报错时又炸一次」。识别失败即视为非 null，交由下游处理。
+   */
+  @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+  private static boolean isNullKey(Object k) {
+    if (k == null) return true;
+    try {
+      return com.oracle.truffle.api.interop.InteropLibrary.getUncached().isNull(k);
+    } catch (Exception | LinkageError ignored) {
+      return false;
+    }
+  }
+
   public static Object mapKey(Object key) {
     Object k = unwrap(key);
+    // ★null 键显式拒绝（ADR 0035 档位 A / issue #74 第 1 项）。
+    //
+    //   此前 String.valueOf(null) 得 "null"，于是 Map.put(m, null, a) 与
+    //   Map.put(m, "null", b) **塌陷到同一个槽位**——后者静默覆盖前者，
+    //   size 仍是 1。这不是「null 泄漏出来」，而是「两个不同的逻辑键被悄悄合并」，
+    //   属于**静默丢数据**：调用方拿不到任何提示。
+    //
+    //   对合规决策引擎，静默丢数据比抛错危险得多，故这里响亮失败。
+    //   TS 侧同样塌陷（String(null)==="null"），已同步拒绝以维持双引擎一致。
+    //
+    //   两种 null 形态都要拦：宿主裸 null，以及 guest 侧 isNull()==true 的
+    //   互操作对象（如 AsterNullValue）。判据与 MatchNode.isGuestNull 同源，
+    //   只认「是不是 null」而不认具体类，避免漏掉别的 TruffleObject 实现。
+    if (isNullKey(k)) {
+      throw new BuiltinException(
+          "Map key must not be null: null 与字符串 \"null\" 会塌陷到同一个键、"
+              + "导致静默覆盖。请改用非 null 的键，或用 Maybe/Option 表达「缺失」。");
+    }
     // ★整数值的浮点必须与整数落到同一个键（2026-08-18 对抗性审查发现）。
     //
     //   Java 的 String.valueOf(1.0) = "1.0"，而 JS 的 String(1.0) = "1"。
