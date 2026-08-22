@@ -679,7 +679,13 @@ public final class Builtins {
       LambdaValue keyFn = requireLambda("List.groupBy", args[1]);
       java.util.LinkedHashMap<String, Object> groups = new java.util.LinkedHashMap<>();
       for (Object item : l) {
-        String key = textValue(callLambda1(keyFn, item));
+        // ★键必须走 mapKey，而不是裸 textValue（#74 第 1 项的补漏）。
+        //   groupBy 自己建 LinkedHashMap，绕过了 Map.* 共用的归一化点，于是
+        //   「keyFn 返回真 null」与「keyFn 返回字符串 \"null\"」**塌陷到同一个桶**——
+        //   实测两个元素被并进一个组（期望 2 组、实得 1 组）。
+        //   与 Map.put 一样，null 分组键应响亮失败而非静默合并。
+        //   同时 mapKey 还带来整数/浮点键归一，与 Map.* 口径一致。
+        String key = String.valueOf(mapKey(callLambda1(keyFn, item)));
         @SuppressWarnings("unchecked")
         List<Object> bucket = (List<Object>) groups.computeIfAbsent(key, k -> new ArrayList<>());
         bucket.add(item);
