@@ -702,11 +702,25 @@ public final class Builtins {
       return new java.util.LinkedHashMap<>();
     }));
 
+    // ★Map.get 返回 Maybe（ADR 0035 档位 C）：缺键即 None，命中即 Some(v)。
+    //
+    //   此前返回裸 null，于是 `Map.get(m, k) plus 1` 能**编译通过、运行才炸**
+    //   （类型检查拦不住 null 参与算术）。对合规决策引擎，这类「规则写出来、
+    //   审批过了、上线后才在某条特定输入上炸」是最该消灭的一类。
+    //
+    //   ★这是对 Stable 集的**语义变更**，明知破坏 spec-1.0-freeze 的
+    //   「Stable 1.x 内语义不变」承诺，由用户拍板接受。调用方须改为
+    //   `Maybe.withDefault(Map.get(m,k), 兜底)` 或 `Match ... When null`。
+    //
+    //   命中值本身为 null 时仍返回 Some(null)——「键存在但值为 null」与
+    //   「键不存在」是两件事，不能塌陷（Map 本就允许 null 值）。
     register("Map.get", new BuiltinDef(args -> {
       checkArity("Map.get", args, 2);
       Map<String, Object> m = asMap(args[0]);
       if (m != null) {
-        return m.get(mapKey(args[1]));
+        Object key = mapKey(args[1]);
+        if (!m.containsKey(key)) return maybeNone();
+        return maybeSome(m.get(key));
       }
       throw new BuiltinException(ErrorMessages.operationExpectedType("Map.get", "Map", typeName(args[0])));
     }));
@@ -1647,6 +1661,21 @@ public final class Builtins {
     } catch (Exception | LinkageError ignored) {
       return false;
     }
+  }
+
+  /** 构造 Maybe 的 None —— 形状与 ResultNodes.createResult("None") 一致。 */
+  private static Map<String, Object> maybeNone() {
+    java.util.LinkedHashMap<String, Object> m = new java.util.LinkedHashMap<>();
+    m.put("_type", "None");
+    return m;
+  }
+
+  /** 构造 Maybe 的 Some(v) —— 形状与 ResultNodes.createResult("Some", v) 一致。 */
+  private static Map<String, Object> maybeSome(Object value) {
+    java.util.LinkedHashMap<String, Object> m = new java.util.LinkedHashMap<>();
+    m.put("_type", "Some");
+    m.put("value", value);
+    return m;
   }
 
   public static Object mapKey(Object key) {

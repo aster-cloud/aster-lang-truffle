@@ -36,8 +36,23 @@ class MapKeyNormalizationTest {
     return Builtins.call("Map.put", new Object[]{m, k, v});
   }
 
+  /**
+   * 取值并**解包 Maybe**：本类测的是**键归一化**，不是 Maybe 契约本身。
+   *
+   * <p>ADR 0035 档位 C 起 Map.get 返回 Some(v)/None，若逐条断言里都写成
+   * {@code {_type=Some, value=…}}，会把「键有没有落到同一个槽位」这个真正的
+   * 被测点淹没在包装噪声里。故在此解包，让原有断言继续直指键归一化。
+   * Maybe 契约本身由 aster-lang-ts 的 map-get-maybe 用例覆盖。
+   */
+  @SuppressWarnings("unchecked")
   private static Object get(Object m, Object k) {
-    return Builtins.call("Map.get", new Object[]{m, k});
+    Object r = Builtins.call("Map.get", new Object[]{m, k});
+    if (r instanceof java.util.Map<?, ?> mm) {
+      Object t = mm.get("_type");
+      if ("Some".equals(t)) return mm.get("value");
+      if ("None".equals(t)) return null;
+    }
+    return r;
   }
 
   private static Object contains(Object m, Object k) {
@@ -253,6 +268,6 @@ class MapKeyNormalizationTest {
   void literalNullStringRemainsUsable() {
     Object m = put(empty(), "null", "v");
     assertEquals(1, ((Map<Object, Object>) m).size(), "字符串 \"null\" 是合法键");
-    assertEquals("v", Builtins.call("Map.get", new Object[]{m, "null"}));
+    assertEquals("v", get(m, "null"));
   }
 }
