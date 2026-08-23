@@ -25,4 +25,12 @@ class StdlibHofProbeTest {
   @Test void maxBy()  throws Exception { assertEquals(8, evalMain("stdlib-hof/hof-maxBy.json")); }
   @Test void count()  throws Exception { assertEquals(3, evalMain("stdlib-hof/hof-count.json")); }
   @Test void groupBy() throws Exception { assertEquals(2, evalMain("stdlib-hof/hof-groupBy.json")); }
+
+  // 跨引擎：fixture 由 TS 编译器产出（`Option.map(Some of 21, double)`），TS 侧求值同样得 42。
+  @Test void optionMapAliasCrossEngine() throws Exception { assertEquals(42, evalMain("stdlib-hof/option-map.json")); }
+
+  // 构造器**调用形式** `Some(21)`（aster-lang-ts#124）：此前 TS 把它降成
+  // Call{Name 'Some'}，喂给本引擎报 "Unknown call target: Some"。
+  // TS 侧补上 lower 期归一后，两种写法产出同一份 IR，本引擎即可直接执行。
+  @Test void ctorCallFormCrossEngine() throws Exception { assertEquals(42, evalMain("stdlib-hof/ctor-call-form.json")); }
 }

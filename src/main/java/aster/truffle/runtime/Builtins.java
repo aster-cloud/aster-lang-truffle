@@ -934,6 +934,20 @@ public final class Builtins {
       throw new BuiltinException(ErrorMessages.operationExpectedType("Maybe.map", "Maybe (Some or None)", typeName(args[0])));
     }));
 
+    // Option.map 是 Maybe.map 的别名（aster-lang-ts#122）。
+    // ★不复制实现体：TS 侧这两个名字共用同一个 `case`，若此处另写一份，
+    // 两个引擎之间、乃至同引擎的两个名字之间都会随时间漂移。直接复用同一个
+    // BuiltinDef 实例，行为天然一致。
+    // 注：用 Option.map 触发的错误信息里会显示 "Maybe.map"（复用同一个 def），
+    // 这是刻意接受的取舍——名字指向真正的实现，好过维护两份会漂移的副本。
+    BuiltinDef maybeMap = REGISTRY.get("Maybe.map");
+    if (maybeMap == null) {
+      // 大声失败：若 Maybe.map 被改名/挪位，这里静默注册 null 会让 Option.map
+      // 在调用时才以难以定位的方式炸掉。
+      throw new IllegalStateException("Option.map 别名注册失败：Maybe.map 尚未注册");
+    }
+    register("Option.map", maybeMap);
+
     register("Result.mapOk", new BuiltinDef(args -> {
       checkArity("Result.mapOk", args, 2);
 
@@ -1110,6 +1124,22 @@ public final class Builtins {
    */
   public static boolean has(String name) {
     return REGISTRY.containsKey(canonicalName(name));
+  }
+
+  /**
+   * 取出已注册的 BuiltinDef 实例本身（不调用它）。
+   *
+   * <p>仅供测试断言**别名共享同一实例**用：`Option.map` 之类的别名必须复用
+   * 被别名者的同一个 def，而不是复制一份实现体——复制出来的副本行为一开始一致、
+   * 却会随时间漂移，那正是 TS/JVM 分叉的成因。
+   * 只断言"两者都存在且行为相同"锁不住这一点（复制体同样能通过），
+   * 必须比较实例同一性。
+   *
+   * <p>public 是因为测试在 `aster.truffle` 包、本类在 `aster.truffle.runtime`；
+   * 同类的 `register` 也是 public。返回的是不可变的函数对象，不泄漏可变状态。
+   */
+  public static BuiltinDef defOf(String name) {
+    return REGISTRY.get(canonicalName(name));
   }
 
   /**
