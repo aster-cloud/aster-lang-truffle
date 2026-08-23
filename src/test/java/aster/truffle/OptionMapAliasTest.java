@@ -1,6 +1,7 @@
 package aster.truffle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import aster.truffle.runtime.Builtins;
@@ -37,9 +38,24 @@ class OptionMapAliasTest {
     assertTrue(Builtins.has("Option.map"), "Option.map 应已注册（此前 JVM 侧缺失 → 双引擎分叉）");
   }
 
+  /**
+   * ★锁住「复用同一实例」而非仅仅「行为相同」。
+   *
+   * <p>下面两条行为等价性断言**证明不了**这一点——交叉审查做过反事实验证：
+   * 把别名换成逐字复制的实现体，那两条依然全绿。而复制体正是漂移的源头
+   * （TS/JVM 分叉即由此而来）。故必须直接比较实例同一性。
+   */
+  @Test
+  void optionMapReusesTheSameInstance() {
+    assertSame(
+        Builtins.defOf("Maybe.map"),
+        Builtins.defOf("Option.map"),
+        "Option.map 必须复用 Maybe.map 的同一个 BuiltinDef，而不是复制一份实现体");
+  }
+
   @Test
   void optionMapRejectsNonLambdaLikeMaybeMap() throws Exception {
-    // 两个名字对**同一种误用**必须给出同样的失败，以此证明它们走的是同一份实现。
+    // 两个名字对**同一种误用**必须给出同样的失败，作为行为等价的佐证；「同一实例」由 optionMapReusesTheSameInstance 单独锁死。
     // 传一个非 Lambda 的第二参：Maybe.map 与 Option.map 都应抛出同类错误。
     Object[] args = {some(21), "not-a-lambda"};
 

@@ -1127,6 +1127,22 @@ public final class Builtins {
   }
 
   /**
+   * 取出已注册的 BuiltinDef 实例本身（不调用它）。
+   *
+   * <p>仅供测试断言**别名共享同一实例**用：`Option.map` 之类的别名必须复用
+   * 被别名者的同一个 def，而不是复制一份实现体——复制出来的副本行为一开始一致、
+   * 却会随时间漂移，那正是 TS/JVM 分叉的成因。
+   * 只断言"两者都存在且行为相同"锁不住这一点（复制体同样能通过），
+   * 必须比较实例同一性。
+   *
+   * <p>public 是因为测试在 `aster.truffle` 包、本类在 `aster.truffle.runtime`；
+   * 同类的 `register` 也是 public。返回的是不可变的函数对象，不泄漏可变状态。
+   */
+  public static BuiltinDef defOf(String name) {
+    return REGISTRY.get(canonicalName(name));
+  }
+
+  /**
    * 获取builtin函数所需的effects
    * @param name 函数名
    * @return effects集合，如果不存在返回null
