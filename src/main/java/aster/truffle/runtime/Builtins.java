@@ -934,6 +934,20 @@ public final class Builtins {
       throw new BuiltinException(ErrorMessages.operationExpectedType("Maybe.map", "Maybe (Some or None)", typeName(args[0])));
     }));
 
+    // Option.map 是 Maybe.map 的别名（aster-lang-ts#122）。
+    // ★不复制实现体：TS 侧这两个名字共用同一个 `case`，若此处另写一份，
+    // 两个引擎之间、乃至同引擎的两个名字之间都会随时间漂移。直接复用同一个
+    // BuiltinDef 实例，行为天然一致。
+    // 注：用 Option.map 触发的错误信息里会显示 "Maybe.map"（复用同一个 def），
+    // 这是刻意接受的取舍——名字指向真正的实现，好过维护两份会漂移的副本。
+    BuiltinDef maybeMap = REGISTRY.get("Maybe.map");
+    if (maybeMap == null) {
+      // 大声失败：若 Maybe.map 被改名/挪位，这里静默注册 null 会让 Option.map
+      // 在调用时才以难以定位的方式炸掉。
+      throw new IllegalStateException("Option.map 别名注册失败：Maybe.map 尚未注册");
+    }
+    register("Option.map", maybeMap);
+
     register("Result.mapOk", new BuiltinDef(args -> {
       checkArity("Result.mapOk", args, 2);
 
