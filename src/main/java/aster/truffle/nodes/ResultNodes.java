@@ -47,14 +47,14 @@ public final class ResultNodes {
 
   private static java.util.Map<String,Object> createResult(String type, Object value) {
     java.util.LinkedHashMap<String,Object> map = new java.util.LinkedHashMap<>();
-    map.put("_type", type);
+    map.put("__type", type);
     map.put("value", value);
     return map;
   }
 
   private static java.util.Map<String,Object> createResult(String type) {
     java.util.LinkedHashMap<String,Object> map = new java.util.LinkedHashMap<>();
-    map.put("_type", type);
+    map.put("__type", type);
     return map;
   }
 }

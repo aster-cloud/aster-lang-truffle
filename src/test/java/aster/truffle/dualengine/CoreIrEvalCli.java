@@ -268,7 +268,7 @@ class CoreIrEvalCli {
         if (node.isObject()) {
             java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
             node.fields().forEachRemaining(e -> {
-                String key = "__type".equals(e.getKey()) ? "_type" : e.getKey();
+                String key = "__type".equals(e.getKey()) ? "__type" : e.getKey();
                 map.put(key, jsonToHostArg(e.getValue()));
             });
             return new aster.truffle.runtime.interop.AsterMapValue(map);
@@ -304,13 +304,13 @@ class CoreIrEvalCli {
             var keys = v.getMemberKeys();
             // The Aster type name is exposed as a `_type` member; surface it as
             // `__type` (TS's key) and drop the internal `_type` from the body.
-            String typeName = keys.contains("_type") && v.getMember("_type").isString()
-                ? v.getMember("_type").asString()
+            String typeName = keys.contains("__type") && v.getMember("__type").isString()
+                ? v.getMember("__type").asString()
                 : (v.getMetaObject() != null ? v.getMetaObject().getMetaQualifiedName() : "?");
             ObjectNode out = MAPPER.createObjectNode();
             out.put("__type", typeName);
             for (String key : keys) {
-                if ("_type".equals(key)) continue;
+                if ("__type".equals(key)) continue;
                 out.set(key, valueToJson(v.getMember(key)));
             }
             return out;

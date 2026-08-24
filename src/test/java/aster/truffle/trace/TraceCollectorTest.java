@@ -139,8 +139,8 @@ class TraceCollectorTest {
     assertInstanceOf(Map.class, result);
     Map<String, Object> m = (Map<String, Object>) result;
     // 字段顺序保留声明序 + _type 头；嵌套整数归一 Long。
-    assertEquals(Arrays.asList("_type", "age", "score"), new ArrayList<>(m.keySet()));
-    assertEquals("Applicant", m.get("_type"));
+    assertEquals(Arrays.asList("__type", "age", "score"), new ArrayList<>(m.keySet()));
+    assertEquals("Applicant", m.get("__type"));
     assertEquals(30L, m.get("age"));
     assertInstanceOf(BigDecimal.class, m.get("score"));
   }

@@ -24,7 +24,7 @@ import java.util.Map;
  */
 @ExportLibrary(InteropLibrary.class)
 public final class AsterDataValue implements TruffleObject {
-  private static final String META_TYPE = "_type";
+  private static final String META_TYPE = "__type";
 
   private final String typeName;
   private final String[] fieldNames;

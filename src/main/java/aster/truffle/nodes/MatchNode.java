@@ -123,11 +123,11 @@ public abstract class MatchNode extends AsterExpressionNode {
       }
       if (!(s instanceof java.util.Map)) return false;
       var m = (java.util.Map<String,Object>) s;
-      Object t = m.get("_type");
+      Object t = m.get("__type");
       if (!(t instanceof String) || !typeName.equals(t)) return false;
       java.util.ArrayList<Object> values = new java.util.ArrayList<>();
       for (var e : m.entrySet()) {
-        if ("_type".equals(e.getKey())) continue;
+        if ("__type".equals(e.getKey())) continue;
         values.add(e.getValue());
       }
       return matchOrderedFields(values.size(), values::get, env);
@@ -186,7 +186,7 @@ public abstract class MatchNode extends AsterExpressionNode {
           var m = (java.util.Map<String,Object>) s;
           Object v = m.get("value");
           if (v instanceof String && name.equals(v)) return true; // enum variant value
-          Object t = m.get("_type");
+          Object t = m.get("__type");
           return t instanceof String && name.equals(t); // constructor type fallback
         }
         return false;

@@ -41,7 +41,7 @@ class NullMemberInteropTest {
   void mapNullMemberReturnsGuestNull() throws Exception {
     // 复刻 Err null 的形状：value 成员存在但为 null。
     Map<String, Object> entries = new LinkedHashMap<>();
-    entries.put("_type", "Err");
+    entries.put("__type", "Err");
     entries.put("value", null);
     AsterMapValue map = new AsterMapValue(entries);
 
@@ -55,7 +55,7 @@ class NullMemberInteropTest {
     assertTrue(interop.isNull(read), "返回值应是 guest-null（isNull()==true），宿主据此还原 Java null");
 
     // 非 null 成员保持原值不变。
-    assertSame("Err", interop.readMember(map, "_type"));
+    assertSame("Err", interop.readMember(map, "__type"));
 
     // 不存在的成员仍抛 UnknownIdentifierException（既有契约不变）。
     assertThrows(UnknownIdentifierException.class, () -> interop.readMember(map, "missing"));
@@ -90,7 +90,7 @@ class NullMemberInteropTest {
   @DisplayName("底层 Map/List 仍存原始 Java null —— builtins 直接消费路径不变")
   void backingStorageKeepsRawNull() {
     Map<String, Object> entries = new LinkedHashMap<>();
-    entries.put("_type", "Err");
+    entries.put("__type", "Err");
     entries.put("value", null);
     AsterMapValue map = new AsterMapValue(entries);
 
