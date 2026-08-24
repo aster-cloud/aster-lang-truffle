@@ -727,6 +727,11 @@ public final class Builtins {
 
     register("Map.put", new BuiltinDef(args -> {
       checkArity("Map.put", args, 3);
+      // Maybe/Result 变体不是 Map（aster-lang-ts#134）——它们的运行期形态本身是
+      // java.util.Map，不拦就会被下面的 instanceof 收下、把 _type/value 当成键来数。
+      if (isVariantShaped(args[0])) {
+        throw new BuiltinException(ErrorMessages.operationExpectedType("Map.put", "Map", typeName(args[0])));
+      }
       if (args[0] instanceof Map<?,?> m) {
         // LinkedHashMap 拷贝保插入序；新键追加末尾（与 TS `{...m, [k]:v}` 一致）。
         @SuppressWarnings("unchecked")
@@ -739,6 +744,11 @@ public final class Builtins {
 
     register("Map.remove", new BuiltinDef(args -> {
       checkArity("Map.remove", args, 2);
+      // Maybe/Result 变体不是 Map（aster-lang-ts#134）——它们的运行期形态本身是
+      // java.util.Map，不拦就会被下面的 instanceof 收下、把 _type/value 当成键来数。
+      if (isVariantShaped(args[0])) {
+        throw new BuiltinException(ErrorMessages.operationExpectedType("Map.remove", "Map", typeName(args[0])));
+      }
       if (args[0] instanceof Map<?,?> m) {
         @SuppressWarnings("unchecked")
         Map<Object,Object> mutable = new java.util.LinkedHashMap<>((Map<Object,Object>)m);
@@ -759,6 +769,11 @@ public final class Builtins {
 
     register("Map.keys", new BuiltinDef(args -> {
       checkArity("Map.keys", args, 1);
+      // Maybe/Result 变体不是 Map（aster-lang-ts#134）——它们的运行期形态本身是
+      // java.util.Map，不拦就会被下面的 instanceof 收下、把 _type/value 当成键来数。
+      if (isVariantShaped(args[0])) {
+        throw new BuiltinException(ErrorMessages.operationExpectedType("Map.keys", "Map", typeName(args[0])));
+      }
       if (args[0] instanceof Map<?,?> m) {
         return new ArrayList<>(m.keySet());
       }
@@ -767,6 +782,11 @@ public final class Builtins {
 
     register("Map.values", new BuiltinDef(args -> {
       checkArity("Map.values", args, 1);
+      // Maybe/Result 变体不是 Map（aster-lang-ts#134）——它们的运行期形态本身是
+      // java.util.Map，不拦就会被下面的 instanceof 收下、把 _type/value 当成键来数。
+      if (isVariantShaped(args[0])) {
+        throw new BuiltinException(ErrorMessages.operationExpectedType("Map.values", "Map", typeName(args[0])));
+      }
       if (args[0] instanceof Map<?,?> m) {
         return new ArrayList<>(m.values());
       }
@@ -775,6 +795,11 @@ public final class Builtins {
 
     register("Map.size", new BuiltinDef(args -> {
       checkArity("Map.size", args, 1);
+      // Maybe/Result 变体不是 Map（aster-lang-ts#134）——它们的运行期形态本身是
+      // java.util.Map，不拦就会被下面的 instanceof 收下、把 _type/value 当成键来数。
+      if (isVariantShaped(args[0])) {
+        throw new BuiltinException(ErrorMessages.operationExpectedType("Map.size", "Map", typeName(args[0])));
+      }
       if (args[0] instanceof Map<?,?> m) {
         return m.size();
       }
@@ -1766,6 +1791,9 @@ public final class Builtins {
   @SuppressWarnings("unchecked")
   public static Map<String, Object> asMap(Object o) {
     Object v = unwrap(o);
+    if (isVariantShaped(v)) {
+      return null;
+    }
     if (v instanceof AsterMapValue amv) {
       return amv.entries();
     }
@@ -1773,6 +1801,28 @@ public final class Builtins {
       return (Map<String, Object>) m;
     }
     return null;
+  }
+
+  /**
+   * 判断一个值是否是 Maybe/Result 的运行期形态（{@code {_type: Some|None|Ok|Err}}）。
+   *
+   * <p>★为什么需要（aster-lang-ts#134）：这些变体的运行期表示**本身就是
+   * {@code java.util.Map}**（见 {@link #maybeNone()}），于是 {@code Map.*} 的
+   * {@code instanceof Map} 会把它们当成普通 Map 收下，把 {@code _type}/{@code value}
+   * 当成键来数——{@code Map.size(Some(1))} 返回 2、{@code Map.size(None)} 返回 1。
+   *
+   * <p>这是**静默错答案**：不报错，而是给出一个看起来完全合理的数字。二维矩阵
+   * （6 个 Map.* × 6 种输入）实测确认 18 格受影响；其中 None 那 6 格还与 TS 侧
+   * 分叉（TS 拒、此处放行）。
+   *
+   * <p>Maybe/Result 不是 Map，理应被 {@code Map.*} 拒绝——两引擎同步收紧。
+   */
+  private static boolean isVariantShaped(Object v) {
+    if (!(v instanceof Map<?, ?> m)) {
+      return false;
+    }
+    Object t = m.get("_type");
+    return "Some".equals(t) || "None".equals(t) || "Ok".equals(t) || "Err".equals(t);
   }
 
   /**

@@ -1,6 +1,5 @@
 package aster.truffle;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,25 +74,47 @@ class MapGuardParityTest {
   }
 
   /**
-   * ★残留分叉锁（aster-lang-ts#134）：{@code None} 首参本引擎**不抛**。
+   * Maybe/Result 变体不是 Map（aster-lang-ts#134）。
    *
-   * <p>本引擎的 None 是 {@code LinkedHashMap{_type:"None"}}，它本身就是
-   * {@code java.util.Map}，于是 {@code Map.size} 的 {@code instanceof Map} 命中，
-   * 把 {@code _type} 当成一个键数进去 → 返回 1。而 TS 侧 None 是裸 null，被守卫拒掉。
+   * <p>这些变体的运行期表示**本身就是 {@code java.util.Map}**（见 {@code maybeNone()}），
+   * 此前会被 {@code Map.*} 的 {@code instanceof Map} 收下、把 {@code _type}/{@code value}
+   * 当成键来数：{@code Map.size(None)} 返回 1、{@code Map.size(Some(1))} 返回 2——
+   * **静默错答案**，不报错却给出看起来完全合理的数字。
    *
-   * <p>本用例**不是**在断言"正确行为"，而是钉住当前的不一致：将来任一侧改动时
-   * 必须显式面对它，而不是让分叉在某次重构里无声消失或反向扩大。
+   * <p>★必须**逐个函数**参数化，不能只测一个：守卫分布在两条独立路径上
+   * （{@code asMap} 覆盖 get/contains，另五个各自在 checkArity 之后显式拒绝）。
+   * 初版只测了 {@code Map.size}，自查时实测「删掉 {@code Map.remove} 的守卫」
+   * → 测试**仍全绿**，覆盖面对不上「七个函数都拒绝」这个声称。
+   *
+   * <p>已知取舍（两引擎一致，非分叉）：判定只看 {@code _type} 的值是否恰为
+   * Some/None/Ok/Err。故业务 map 若恰好有个键叫 {@code _type} 且值正是这四个词之一，
+   * 会被误拒；值为其它内容（如 {@code "premium"}）则正常放行。TS 侧规则相同。
    */
-  @Test
-  void residualDivergence_noneIsAcceptedHere() throws Exception {
-    String json = loadIr("mg-none.json");
+  @ParameterizedTest(name = "{0} 拒绝 Maybe/Result 变体")
+  @CsvSource({
+    "Map.get, var-get.json",
+    "Map.contains, var-contains.json",
+    "Map.size, var-size.json",
+    "Map.put, var-put.json",
+    "Map.remove, var-remove.json",
+    "Map.keys, var-keys.json",
+    "Map.values, var-values.json",
+  })
+  void maybeVariantIsRejected(String op, String fixture) throws Exception {
+    String json = loadIr(fixture);
     try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
-      Value r = ctx.eval(Source.newBuilder("aster", json, "mg-none.json").build());
-      Value v = r.canExecute() ? r.execute() : r;
-      assertEquals(
-          1,
-          v.asInt(),
-          "本引擎把 None 当成含 _type 一个键的 Map（TS 侧则拒绝）——见 aster-lang-ts#134");
+      PolyglotException ex =
+          assertThrows(
+              PolyglotException.class,
+              () -> {
+                Value r = ctx.eval(Source.newBuilder("aster", json, fixture).build());
+                Value v = r.canExecute() ? r.execute() : r;
+                v.as(Object.class);
+              },
+              op + " 必须拒绝 Some(1)——变体不是 Map（此前被当成 2 个键的 Map 来数）");
+      assertTrue(
+          ex.getMessage().contains(op),
+          "错误信息应指向 " + op + "，实际: " + ex.getMessage());
     }
   }
 }
