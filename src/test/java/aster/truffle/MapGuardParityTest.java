@@ -1,6 +1,5 @@
 package aster.truffle;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,25 +74,33 @@ class MapGuardParityTest {
   }
 
   /**
-   * ★残留分叉锁（aster-lang-ts#134）：{@code None} 首参本引擎**不抛**。
+   * Maybe/Result 变体不是 Map（aster-lang-ts#134）。
    *
-   * <p>本引擎的 None 是 {@code LinkedHashMap{_type:"None"}}，它本身就是
-   * {@code java.util.Map}，于是 {@code Map.size} 的 {@code instanceof Map} 命中，
-   * 把 {@code _type} 当成一个键数进去 → 返回 1。而 TS 侧 None 是裸 null，被守卫拒掉。
+   * <p>这些变体的运行期表示**本身就是 {@code java.util.Map}**（见 {@code maybeNone()}），
+   * 此前会被 {@code Map.*} 的 {@code instanceof Map} 收下、把 {@code _type}/{@code value}
+   * 当成键来数：{@code Map.size(None)} 返回 1、{@code Map.size(Some(1))} 返回 2——
+   * **静默错答案**，不报错却给出看起来完全合理的数字。
    *
-   * <p>本用例**不是**在断言"正确行为"，而是钉住当前的不一致：将来任一侧改动时
-   * 必须显式面对它，而不是让分叉在某次重构里无声消失或反向扩大。
+   * <p>二维矩阵实测（6 个 Map.* × 6 种输入 = 36 格）：修复前 None 那 6 格两引擎分叉
+   * （TS 拒、此处放行）、Some/Ok/Err 那 18 格两引擎"一致地错"。两侧同步收紧后
+   * 36 格逐格一致。本用例锁住其中的 None 一格。
    */
   @Test
-  void residualDivergence_noneIsAcceptedHere() throws Exception {
+  void maybeVariantIsRejected() throws Exception {
     String json = loadIr("mg-none.json");
     try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
-      Value r = ctx.eval(Source.newBuilder("aster", json, "mg-none.json").build());
-      Value v = r.canExecute() ? r.execute() : r;
-      assertEquals(
-          1,
-          v.asInt(),
-          "本引擎把 None 当成含 _type 一个键的 Map（TS 侧则拒绝）——见 aster-lang-ts#134");
+      PolyglotException ex =
+          assertThrows(
+              PolyglotException.class,
+              () -> {
+                Value r = ctx.eval(Source.newBuilder("aster", json, "mg-none.json").build());
+                Value v = r.canExecute() ? r.execute() : r;
+                v.as(Object.class);
+              },
+              "None 不是 Map，Map.size 必须拒绝（此前返回 1）");
+      assertTrue(
+          ex.getMessage().contains("Map.size"),
+          "错误信息应指向 Map.size，实际: " + ex.getMessage());
     }
   }
 }
