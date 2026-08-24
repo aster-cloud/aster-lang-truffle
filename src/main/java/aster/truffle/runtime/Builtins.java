@@ -811,7 +811,7 @@ public final class Builtins {
       checkArity("Result.isOk", args, 1);
       // Check for Map-based Ok
       if (args[0] instanceof Map<?,?> m) {
-        return "Ok".equals(m.get("_type"));
+        return "Ok".equals(m.get("__type"));
       }
       return false;
     }));
@@ -820,7 +820,7 @@ public final class Builtins {
       checkArity("Result.isErr", args, 1);
       // Check for Map-based Err
       if (args[0] instanceof Map<?,?> m) {
-        return "Err".equals(m.get("_type"));
+        return "Err".equals(m.get("__type"));
       }
       return false;
     }));
@@ -828,7 +828,7 @@ public final class Builtins {
     register("Result.unwrap", new BuiltinDef(args -> {
       checkArity("Result.unwrap", args, 1);
       // Check for Map-based Ok
-      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("__type"))) {
         return m.get("value");
       }
       throw new BuiltinException(ErrorMessages.unwrapOnUnexpectedVariant("Result.unwrap", "Err"));
@@ -837,7 +837,7 @@ public final class Builtins {
     register("Result.unwrapErr", new BuiltinDef(args -> {
       checkArity("Result.unwrapErr", args, 1);
       // Check for Map-based Err
-      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("__type"))) {
         return m.get("value");
       }
       throw new BuiltinException(ErrorMessages.unwrapOnUnexpectedVariant("Result.unwrapErr", "Ok"));
@@ -847,7 +847,7 @@ public final class Builtins {
     register("Maybe.isSome", new BuiltinDef(args -> {
       checkArity("Maybe.isSome", args, 1);
       if (args[0] instanceof Map<?,?> m) {
-        return "Some".equals(m.get("_type"));
+        return "Some".equals(m.get("__type"));
       }
       return false;
     }));
@@ -856,7 +856,7 @@ public final class Builtins {
       checkArity("Maybe.isNone", args, 1);
       // Check for Map-based None
       if (args[0] instanceof Map<?,?> m) {
-        return "None".equals(m.get("_type"));
+        return "None".equals(m.get("__type"));
       }
       return false;
     }));
@@ -865,7 +865,7 @@ public final class Builtins {
     register("Option.isSome", new BuiltinDef(args -> {
       checkArity("Option.isSome", args, 1);
       if (args[0] instanceof Map<?,?> m) {
-        return "Some".equals(m.get("_type"));
+        return "Some".equals(m.get("__type"));
       }
       return false;
     }));
@@ -874,14 +874,14 @@ public final class Builtins {
       checkArity("Option.isNone", args, 1);
       // Check for Map-based None
       if (args[0] instanceof Map<?,?> m) {
-        return "None".equals(m.get("_type"));
+        return "None".equals(m.get("__type"));
       }
       return false;
     }));
 
     register("Option.unwrap", new BuiltinDef(args -> {
       checkArity("Option.unwrap", args, 1);
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
         return m.get("value");
       }
       throw new BuiltinException(ErrorMessages.unwrapOnUnexpectedVariant("Option.unwrap", "None"));
@@ -889,7 +889,7 @@ public final class Builtins {
 
     register("Option.unwrapOr", new BuiltinDef(args -> {
       checkArity("Option.unwrapOr", args, 2);
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
         return m.get("value");
       }
       return args[1]; // default value
@@ -897,7 +897,7 @@ public final class Builtins {
 
     register("Maybe.unwrap", new BuiltinDef(args -> {
       checkArity("Maybe.unwrap", args, 1);
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
         return m.get("value");
       }
       throw new BuiltinException(ErrorMessages.unwrapOnUnexpectedVariant("Maybe.unwrap", "None"));
@@ -905,7 +905,7 @@ public final class Builtins {
 
     register("Maybe.unwrapOr", new BuiltinDef(args -> {
       checkArity("Maybe.unwrapOr", args, 2);
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
         return m.get("value");
       }
       return args[1]; // default value
@@ -915,7 +915,7 @@ public final class Builtins {
     register("Maybe.withDefault", new BuiltinDef(args -> {
       checkArity("Maybe.withDefault", args, 2);
       // Check for Map-based Some
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
         return m.get("value");
       }
       return args[1]; // default value
@@ -925,12 +925,12 @@ public final class Builtins {
       checkArity("Maybe.map", args, 2);
 
       // If None, return None
-      if (args[0] instanceof Map<?,?> m && "None".equals(m.get("_type"))) {
-        return java.util.Map.of("_type", "None");
+      if (args[0] instanceof Map<?,?> m && "None".equals(m.get("__type"))) {
+        return java.util.Map.of("__type", "None");
       }
 
       // If Some, apply function
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
         if (!(args[1] instanceof LambdaValue lambda)) {
           throw new BuiltinException(ErrorMessages.operationExpectedType("Maybe.map", "Lambda", typeName(args[1])));
         }
@@ -951,7 +951,7 @@ public final class Builtins {
         // Return Some(mapped)。红队 P2-I：LinkedHashMap 固定 _type→value 插入序，
         // 防 HashMap 键序不定破坏 Map.keys 可复现 / 双引擎 parity。
         Map<String, Object> result = new java.util.LinkedHashMap<>();
-        result.put("_type", "Some");
+        result.put("__type", "Some");
         result.put("value", mapped);
         return result;
       }
@@ -977,7 +977,7 @@ public final class Builtins {
       checkArity("Result.mapOk", args, 2);
 
       // Check for Map-based Err - return unchanged
-      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("__type"))) {
         return args[0];
       }
 
@@ -992,7 +992,7 @@ public final class Builtins {
       }
 
       Object value;
-      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("__type"))) {
         value = m.get("value");
       } else {
         throw new BuiltinException(ErrorMessages.operationExpectedType("Result.mapOk", "Result (Ok or Err)", typeName(args[0])));
@@ -1007,7 +1007,7 @@ public final class Builtins {
 
       // Return Ok(mapped)。红队 P2-I：LinkedHashMap 固定键序（可复现 / parity）。
       Map<String, Object> result = new java.util.LinkedHashMap<>();
-      result.put("_type", "Ok");
+      result.put("__type", "Ok");
       result.put("value", mapped);
       return result;
     }));
@@ -1016,7 +1016,7 @@ public final class Builtins {
       checkArity("Result.mapErr", args, 2);
 
       // Check for Map-based Ok - return unchanged
-      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("__type"))) {
         return args[0];
       }
 
@@ -1031,7 +1031,7 @@ public final class Builtins {
       }
 
       Object value;
-      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("__type"))) {
         value = m.get("value");
       } else {
         throw new BuiltinException(ErrorMessages.operationExpectedType("Result.mapErr", "Result (Ok or Err)", typeName(args[0])));
@@ -1046,7 +1046,7 @@ public final class Builtins {
 
       // Return Err(mapped)。红队 P2-I：LinkedHashMap 固定键序（可复现 / parity）。
       Map<String, Object> result = new java.util.LinkedHashMap<>();
-      result.put("_type", "Err");
+      result.put("__type", "Err");
       result.put("value", mapped);
       return result;
     }));
@@ -1055,7 +1055,7 @@ public final class Builtins {
       checkArity("Result.tapError", args, 2);
 
       // Check for Map-based Ok - return unchanged
-      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("__type"))) {
         return args[0];
       }
 
@@ -1070,7 +1070,7 @@ public final class Builtins {
       }
 
       Object value;
-      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("_type"))) {
+      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("__type"))) {
         value = m.get("value");
       } else {
         throw new BuiltinException(ErrorMessages.operationExpectedType("Result.tapError", "Result (Ok or Err)", typeName(args[0])));
@@ -1721,14 +1721,14 @@ public final class Builtins {
   /** 构造 Maybe 的 None —— 形状与 ResultNodes.createResult("None") 一致。 */
   private static Map<String, Object> maybeNone() {
     java.util.LinkedHashMap<String, Object> m = new java.util.LinkedHashMap<>();
-    m.put("_type", "None");
+    m.put("__type", "None");
     return m;
   }
 
   /** 构造 Maybe 的 Some(v) —— 形状与 ResultNodes.createResult("Some", v) 一致。 */
   private static Map<String, Object> maybeSome(Object value) {
     java.util.LinkedHashMap<String, Object> m = new java.util.LinkedHashMap<>();
-    m.put("_type", "Some");
+    m.put("__type", "Some");
     m.put("value", value);
     return m;
   }
@@ -1821,7 +1821,7 @@ public final class Builtins {
     if (!(v instanceof Map<?, ?> m)) {
       return false;
     }
-    Object t = m.get("_type");
+    Object t = m.get("__type");
     return "Some".equals(t) || "None".equals(t) || "Ok".equals(t) || "Err".equals(t);
   }
 
@@ -1837,7 +1837,7 @@ public final class Builtins {
     if (o instanceof AsterDataValue dataValue) return dataValue.getTypeName();
     if (o instanceof AsterEnumValue enumValue) return enumValue.getQualifiedName();
     if (o instanceof Map<?,?> m) {
-      Object t = m.get("_type");
+      Object t = m.get("__type");
       if (t instanceof String s) return s;
       return "Map";
     }

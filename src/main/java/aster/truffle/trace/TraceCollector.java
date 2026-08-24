@@ -245,7 +245,7 @@ public final class TraceCollector {
     // Data：{_type, 字段名:值...} 按声明字段顺序（AsterDataValue fieldName(i) 有序）。
     if (value instanceof AsterDataValue dataValue) {
       Map<String, Object> m = new LinkedHashMap<>(dataValue.fieldCount() + 1);
-      m.put("_type", dataValue.getTypeName());
+      m.put("__type", dataValue.getTypeName());
       for (int i = 0; i < dataValue.fieldCount(); i++) {
         m.put(dataValue.fieldName(i), normalize(dataValue.fieldValue(i)));
       }

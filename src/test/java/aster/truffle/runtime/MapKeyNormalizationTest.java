@@ -48,7 +48,7 @@ class MapKeyNormalizationTest {
   private static Object get(Object m, Object k) {
     Object r = Builtins.call("Map.get", new Object[]{m, k});
     if (r instanceof java.util.Map<?, ?> mm) {
-      Object t = mm.get("_type");
+      Object t = mm.get("__type");
       if ("Some".equals(t)) return mm.get("value");
       if ("None".equals(t)) return null;
     }

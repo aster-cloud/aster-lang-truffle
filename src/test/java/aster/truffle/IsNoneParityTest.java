@@ -15,7 +15,7 @@ import org.junit.jupiter.params.provider.CsvSource;
  *
  * <p>TS 侧此前把 isNone 实现成「**不是 Some**」（{@code x?.__type !== 'Some'}），
  * 于是 {@code Maybe.isNone(42)} / {@code Maybe.isNone(Ok(1))} 返回 true；
- * 本引擎写的是 {@code "None".equals(m.get("_type"))}——**是** None 才为真。
+ * 本引擎写的是 {@code "None".equals(m.get("__type"))}——**是** None 才为真。
  * 同一条规则两引擎走不同分支 → 跨引擎决策翻转，且 TS 那侧不报错（静默错答案）。
  *
  * <p>TS 侧已改为正向判定后，本测试用**由 TS 编译器产出的同一份 IR** 验证

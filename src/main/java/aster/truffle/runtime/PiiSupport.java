@@ -119,7 +119,7 @@ public final class PiiSupport {
   @SuppressWarnings("unchecked")
   private static Map<String,Object> wrapResult(Map<?,?> input, CoreModel.Result res) {
     Map<String,Object> copy = copyMap(input);
-    Object variant = copy.get("_type");
+    Object variant = copy.get("__type");
     if (!(variant instanceof String name)) {
       return copy;
     }
@@ -133,7 +133,7 @@ public final class PiiSupport {
 
   private static Map<String,Object> wrapOptional(Map<?,?> input, CoreModel.Type innerType) {
     Map<String,Object> copy = copyMap(input);
-    Object variant = copy.get("_type");
+    Object variant = copy.get("__type");
     if (Objects.equals(variant, "Some")) {
       copy.put("value", wrapValue(copy.get("value"), innerType));
     }

@@ -27,7 +27,7 @@ class OptionMapAliasTest {
   /** 构造 {@code Some(v)} 的运行期表示（与 Builtins 内部一致：_type→value 的插入序 Map）。 */
   private static Map<String, Object> some(Object value) {
     Map<String, Object> m = new LinkedHashMap<>();
-    m.put("_type", "Some");
+    m.put("__type", "Some");
     m.put("value", value);
     return m;
   }
@@ -86,7 +86,7 @@ class OptionMapAliasTest {
   void optionMapPassesNoneThrough() throws Exception {
     // None 分支不需要 Lambda（实现里先判 None 直接返回），故可直接验证正向行为。
     Map<String, Object> none = new LinkedHashMap<>();
-    none.put("_type", "None");
+    none.put("__type", "None");
     Object viaMaybe = Builtins.call("Maybe.map", new Object[] {none, "unused"});
     Object viaOption = Builtins.call("Option.map", new Object[] {none, "unused"});
     assertEquals(viaMaybe, viaOption, "None 穿透行为两名字应一致");
