@@ -81,26 +81,40 @@ class MapGuardParityTest {
    * 当成键来数：{@code Map.size(None)} 返回 1、{@code Map.size(Some(1))} 返回 2——
    * **静默错答案**，不报错却给出看起来完全合理的数字。
    *
-   * <p>二维矩阵实测（6 个 Map.* × 6 种输入 = 36 格）：修复前 None 那 6 格两引擎分叉
-   * （TS 拒、此处放行）、Some/Ok/Err 那 18 格两引擎"一致地错"。两侧同步收紧后
-   * 36 格逐格一致。本用例锁住其中的 None 一格。
+   * <p>★必须**逐个函数**参数化，不能只测一个：守卫分布在两条独立路径上
+   * （{@code asMap} 覆盖 get/contains，另五个各自在 checkArity 之后显式拒绝）。
+   * 初版只测了 {@code Map.size}，自查时实测「删掉 {@code Map.remove} 的守卫」
+   * → 测试**仍全绿**，覆盖面对不上「七个函数都拒绝」这个声称。
+   *
+   * <p>已知取舍（两引擎一致，非分叉）：判定只看 {@code _type} 的值是否恰为
+   * Some/None/Ok/Err。故业务 map 若恰好有个键叫 {@code _type} 且值正是这四个词之一，
+   * 会被误拒；值为其它内容（如 {@code "premium"}）则正常放行。TS 侧规则相同。
    */
-  @Test
-  void maybeVariantIsRejected() throws Exception {
-    String json = loadIr("mg-none.json");
+  @ParameterizedTest(name = "{0} 拒绝 Maybe/Result 变体")
+  @CsvSource({
+    "Map.get, var-get.json",
+    "Map.contains, var-contains.json",
+    "Map.size, var-size.json",
+    "Map.put, var-put.json",
+    "Map.remove, var-remove.json",
+    "Map.keys, var-keys.json",
+    "Map.values, var-values.json",
+  })
+  void maybeVariantIsRejected(String op, String fixture) throws Exception {
+    String json = loadIr(fixture);
     try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
       PolyglotException ex =
           assertThrows(
               PolyglotException.class,
               () -> {
-                Value r = ctx.eval(Source.newBuilder("aster", json, "mg-none.json").build());
+                Value r = ctx.eval(Source.newBuilder("aster", json, fixture).build());
                 Value v = r.canExecute() ? r.execute() : r;
                 v.as(Object.class);
               },
-              "None 不是 Map，Map.size 必须拒绝（此前返回 1）");
+              op + " 必须拒绝 Some(1)——变体不是 Map（此前被当成 2 个键的 Map 来数）");
       assertTrue(
-          ex.getMessage().contains("Map.size"),
-          "错误信息应指向 Map.size，实际: " + ex.getMessage());
+          ex.getMessage().contains(op),
+          "错误信息应指向 " + op + "，实际: " + ex.getMessage());
     }
   }
 }
