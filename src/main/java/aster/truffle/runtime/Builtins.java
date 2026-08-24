@@ -810,7 +810,8 @@ public final class Builtins {
     register("Result.isOk", new BuiltinDef(args -> {
       checkArity("Result.isOk", args, 1);
       // Check for Map-based Ok
-      if (args[0] instanceof Map<?,?> m) {
+      Map<?, ?> m = asVariantMap(args[0]);
+      if (m != null) {
         return "Ok".equals(m.get("__type"));
       }
       return false;
@@ -819,7 +820,8 @@ public final class Builtins {
     register("Result.isErr", new BuiltinDef(args -> {
       checkArity("Result.isErr", args, 1);
       // Check for Map-based Err
-      if (args[0] instanceof Map<?,?> m) {
+      Map<?, ?> m = asVariantMap(args[0]);
+      if (m != null) {
         return "Err".equals(m.get("__type"));
       }
       return false;
@@ -828,8 +830,9 @@ public final class Builtins {
     register("Result.unwrap", new BuiltinDef(args -> {
       checkArity("Result.unwrap", args, 1);
       // Check for Map-based Ok
-      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("__type"))) {
-        return m.get("value");
+      Map<?, ?> mOk = asVariantMap(args[0]);
+      if (mOk != null && "Ok".equals(mOk.get("__type"))) {
+        return mOk.get("value");
       }
       throw new BuiltinException(ErrorMessages.unwrapOnUnexpectedVariant("Result.unwrap", "Err"));
     }));
@@ -837,8 +840,9 @@ public final class Builtins {
     register("Result.unwrapErr", new BuiltinDef(args -> {
       checkArity("Result.unwrapErr", args, 1);
       // Check for Map-based Err
-      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("__type"))) {
-        return m.get("value");
+      Map<?, ?> mErr = asVariantMap(args[0]);
+      if (mErr != null && "Err".equals(mErr.get("__type"))) {
+        return mErr.get("value");
       }
       throw new BuiltinException(ErrorMessages.unwrapOnUnexpectedVariant("Result.unwrapErr", "Ok"));
     }));
@@ -846,7 +850,8 @@ public final class Builtins {
     // === Maybe Operations (纯函数) ===
     register("Maybe.isSome", new BuiltinDef(args -> {
       checkArity("Maybe.isSome", args, 1);
-      if (args[0] instanceof Map<?,?> m) {
+      Map<?, ?> m = asVariantMap(args[0]);
+      if (m != null) {
         return "Some".equals(m.get("__type"));
       }
       return false;
@@ -855,7 +860,8 @@ public final class Builtins {
     register("Maybe.isNone", new BuiltinDef(args -> {
       checkArity("Maybe.isNone", args, 1);
       // Check for Map-based None
-      if (args[0] instanceof Map<?,?> m) {
+      Map<?, ?> m = asVariantMap(args[0]);
+      if (m != null) {
         return "None".equals(m.get("__type"));
       }
       return false;
@@ -864,7 +870,8 @@ public final class Builtins {
     // === Option Operations (alias for Maybe) ===
     register("Option.isSome", new BuiltinDef(args -> {
       checkArity("Option.isSome", args, 1);
-      if (args[0] instanceof Map<?,?> m) {
+      Map<?, ?> m = asVariantMap(args[0]);
+      if (m != null) {
         return "Some".equals(m.get("__type"));
       }
       return false;
@@ -873,7 +880,8 @@ public final class Builtins {
     register("Option.isNone", new BuiltinDef(args -> {
       checkArity("Option.isNone", args, 1);
       // Check for Map-based None
-      if (args[0] instanceof Map<?,?> m) {
+      Map<?, ?> m = asVariantMap(args[0]);
+      if (m != null) {
         return "None".equals(m.get("__type"));
       }
       return false;
@@ -881,32 +889,36 @@ public final class Builtins {
 
     register("Option.unwrap", new BuiltinDef(args -> {
       checkArity("Option.unwrap", args, 1);
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
-        return m.get("value");
+      Map<?, ?> mSome = asVariantMap(args[0]);
+      if (mSome != null && "Some".equals(mSome.get("__type"))) {
+        return mSome.get("value");
       }
       throw new BuiltinException(ErrorMessages.unwrapOnUnexpectedVariant("Option.unwrap", "None"));
     }));
 
     register("Option.unwrapOr", new BuiltinDef(args -> {
       checkArity("Option.unwrapOr", args, 2);
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
-        return m.get("value");
+      Map<?, ?> mSome = asVariantMap(args[0]);
+      if (mSome != null && "Some".equals(mSome.get("__type"))) {
+        return mSome.get("value");
       }
       return args[1]; // default value
     }));
 
     register("Maybe.unwrap", new BuiltinDef(args -> {
       checkArity("Maybe.unwrap", args, 1);
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
-        return m.get("value");
+      Map<?, ?> mSome = asVariantMap(args[0]);
+      if (mSome != null && "Some".equals(mSome.get("__type"))) {
+        return mSome.get("value");
       }
       throw new BuiltinException(ErrorMessages.unwrapOnUnexpectedVariant("Maybe.unwrap", "None"));
     }));
 
     register("Maybe.unwrapOr", new BuiltinDef(args -> {
       checkArity("Maybe.unwrapOr", args, 2);
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
-        return m.get("value");
+      Map<?, ?> mSome = asVariantMap(args[0]);
+      if (mSome != null && "Some".equals(mSome.get("__type"))) {
+        return mSome.get("value");
       }
       return args[1]; // default value
     }));
@@ -915,8 +927,9 @@ public final class Builtins {
     register("Maybe.withDefault", new BuiltinDef(args -> {
       checkArity("Maybe.withDefault", args, 2);
       // Check for Map-based Some
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
-        return m.get("value");
+      Map<?, ?> mSome = asVariantMap(args[0]);
+      if (mSome != null && "Some".equals(mSome.get("__type"))) {
+        return mSome.get("value");
       }
       return args[1]; // default value
     }));
@@ -925,12 +938,14 @@ public final class Builtins {
       checkArity("Maybe.map", args, 2);
 
       // If None, return None
-      if (args[0] instanceof Map<?,?> m && "None".equals(m.get("__type"))) {
+      Map<?, ?> mNone = asVariantMap(args[0]);
+      if (mNone != null && "None".equals(mNone.get("__type"))) {
         return java.util.Map.of("__type", "None");
       }
 
       // If Some, apply function
-      if (args[0] instanceof Map<?,?> m && "Some".equals(m.get("__type"))) {
+      Map<?, ?> mSome = asVariantMap(args[0]);
+      if (mSome != null && "Some".equals(mSome.get("__type"))) {
         if (!(args[1] instanceof LambdaValue lambda)) {
           throw new BuiltinException(ErrorMessages.operationExpectedType("Maybe.map", "Lambda", typeName(args[1])));
         }
@@ -940,7 +955,7 @@ public final class Builtins {
           throw new BuiltinException(ErrorMessages.lambdaMissingCallTarget("Maybe.map"));
         }
 
-        Object value = m.get("value");
+        Object value = mSome.get("value");
         Object[] capturedValues = lambda.getCapturedValues();
         Object[] callArgs = new Object[1 + capturedValues.length];
         callArgs[0] = value;
@@ -977,7 +992,8 @@ public final class Builtins {
       checkArity("Result.mapOk", args, 2);
 
       // Check for Map-based Err - return unchanged
-      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("__type"))) {
+      Map<?, ?> mErr = asVariantMap(args[0]);
+      if (mErr != null && "Err".equals(mErr.get("__type"))) {
         return args[0];
       }
 
@@ -992,8 +1008,9 @@ public final class Builtins {
       }
 
       Object value;
-      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("__type"))) {
-        value = m.get("value");
+      Map<?, ?> mOk = asVariantMap(args[0]);
+      if (mOk != null && "Ok".equals(mOk.get("__type"))) {
+        value = mOk.get("value");
       } else {
         throw new BuiltinException(ErrorMessages.operationExpectedType("Result.mapOk", "Result (Ok or Err)", typeName(args[0])));
       }
@@ -1016,7 +1033,8 @@ public final class Builtins {
       checkArity("Result.mapErr", args, 2);
 
       // Check for Map-based Ok - return unchanged
-      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("__type"))) {
+      Map<?, ?> mOk = asVariantMap(args[0]);
+      if (mOk != null && "Ok".equals(mOk.get("__type"))) {
         return args[0];
       }
 
@@ -1031,8 +1049,9 @@ public final class Builtins {
       }
 
       Object value;
-      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("__type"))) {
-        value = m.get("value");
+      Map<?, ?> mErr = asVariantMap(args[0]);
+      if (mErr != null && "Err".equals(mErr.get("__type"))) {
+        value = mErr.get("value");
       } else {
         throw new BuiltinException(ErrorMessages.operationExpectedType("Result.mapErr", "Result (Ok or Err)", typeName(args[0])));
       }
@@ -1055,7 +1074,8 @@ public final class Builtins {
       checkArity("Result.tapError", args, 2);
 
       // Check for Map-based Ok - return unchanged
-      if (args[0] instanceof Map<?,?> m && "Ok".equals(m.get("__type"))) {
+      Map<?, ?> mOk = asVariantMap(args[0]);
+      if (mOk != null && "Ok".equals(mOk.get("__type"))) {
         return args[0];
       }
 
@@ -1070,8 +1090,9 @@ public final class Builtins {
       }
 
       Object value;
-      if (args[0] instanceof Map<?,?> m && "Err".equals(m.get("__type"))) {
-        value = m.get("value");
+      Map<?, ?> mErr = asVariantMap(args[0]);
+      if (mErr != null && "Err".equals(mErr.get("__type"))) {
+        value = mErr.get("value");
       } else {
         throw new BuiltinException(ErrorMessages.operationExpectedType("Result.tapError", "Result (Ok or Err)", typeName(args[0])));
       }
@@ -1541,7 +1562,64 @@ public final class Builtins {
   }
 
   private static Object unwrap(Object value) {
-    return AsterPiiValue.unwrap(value);
+    return hostUnwrap(AsterPiiValue.unwrap(value));
+  }
+
+  /**
+   * 穿透 GraalVM 的宿主对象包装，取回其中的 Java 值。
+   *
+   * <p>★为什么需要（aster-lang-ts#138）：宿主经 polyglot 传进来的
+   * {@code Map}，到达 builtin 时是 {@code com.oracle.truffle.host.HostObject}
+   * 包装，{@code instanceof Map} 为 **false**。于是
+   * {@code Maybe.withDefault({__type:"Some",value:7}, 0)} 会落到兜底分支返回
+   * {@code 0}——**静默错答案**，而 TS 侧同样输入返回 7。
+   *
+   * <p>这一层极难自查：{@code Builtins.typeName} 走 InteropLibrary 能穿透、
+   * 直接 {@code Builtins.call} 传的是裸 Java 对象、{@code Value.as(Object.class)}
+   * 会自动解包——三种常用观察手段都显示"值是对的"，只有在
+   * {@code BuiltinCallNode} 实际调用点插桩才能看到 HostObject。
+   *
+   * <p>用 {@code Env.isHostObject/asHostObject} 而非 {@code instanceof HostObject}：
+   * 后者是 {@code com.oracle.truffle.host} 包内类型，不对外暴露。
+   *
+   * <p>本方法**绝不抛异常**：它位于所有值判定的公共路径上，自己炸会把
+   * 「类型判定不准」升级成「任何调用都炸」。识别不了就原样返回。
+   */
+  /**
+   * 取出变体的底层 map：**先穿透宿主包装**，再判定是否为 map 形态。
+   *
+   * <p>所有 Maybe/Result 的变体判定都必须走这里，不能直接写
+   * {@code args[0] instanceof Map<?,?>}——宿主经 polyglot 传进来的 map 是
+   * {@code HostObject} 包装，那个 instanceof 恒为 false，会让
+   * {@code Maybe.withDefault(Some(7), 0)} 静默返回兜底值 0（aster-lang-ts#138）。
+   *
+   * <p>与 {@link #isVariantShaped} 共用同一条穿透逻辑：那边**拒绝**变体
+   * （{@code Map.*} 不接受 Maybe/Result），这边**接受**变体。二者必须对同一个值
+   * 给出一致判断，否则会出现「Map.size 说它不是变体所以当普通 map 收下、
+   * Maybe.map 说它是变体所以接受」的两头堵。
+   *
+   * @return 变体的底层 map；若不是 map 形态则返回 null
+   */
+  private static Map<?, ?> asVariantMap(Object value) {
+    Object v = unwrap(value);
+    return v instanceof Map<?, ?> m ? m : null;
+  }
+
+  @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+  private static Object hostUnwrap(Object value) {
+    if (value == null) {
+      return null;
+    }
+    try {
+      com.oracle.truffle.api.TruffleLanguage.Env env =
+          aster.truffle.AsterLanguage.getContext().getEnv();
+      if (env != null && env.isHostObject(value)) {
+        return env.asHostObject(value);
+      }
+    } catch (Exception | LinkageError ignored) {
+      // 识别失败按原值处理——见上方「绝不抛异常」。
+    }
+    return value;
   }
 
   /**
@@ -1818,7 +1896,13 @@ public final class Builtins {
    * <p>Maybe/Result 不是 Map，理应被 {@code Map.*} 拒绝——两引擎同步收紧。
    */
   private static boolean isVariantShaped(Object v) {
-    if (!(v instanceof Map<?, ?> m)) {
+    // ★与 asVariantMap 共用同一条穿透逻辑（aster-lang-ts#138）：
+    // 宿主经 polyglot 传进来的 map 是 HostObject 包装，裸 instanceof 认不出。
+    // 若这里不穿透而 Maybe.* 那边穿透，同一个值会被两处判成不同结论——
+    // Map.size 当它是普通 map 收下（回到 #134 修掉的静默错答案）、
+    // Maybe.map 当它是变体接受，两头不一致。
+    Map<?, ?> m = asVariantMap(v);
+    if (m == null) {
       return false;
     }
     Object t = m.get("__type");
