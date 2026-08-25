@@ -181,6 +181,17 @@ class CoreIrEvalCli {
         // their first rule regardless of the requested entry. Hoist the requested
         // entry Func to the front of the decls so the loader's first-Func fallback
         // selects it. (Test-only IR reshaping; production runtime is untouched.)
+        //
+        // ★仅靠 hoist 不够：Loader 的选择顺序是
+        //     ①按 funcName 精确查找 → ②回落到名为 "main" 的规则 → ③回落到首个 Func
+        // parse() 传的 funcName 恒为 DEFAULT_FUNCTION（"main"），且它是 static final、
+        // 类初始化时读取，本 CLI 无法逐请求改。于是当样本里**存在名为 main 的规则**时，
+        // ②会命中它，hoist 到首位的 ③永远轮不上——请求 entry=helper 却静默执行了 main。
+        // 实测 entry_annotation 样本：helper(21) 应得 42，实际得 22（= main 的 21+1）。
+        // 全语料仅此一个样本有名为 main 的规则，故长期没暴露。
+        //
+        // 修法：把**非目标**的同名 main 规则改名，让 ②失效、③选中 hoist 到首位的目标。
+        // 改的是本 CLI 内存里的 IR 副本（test-only），不触碰样本文件与生产运行时。
         if (!entry.isEmpty() && coreModule.decls != null) {
             java.util.List<CoreModel.Decl> decls = new java.util.ArrayList<>(coreModule.decls);
             int idx = -1;
@@ -190,8 +201,18 @@ class CoreIrEvalCli {
                     break;
                 }
             }
-            if (idx > 0) {
-                decls.add(0, decls.remove(idx));
+            if (idx >= 0) {
+                // 目标不叫 main 时，把其它叫 main 的规则改名，避免 Loader 的 ②号回落抢走入口。
+                if (!"main".equals(entry)) {
+                    for (CoreModel.Decl d : decls) {
+                        if (d instanceof CoreModel.Func f && "main".equals(f.name)) {
+                            f.name = "__parity_shadowed_main";
+                        }
+                    }
+                }
+                if (idx > 0) {
+                    decls.add(0, decls.remove(idx));
+                }
                 coreModule.decls = decls;
             }
         }
