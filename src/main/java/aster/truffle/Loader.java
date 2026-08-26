@@ -507,6 +507,31 @@ public final class Loader {
         }
       }
 
+      // ★命名空间函数不存在时，直接报「未定义」，别退化成成员访问（#99）。
+      //
+      //   `Foo.bar(n)` 在 Core IR 里是 Call{target: Name("Foo.bar")}。若 Foo.bar
+      //   既不是 builtin 也不是用户规则，下面的 buildExpr 会把它当普通表达式解析，
+      //   最终走到 MemberAccessNode，抛出：
+      //       无法访问成员：对象类型 java.lang.String 不支持成员访问，成员：bar
+      //       （若为宿主对象，请确认 polyglot Context 配置了恰当的 HostAccess…）
+      //
+      //   这条消息把排查引向 polyglot/HostAccess 配置——一整个无关子系统；
+      //   而真实原因只是**函数名写错或 builtin 不存在**。报的类型也是错的
+      //   （Foo 并非 String）。TS 侧对同一输入给的是 `Undefined function 'Foo.bar'`。
+      //
+      //   判据用「含点号 + 首段是已知 builtin 命名空间」而非无条件拦截：
+      //   合法的宿主对象成员访问（`applicant.age`）在 Core IR 里是 Member 节点、
+      //   不是 Call{Name}，本就走不到这里；而形如 `someVar.field(x)` 的动态调用
+      //   首段不会是命名空间名，故不受影响。
+      if (c.target instanceof CoreModel.Name nsName
+          && nsName.name != null
+          && nsName.name.indexOf('.') > 0
+          && !userFunctionNames.contains(nsName.name)
+          && !Builtins.has(nsName.name)
+          && Builtins.hasNamespace(nsName.name.substring(0, nsName.name.indexOf('.')))) {
+        throw new RuntimeException("Undefined function '" + nsName.name + "'");
+      }
+
       // 普通函数调用：使用 CallNode
       Node target = buildExpr(c.target);
       var args = new java.util.ArrayList<Node>();
