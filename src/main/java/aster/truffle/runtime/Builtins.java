@@ -1173,6 +1173,25 @@ public final class Builtins {
   }
 
   /**
+   * 是否存在以 {@code ns} 为前缀的 builtin 命名空间（如 "Text"、"List"、"Maybe"）。
+   *
+   * <p>用于把「命名空间函数不存在」与「宿主对象成员访问」区分开（#99）：
+   * `Text.nosuch(x)` 应报 Undefined function，而 `someVar.field(x)` 这类
+   * 动态调用不该被误拦——判据是首段是否为**已注册的命名空间**。
+   *
+   * <p>不缓存：注册表在 static 初始化后不再变动，且本方法只在**编译期**
+   * （Loader 建树）调用，不在热路径上。
+   */
+  public static boolean hasNamespace(String ns) {
+    if (ns == null || ns.isEmpty()) return false;
+    String prefix = ns + ".";
+    for (String key : REGISTRY.keySet()) {
+      if (key.startsWith(prefix)) return true;
+    }
+    return false;
+  }
+
+  /**
    * 取出已注册的 BuiltinDef 实例本身（不调用它）。
    *
    * <p>仅供测试断言**别名共享同一实例**用：`Option.map` 之类的别名必须复用
