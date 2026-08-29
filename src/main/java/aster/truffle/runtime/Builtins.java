@@ -161,14 +161,22 @@ public final class Builtins {
       checkArity("eq", args, 2);
       if (isDecimal(args[0]) || isDecimal(args[1])) return toDecimal(args[0]).compareTo(toDecimal(args[1])) == 0;
       if (isNumber(args[0]) && isNumber(args[1])) return toDouble(args[0]) == toDouble(args[1]);
-      return Objects.equals(unwrap(args[0]), unwrap(args[1]));
+      // ★用 valueEquals 而非 Objects.equals：AsterDataValue / AsterListValue /
+      //   AsterMapValue 都没覆写 equals，Objects.equals 会落回**引用相等**——
+      //   字段全同的两个结构体判 false，而 TS 侧是结构相等判 true。
+      //   实测（tier1 eval 门）：`Point with x set to 1, y set to 2` 两个实例
+      //   ts=true / java=false，同一条规则跨引擎决策翻转且不报错。
+      //   本仓自身也不自洽：List.contains / List.distinct 一直走 valueEquals
+      //   （结构相等），只有 == / != 走 Objects.equals。归一到 valueEquals。
+      return valueEquals(args[0], args[1]);
     }));
 
     register("ne", new BuiltinDef(args -> {
       checkArity("ne", args, 2);
       if (isDecimal(args[0]) || isDecimal(args[1])) return toDecimal(args[0]).compareTo(toDecimal(args[1])) != 0;
       if (isNumber(args[0]) && isNumber(args[1])) return toDouble(args[0]) != toDouble(args[1]);
-      return !Objects.equals(unwrap(args[0]), unwrap(args[1]));
+      // 与 eq 严格互补：必须走同一套语义，否则会出现 a==b 与 a!=b 同时为 true 的荒谬结果。
+      return !valueEquals(args[0], args[1]);
     }));
 
     register("lt", new BuiltinDef(args -> {
