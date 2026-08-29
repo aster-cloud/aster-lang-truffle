@@ -563,11 +563,38 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     return "BuiltinCallNode(" + builtinName + ", " + argNodes.length + " args)";
   }
 
+  /**
+   * 懒插入 {@link ParallelListMapNode} —— 必须**加锁**（issue #104 正文）。
+   *
+   * <p>★原实现是无锁的 check-then-insert：
+   * <pre>
+   *   if (parallelListMapNode == null) { ... parallelListMapNode = insert(...); }
+   * </pre>
+   * 单线程下没问题，但 workflow 的多个 step 在 executor worker 线程上**并发**执行同一段
+   * AST（{@code Exec.exec(expr, materializedFrame)} 共享节点树）。两个 step 同时调
+   * {@code List.map} 时会双双看到 null、双双 {@code insert()}——Truffle 的
+   * {@code insert()} 会改写 {@code @Child} 字段与父指针，并发改写共享 AST 属未定义行为。
+   *
+   * <p>用 {@code Node} 自身的 {@code getLock()}（Truffle 官方为 AST 改写提供的锁），
+   * 而非 {@code synchronized(this)}：前者与运行时其它 AST 改写路径共用同一把锁，
+   * 后者只能挡住本方法自己的并发。锁内**再查一次** null（double-checked）——
+   * 先到的线程已插入时，后到者直接复用而不重复 insert。
+   *
+   * <p>快路径（已插入）不进锁：这是热路径，PE 后 {@code parallelListMapNode} 是
+   * PE-constant，判空会被折叠掉，不引入稳态开销。
+   */
   private ParallelListMapNode getParallelListMapNode() {
-    if (parallelListMapNode == null) {
-      CompilerDirectives.transferToInterpreterAndInvalidate();
-      parallelListMapNode = insert(ParallelListMapNode.create());
+    ParallelListMapNode local = parallelListMapNode;
+    if (local != null) {
+      return local;   // 快路径：已插入，无需加锁
     }
-    return parallelListMapNode;
+    CompilerDirectives.transferToInterpreterAndInvalidate();
+    synchronized (getLock()) {
+      // double-check：可能已被另一线程插入
+      if (parallelListMapNode == null) {
+        parallelListMapNode = insert(ParallelListMapNode.create());
+      }
+      return parallelListMapNode;
+    }
   }
 }

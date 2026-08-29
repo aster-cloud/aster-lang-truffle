@@ -57,6 +57,35 @@ public final class AsterLanguage extends TruffleLanguage<AsterContext> {
   }
 
   /**
+   * 声明多线程访问策略（issue #104 正文）。
+   *
+   * <p>★为什么必须显式覆写：workflow 的 step 体在 {@code AsyncTaskRegistry} 的
+   * executor worker 线程上执行 Truffle 节点树（{@code Exec.exec(expr, materializedFrame)}），
+   * 而 {@code TruffleLanguage} 的**默认**实现只允许单线程访问——除非语言显式声明支持。
+   * 不覆写时，Truffle 是否放行取决于运行时的「单 context 快速路径」等实现细节，
+   * 属于「侥幸可用」而非「契约保证」。
+   *
+   * <p>本语言确实需要多线程：workflow 并行 step、{@code List.map} 的并行化路径
+   * （{@code ParallelListMapNode}）都会在非 eval 线程上跑 guest 代码。故显式返回 true，
+   * 把「支持多线程」变成**声明的契约**——运行时据此走多线程安全路径，
+   * 而不是依赖未定义行为。
+   *
+   * <p>★这不是「打开一个开关就安全了」：声明多线程后，共享 AST 的并发改写必须自行加锁。
+   * 与本次改动配套的是 {@code BuiltinCallNode.getParallelListMapNode()} 的
+   * double-checked + {@code getLock()}——那处此前是无锁 check-then-insert，
+   * 两个 step 并发调 {@code List.map} 会双双 {@code insert()} 改写同一个 {@code @Child}。
+   *
+   * <p>范围声明：本方法只声明策略、消除「未定义行为」这一层。issue 正文提到的
+   * 「worker 线程未经 polyglot API enter context」本身（{@code TruffleContext.enter()}）
+   * 未在此处理——实测当前 {@code AsterLanguage.getContext()} 在 worker 线程上可正常返回，
+   * 且四个并发 Context 各自跑 workflow 均成功，未复现该失败。
+   */
+  @Override
+  protected boolean isThreadAccessAllowed(Thread thread, boolean singleThreaded) {
+    return true;
+  }
+
+  /**
    * 释放 context 持有的原生资源。
    *
    * <p>{@link AsterContext#getAsyncRegistry()} 会懒建一个 {@code AsyncTaskRegistry}，
