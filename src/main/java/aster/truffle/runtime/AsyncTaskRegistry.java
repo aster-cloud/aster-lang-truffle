@@ -1078,9 +1078,30 @@ public final class AsyncTaskRegistry {
       }
       failure = t;
       RetryPolicy policy = retryPolicies.get(info.taskId);
+      boolean movedToPending = false;
       if (policy != null) {
         workflowRetryTasks.add(info.taskId);
         Exception failureException = (t instanceof Exception) ? (Exception) t : new Exception(t);
+
+        // ★顺序：先把状态推进到 PENDING，**再**调 onTaskFailed（issue #105 body）。
+        //
+        //   此前是反的：onTaskFailed 内部的 scheduleRetry 已经把 DelayedTask 入队
+        //   并启动 poller，返回后才 `state.status.set(PENDING)`。若 poller 恰好在这
+        //   两步之间触发，resumeTask → scheduleTask 看到状态仍是 RUNNING 就直接 return
+        //   （scheduleTask 对非 PENDING 是静默丢弃且**不重新入队**）——此时 DelayedTask
+        //   已出队且不回队，**重试被永久丢弃**；随后任务被置回 PENDING 且仍在 readyQueue
+        //   里，executeUntilComplete 反复 submit 但 CAS submitted 失败只拿到一个永不完成
+        //   的 future → barrier.join() 永久阻塞。
+        //
+        //   handleTaskTimeout 的重试分支（本文件下方）一直是「先 CAS RUNNING→PENDING
+        //   再 onTaskFailed」的正确顺序——两处不一致本身就是证据。此处与之对齐。
+        //
+        //   用 CAS 而非无条件 set：与超时路径同一写法，避免覆盖已被其他路径推进的终态。
+        movedToPending = state.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.PENDING);
+        if (movedToPending) {
+          state.exception = t;
+        }
+
         try {
           onTaskFailed(info.taskId, failureException, replayMode);
           retryScheduled = true;
@@ -1090,13 +1111,15 @@ public final class AsyncTaskRegistry {
           attemptCounters.remove(info.taskId);
           workflowRetryTasks.remove(info.taskId);
           pendingRetryTasks.remove(info.taskId);
+          // 重试没排上：把状态退回 RUNNING，好让 handleFinalTaskFailure 的
+          // CAS(RUNNING→FAILED) 仍然成立——否则任务会卡在 PENDING 永不终结。
+          if (movedToPending) {
+            state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.RUNNING);
+          }
         }
       }
 
-      if (retryScheduled) {
-        state.exception = t;
-        state.status.set(TaskStatus.PENDING);
-      } else {
+      if (!retryScheduled) {
         handleFinalTaskFailure(info, state, failure);
       }
     } finally {
@@ -1707,7 +1730,24 @@ public final class AsyncTaskRegistry {
     if (info == null || state == null) {
       return;
     }
-    if (state.status.get() != TaskStatus.PENDING) {
+    TaskStatus current = state.status.get();
+    if (current != TaskStatus.PENDING) {
+      // ★非 PENDING 不能一律静默丢弃（issue #105 body 的第二半）。
+      //   若该任务是从 DelayedTask 出队来的，此刻直接 return 意味着这次重试**永久消失**
+      //   ——DelayedTask 已出队且没有任何路径把它放回去。
+      //
+      //   但只对**非终态**重排：RUNNING 是「上一代次还没落定」的瞬时情形
+      //   （如失败路径正处在 RUNNING→PENDING 的途中），稍后重排即可；
+      //   而 COMPLETED/FAILED/CANCELLED 是终态，重排只会无限自旋——必须丢弃。
+      //   与依赖未满足分支复用同一套 requeueDelayedTask 机制。
+      boolean terminal = current == TaskStatus.COMPLETED
+          || current == TaskStatus.FAILED
+          || current == TaskStatus.CANCELLED;
+      if (sourceDelayedTask != null && !terminal) {
+        requeueDelayedTask(sourceDelayedTask, 100L);
+      } else if (sourceDelayedTask != null) {
+        pendingRetryTasks.remove(taskId, sourceDelayedTask);
+      }
       return;
     }
     if (!isDependencySatisfied(taskId)) {
