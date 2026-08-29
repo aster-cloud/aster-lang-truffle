@@ -81,6 +81,9 @@ public abstract class AwaitNode extends AsterExpressionNode {
    * </ul>
    * PENDING/RUNNING 时调用 {@code executeNext()} 推进调度后继续轮询。
    */
+  /** 轮询让步时长：短睡眠替代 Thread.yield()，既省 CPU 又可被 interrupt 打断。 */
+  static final long POLL_PARK_MILLIS = 1L;
+
   static Object pollUntilTerminal(AsyncTaskRegistry registry, String taskId) {
     while (true) {
       TaskState state = registry.getTaskState(taskId);
@@ -111,8 +114,27 @@ public abstract class AwaitNode extends AsterExpressionNode {
       // 任务尚未完成 (PENDING 或 RUNNING) - 调度下一个任务并继续等待
       registry.executeNext();
 
-      // 避免忙等，让出 CPU
-      Thread.yield();
+      // ★让出 CPU 时必须**可中断**（issue #106 body）。
+      //   原实现只有 Thread.yield()：它不响应中断，于是
+      //   - 被 await 的任务若永远到不了终态，本线程就 100% CPU 自旋；
+      //   - executor.shutdownNow() 发出的 interrupt 被完全无视，
+      //     awaitTermination(30s) 必然超时 → 非守护线程永久泄漏、阻止 JVM 退出，
+      //     disposeContext 被硬拖 30 秒。
+      //
+      //   改为 Thread.sleep(park) 并显式检查中断：
+      //   - sleep 会抛 InterruptedException，shutdownNow 得以真正终止本线程；
+      //   - 短睡眠（1ms）比 yield 更省 CPU，且对 workflow 这种毫秒级调度粒度无影响。
+      //   捕获后**恢复中断位**再抛，不吞掉中断信号。
+      if (Thread.interrupted()) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException("Await interrupted while waiting for task: " + taskId);
+      }
+      try {
+        Thread.sleep(POLL_PARK_MILLIS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();   // 恢复中断位，交给上层决定
+        throw new RuntimeException("Await interrupted while waiting for task: " + taskId, e);
+      }
     }
   }
 }
