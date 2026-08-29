@@ -56,7 +56,23 @@ public final class Builtins {
     }
   }
 
-  private static final Map<String, BuiltinDef> REGISTRY = new HashMap<>();
+  /**
+   * builtin 注册表 —— **必须是 ConcurrentHashMap**（issue #107 正文）。
+   *
+   * <p>★原为普通 {@code HashMap}，而 {@link #register(String, BuiltinDef)} 是
+   * {@code public static}，确有静态块之外的运行时调用先例
+   * （如测试里注册测试专用 builtin）。任何运行时 {@code register} 与其他线程的
+   * {@code Builtins.call} 并发，即是对非线程安全 HashMap 的写读竞态——
+   * 轻则丢条目，重则结构损坏（HashMap 并发扩容可致读操作死循环）。
+   *
+   * <p>本仓正好具备触发条件：workflow 的 step 体在 executor worker 线程上执行，
+   * 那里会调 {@code Builtins.call}；而 {@code register} 可被任意线程调用。
+   *
+   * <p>★注意本改动**不解决**「注册对所有 Context 全局可见」这一层（跨租户污染面）——
+   * 那要求把注册表做成 per-Context 状态，是独立的架构变更。
+   * 这里只消除数据结构层面的竞态。
+   */
+  private static final Map<String, BuiltinDef> REGISTRY = new java.util.concurrent.ConcurrentHashMap<>();
 
   // Date.* epoch-day 边界（0001-01-01 .. 9999-12-31）。声明在 static 注册块之前——
   // 块内 Date.addDays 引用它们，Java 禁止前向引用后声明的 static 字段。
@@ -1157,6 +1173,24 @@ public final class Builtins {
   /**
    * 注册builtin函数
    */
+  /**
+   * null-safe 查表 —— {@code ConcurrentHashMap} 对 null 键抛 NPE（issue #107）。
+   *
+   * <p>★换用 ConcurrentHashMap 后必须补这一层：{@code canonicalName(null)} 返回 null，
+   * 而 {@code HashMap.get(null)} 老实返回 null、{@code ConcurrentHashMap.get(null)}
+   * **抛 NullPointerException**。不补的话，「换个 Map 实现」这个看似无害的改动
+   * 会把「查不到」变成「崩溃」。
+   */
+  private static BuiltinDef lookup(String rawName) {
+    String key = canonicalName(rawName);
+    return key == null ? null : REGISTRY.get(key);
+  }
+
+  private static boolean hasKey(String rawName) {
+    String key = canonicalName(rawName);
+    return key != null && REGISTRY.containsKey(key);
+  }
+
   public static void register(String name, BuiltinDef def) {
     REGISTRY.put(name, def);
   }
@@ -1168,7 +1202,7 @@ public final class Builtins {
    * @return 返回值，如果不存在返回null
    */
   public static Object call(String name, Object[] args) throws BuiltinException {
-    BuiltinDef def = REGISTRY.get(canonicalName(name));
+    BuiltinDef def = lookup(name);
     if (def == null) return null;
     return def.impl.call(args);
   }
@@ -1177,7 +1211,7 @@ public final class Builtins {
    * 检查builtin是否存在
    */
   public static boolean has(String name) {
-    return REGISTRY.containsKey(canonicalName(name));
+    return hasKey(name);
   }
 
   /**
@@ -1212,7 +1246,7 @@ public final class Builtins {
    * 同类的 `register` 也是 public。返回的是不可变的函数对象，不泄漏可变状态。
    */
   public static BuiltinDef defOf(String name) {
-    return REGISTRY.get(canonicalName(name));
+    return lookup(name);
   }
 
   /**
@@ -1221,7 +1255,7 @@ public final class Builtins {
    * @return effects集合，如果不存在返回null
    */
   public static Set<String> getEffects(String name) {
-    BuiltinDef def = REGISTRY.get(canonicalName(name));
+    BuiltinDef def = lookup(name);
     return def != null ? def.requiredEffects : null;
   }
 
