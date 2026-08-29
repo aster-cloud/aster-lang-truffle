@@ -1687,20 +1687,43 @@ public final class AsyncTaskRegistry {
   private void pollDelayedTasks() {
     while (running) {
       try {
+        // ★两处修正（issue #108 正文）：
+        //
+        //   1) 一轮排空**全部**到期任务，而不是每 100ms 只处理一个。
+        //      原实现用 `if`（非 while）：N 个同时到期的重试要 N×100ms 才排空，
+        //      重试风暴下退避语义被人为拉长——用户配的是 10ms backoff，
+        //      实际却因排队变成几秒。
+        //
+        //   2) 提交动作移出临界区。原实现在持有 delayQueueLock 期间调
+        //      resumeTask → scheduleTask → submitTask（含 executor.submit、
+        //      timeoutScheduler.schedule）——把无关的调度 IO 圈进了本该只保护
+        //      队列结构的锁里，既拉长持锁时间，也给「提交路径回头再取该锁」
+        //      埋下重入/死锁隐患。
+        //
+        //   先在锁内**只做出队**（把到期任务收进本地列表），出锁后再逐个 resume。
+        java.util.List<DelayedTask> due = new java.util.ArrayList<>();
         delayQueueLock.lock();
         try {
-          DelayedTask task = delayQueue.peek();
           long now = this.determinismContext.clock().now().toEpochMilli();
-
-          if (task != null && task.triggerAtMs <= now) {
+          DelayedTask task;
+          while ((task = delayQueue.peek()) != null && task.triggerAtMs <= now) {
             delayQueue.poll();
-            logger.fine(String.format("Triggering delayed retry for workflow %s (attempt %d)",
-                task.workflowId, task.attemptNumber));
-
-            resumeTask(task);
+            due.add(task);
           }
         } finally {
           delayQueueLock.unlock();
+        }
+        for (DelayedTask task : due) {
+          logger.fine(String.format("Triggering delayed retry for workflow %s (attempt %d)",
+              task.workflowId, task.attemptNumber));
+          try {
+            resumeTask(task);
+          } catch (RuntimeException e) {
+            // 单个任务恢复失败不得中断 poller——否则一个坏任务会让**所有**
+            // 后续重试永久停摆（poller 线程退出后没有任何路径重启它）。
+            logger.log(Level.WARNING,
+                "恢复延迟任务失败 taskId=" + task.taskId + " workflowId=" + task.workflowId, e);
+          }
         }
 
         // 轮询间隔 100ms
