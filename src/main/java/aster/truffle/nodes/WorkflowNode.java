@@ -134,6 +134,18 @@ public final class WorkflowNode extends Node {
     }
 
     // 2. 注册任务并声明依赖关系
+    //
+    // ★注册循环必须自带回滚（issue #109 body）。此前它在下面第 3 步的 try/finally
+    //   **之外**：循环第 i 步抛异常时（resolveDependencyIds 的 "Unknown workflow
+    //   dependency"、或 DependencyGraph.addTask 的循环依赖检测），第 0..i-1 步已注册
+    //   的任务永远留在共享 registry —— remainingTasks 已递增且无人递减、无人移除。
+    //
+    //   后果是**永久毒化该 Context**：泄漏任务中无依赖者会被后续无关 workflow 当作
+    //   ready 幽灵执行（副作用在错误时刻触发）；依赖未注册任务者永远不 ready，
+    //   于是此后每次都撞 executeUntilComplete 的死锁检测。即一个含循环依赖的坏程序
+    //   会打断该 Context 之后所有 workflow 求值。
+    java.util.List<String> registeredTaskIds = new java.util.ArrayList<>(taskExprs.length);
+    try {
     for (int i = 0; i < taskExprs.length; i++) {
       Node expr = taskExprs[i];
       String stepName = taskNames[i];
@@ -168,6 +180,23 @@ public final class WorkflowNode extends Node {
       Set<String> depIds = resolveDependencyIds(stepName, nameToId);
       // 使用显式 workflowId 注册，避免并发 workflow 时全局字段被覆盖
       registry.registerTaskWithWorkflowId(taskId, callable, depIds, workflowId);
+      // 只记录**注册成功**的 id：registerTaskWithWorkflowId 自身抛出时
+      // 该任务未进入 registry，不能进回滚名单（否则 removeTask 会误删同名残留）。
+      registeredTaskIds.add(taskId);
+    }
+    } catch (Throwable registrationFailure) {
+      // 回滚本次已注册的部分，再把原异常原样抛出——绝不吞掉。
+      for (String registeredId : registeredTaskIds) {
+        try {
+          registry.removeTask(registeredId);
+        } catch (Throwable cleanupFailure) {
+          // 清理失败不得掩盖原始失败原因，记录后继续清理其余任务。
+          logger.log(Level.WARNING,
+              String.format("回滚注册失败 [workflowId=%s, taskId=%s]", workflowId, registeredId),
+              cleanupFailure);
+        }
+      }
+      throw registrationFailure;
     }
 
     // 3. 执行工作流（带超时控制）

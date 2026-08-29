@@ -615,7 +615,27 @@ public final class AsyncTaskRegistry {
 
   public void removeTask(String taskId) {
     TaskInfo info = taskInfos.remove(taskId);
-    tasks.remove(taskId);
+    TaskState removedState = tasks.remove(taskId);
+
+    // ★移除一个**尚未进入终态**的任务时必须扣减 remainingTasks（issue #109 body）。
+    //   registerInternal 在注册时 incrementAndGet，而此前 removeTask 只清 map、
+    //   不动计数器 —— 于是「注册后未执行完就被移除」的任务会把计数器永久抬高，
+    //   该 Context 后续任何 workflow 都撞 executeUntilComplete 的
+    //   「死锁检测：无就绪任务但仍有 N 个任务待完成」。
+    //
+    //   实测：坏 workflow（含未知依赖）之后，同一 Context 里一个完全合法的
+    //   workflow 直接死于该异常——只清 map 不扣计数修不好这条链路。
+    //
+    //   CAS 守卫与 cancelTask / runTask 终态路径同一套：只有把 PENDING/RUNNING
+    //   推进到终态成功的那一次才扣减，避免与它们双减。
+    if (removedState != null) {
+      boolean transitioned =
+          removedState.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)
+              || removedState.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.CANCELLED);
+      if (transitioned) {
+        remainingTasks.decrementAndGet();
+      }
+    }
 
     // 从依赖图移除，避免内存泄漏
     synchronized (graphLock) {
