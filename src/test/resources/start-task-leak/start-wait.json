@@ -1,0 +1,1 @@
+{"name": "leak.probe", "decls": [{"kind": "Func", "name": "run", "params": [], "ret": {"kind": "TypeName", "name": "Int"}, "effects": ["io", "Async"], "body": {"kind": "Block", "statements": [{"kind": "Start", "name": "t", "expr": {"kind": "Int", "value": 42}}, {"kind": "Wait", "names": ["t"]}, {"kind": "Return", "expr": {"kind": "Int", "value": 0}}]}}]}

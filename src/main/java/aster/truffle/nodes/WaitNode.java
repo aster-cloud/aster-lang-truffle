@@ -58,9 +58,28 @@ public final class WaitNode extends Node {
     // Phase 1: 轮询等待所有任务进入终态（CANCELLED/FAILED 抛错，全部 COMPLETED 才返回）
     pollUntilAllTerminal(registry, taskIds);
 
+    // ★取到结果后必须 removeTask（issue #103 body）。
+    //
+    //   StartNode 注册的任务此前**没有任何路径**会清理：removeTask 的唯一调用点是
+    //   WorkflowNode 的 finally，gc() 的唯一调用点在测试里。于是 start/await 注册的
+    //   任务完成后，tasks / taskInfos / DependencyGraph.nodes / completedNodes
+    //   全部随 Context 终身存活。
+    //
+    //   实测（同一 Context 连跑 5 次 start+wait）：taskCount 1→2→3→4→5，
+    //   **每次 eval 线性泄漏一个**，即便任务已被正确 await。
+    //   TaskInfo.callable 闭包持有 MaterializedFrame 与结果对象，
+    //   宿主池化 Context（aster-api 用 pooled Context）下按 eval 次数无界累积。
+    //
+    //   ★必须在 getResult 之后再删：removeTask 会清掉 taskInfos/tasks，
+    //   先删就取不到结果了。
+    //
+    //   顺带消除「跨 eval 幽灵执行」：残留的无依赖 PENDING 任务会被后续无关 eval 的
+    //   AwaitNode → executeNext 捞起来执行（它不按 eval/workflow 过滤）。
+    //
     // 单任务场景直接返回对应结果，多任务保持 taskIdNames 顺序返回结果数组
     if (taskIds.length == 1) {
       Object result = registry.getResult(taskIds[0]);
+      registry.removeTask(taskIds[0]);
       if (env != null) {
         env.set(taskIdNames[0], result);
       }
@@ -70,6 +89,7 @@ public final class WaitNode extends Node {
     Object[] results = new Object[taskIds.length];
     for (int i = 0; i < taskIds.length; i++) {
       Object result = registry.getResult(taskIds[i]);
+      registry.removeTask(taskIds[i]);
       results[i] = result;
       if (env != null) {
         env.set(taskIdNames[i], result);

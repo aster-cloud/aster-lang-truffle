@@ -50,7 +50,22 @@ public abstract class AwaitNode extends AsterExpressionNode {
     AsterContext context = AsterLanguage.getContext();
     AsyncTaskRegistry registry = context.getAsyncRegistry();
 
-    return pollUntilTerminal(registry, taskId);
+    // ★取到结果后 removeTask（issue #103 body），与 WaitNode 同理：
+    //   StartNode 注册的任务此前没有任何路径会清理，池化 Context 下按 eval 次数
+    //   无界累积（实测同一 Context 连跑 5 次 start+wait → taskCount 1→2→3→4→5）。
+    //
+    //   清理放在 pollUntilTerminal **之后**而非其内部：该方法是 AwaitNode 与
+    //   WaitNode 共用的轮询工具，其语义应是「等到终态并取值」，
+    //   删除任务是调用方的生命周期决定，不该由工具方法代做。
+    //
+    //   ★范围声明：只清理**成功**路径。FAILED/CANCELLED 时 pollUntilTerminal
+    //   直接抛出，任务仍留在 registry——那是刻意的：workflow 补偿与错误诊断需要
+    //   查它的状态与异常（WorkflowNode 的 finally 会统一清）。
+    //   但对**不在 workflow 内**的裸 start/await，失败任务确实仍会残留，
+    //   属本次未覆盖的部分，不假装已解决。
+    Object result = pollUntilTerminal(registry, taskId);
+    registry.removeTask(taskId);
+    return result;
   }
 
   /**
