@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -698,5 +701,97 @@ public class AsyncTaskRegistryTest {
         "间接依赖必须被检出");
     assertTrue(callDependsOnFailedTask(registry, "mid", "root"),
         "直接依赖必须被检出");
+  }
+
+  // ── runTask 对已 CANCELLED 任务的双减（issue #127）──────────────────────
+  // terminateExternally（cancelTask/cancelAll）把 PENDING 推进到 CANCELLED 时已扣过一次；
+  // 工作线程若已越过 isStaleGeneration 检查、随后 CAS(PENDING→RUNNING) 失败读到 CANCELLED，
+  // 原实现再扣一次 → remainingTasks 变负 → executeUntilComplete 的 while 一次都不进，
+  // 该 Context 后续所有任务静默不执行。
+
+  /** 反射读取 remainingTasks 当前值。 */
+  private static int remainingTasks(AsyncTaskRegistry registry) throws Exception {
+    Field f = AsyncTaskRegistry.class.getDeclaredField("remainingTasks");
+    f.setAccessible(true);
+    return ((AtomicInteger) f.get(registry)).get();
+  }
+
+  /** 反射取出内部 TaskInfo。 */
+  private static Object taskInfo(AsyncTaskRegistry registry, String taskId) throws Exception {
+    Field f = AsyncTaskRegistry.class.getDeclaredField("taskInfos");
+    f.setAccessible(true);
+    Object info = ((Map<?, ?>) f.get(registry)).get(taskId);
+    assertNotNull(info, "TaskInfo 缺失: " + taskId);
+    return info;
+  }
+
+  /**
+   * 以**当前**代次直接调用私有 runTask，模拟「工作线程已越过 isStaleGeneration 检查、
+   * 但 cancel 先一步落地」的窗口：此时 stale 兜底不生效，直抵 CAS 失败分支。
+   */
+  private static void invokeStaleRunTask(AsyncTaskRegistry registry, Object info) throws Exception {
+    Field genField = info.getClass().getDeclaredField("generation");
+    genField.setAccessible(true);
+    int currentGen = ((AtomicInteger) genField.get(info)).get();
+    Method runTask = AsyncTaskRegistry.class.getDeclaredMethod("runTask", info.getClass(), int.class);
+    runTask.setAccessible(true);
+    try {
+      runTask.invoke(registry, info, currentGen);
+    } catch (InvocationTargetException e) {
+      throw (e.getCause() instanceof Exception) ? (Exception) e.getCause() : e;
+    }
+  }
+
+  @Test
+  void staleRunTaskAfterCancelDoesNotDoubleDecrement() throws Exception {
+    AsyncTaskRegistry registry = new AsyncTaskRegistry(1);
+    try {
+      registry.registerTaskWithDependencies("t1", () -> 1, Set.of());
+      assertEquals(1, remainingTasks(registry));
+      Object info = taskInfo(registry, "t1");
+
+      registry.cancelTask("t1");
+      assertEquals(TaskStatus.CANCELLED, registry.getStatus("t1"));
+      assertEquals(0, remainingTasks(registry), "cancelTask 应恰好扣减一次");
+
+      // 修复前：这里再扣一次 → -1
+      assertDoesNotThrow(() -> invokeStaleRunTask(registry, info));
+      assertEquals(0, remainingTasks(registry),
+          "对已 CANCELLED 的任务，stale runTask 不得重复扣减");
+      assertEquals(TaskStatus.CANCELLED, registry.getStatus("t1"));
+
+      // 业务护栏：计数器未被毒化，全新合法任务仍会被真正调度执行
+      AtomicBoolean ran = new AtomicBoolean(false);
+      registry.registerTaskWithDependencies("fresh", () -> {
+        ran.set(true);
+        return 42;
+      }, Set.of());
+      registry.executeUntilComplete();
+
+      assertTrue(ran.get(), "计数器一旦为负，executeUntilComplete 会静默跳过全部任务");
+      assertEquals(TaskStatus.COMPLETED, registry.getStatus("fresh"));
+      assertEquals(42, registry.getResult("fresh"));
+      assertEquals(0, remainingTasks(registry));
+    } finally {
+      registry.shutdown();
+    }
+  }
+
+  @Test
+  void normalSchedulingKeepsRemainingTasksBalanced() throws Exception {
+    // 反向护栏：扣减收敛到单一入口后，正常调度路径的 register/execute 计数必须守恒，
+    // 既不能多减（上例），也不能漏减（否则后续 executeUntilComplete 撞死锁检测）。
+    AsyncTaskRegistry registry = new AsyncTaskRegistry(1);
+    try {
+      registry.registerTaskWithDependencies("a", () -> 1, Set.of());
+      registry.registerTaskWithDependencies("b", () -> 2, Set.of("a"));
+      assertEquals(2, remainingTasks(registry));
+      registry.executeUntilComplete();
+      assertEquals(0, remainingTasks(registry), "两次注册对应恰好两次扣减");
+      assertEquals(TaskStatus.COMPLETED, registry.getStatus("a"));
+      assertEquals(TaskStatus.COMPLETED, registry.getStatus("b"));
+    } finally {
+      registry.shutdown();
+    }
   }
 }

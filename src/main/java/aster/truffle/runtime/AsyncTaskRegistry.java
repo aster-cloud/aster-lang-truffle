@@ -633,7 +633,7 @@ public final class AsyncTaskRegistry {
           removedState.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)
               || removedState.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.CANCELLED);
       if (transitioned) {
-        remainingTasks.decrementAndGet();
+        decrementRemainingTasks();
       }
     }
 
@@ -763,7 +763,7 @@ public final class AsyncTaskRegistry {
         state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)
             || state.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.CANCELLED);
     if (transitioned) {
-      remainingTasks.decrementAndGet();
+      decrementRemainingTasks();
       synchronized (graphLock) {
         dependencyGraph.markCompleted(taskId);
       }
@@ -862,6 +862,23 @@ public final class AsyncTaskRegistry {
 
   // ========= 内部工具方法 =========
 
+  /**
+   * remainingTasks 的唯一扣减入口。
+   *
+   * <p>每次 registerInternal 递增恰好对应一次终态扣减；计数器一旦变负，
+   * executeUntilComplete 的 {@code while (remainingTasks.get() > 0)} 会整体跳过，
+   * 后续 workflow 全部静默不执行——对决策引擎而言这比异常危险得多。
+   * 因此这里直接抛 IllegalStateException 而非 {@code assert}：测试 JVM 以 -da 运行，
+   * 断言不会触发；抛异常才能让任何新的双减在第一时间暴露。
+   */
+  private void decrementRemainingTasks() {
+    int remaining = remainingTasks.decrementAndGet();
+    if (remaining < 0) {
+      throw new IllegalStateException(
+          "remainingTasks 被扣成负数 (" + remaining + ")：存在重复扣减路径");
+    }
+  }
+
   private void registerInternal(String taskId, Callable<?> callable, Set<String> deps, long timeoutMs,
       Runnable compensationCallback, int priority, String taskWorkflowId) {
     if (tasks.putIfAbsent(taskId, new TaskState(taskId)) != null) {
@@ -881,7 +898,7 @@ public final class AsyncTaskRegistry {
       // 回滚已插入的数据，避免 registry 状态污染
       taskInfos.remove(taskId);
       tasks.remove(taskId);
-      remainingTasks.decrementAndGet();
+      decrementRemainingTasks();
       throw ex;
     }
   }
@@ -1031,7 +1048,7 @@ public final class AsyncTaskRegistry {
       // 仅在仍为当前代次时上报，避免污染重试 future
       if (info.generation.get() == submissionGen) {
         info.future.completeExceptionally(new IllegalStateException("Unknown task: " + info.taskId));
-        remainingTasks.decrementAndGet();
+        decrementRemainingTasks();
       }
       return;
     }
@@ -1048,7 +1065,7 @@ public final class AsyncTaskRegistry {
           // Dependency failed, mark this task as cancelled
           if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
             info.future.cancel(false);
-            remainingTasks.decrementAndGet();
+            decrementRemainingTasks();
             synchronized (graphLock) {
               dependencyGraph.markCompleted(info.taskId);
             }
@@ -1059,9 +1076,15 @@ public final class AsyncTaskRegistry {
     }
 
     if (!state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.RUNNING)) {
-      if (state.status.get() == TaskStatus.CANCELLED) {
+      // 与本文件其余扣减点同一契约：只有把 PENDING 推进到 CANCELLED 成功的那一次才扣减。
+      // 若 CANCELLED 是 terminateExternally 写入的，它已经扣过一次；这里再扣就会把计数器
+      // 压成负数，executeUntilComplete 的 while (remainingTasks > 0) 从此一次都不进，
+      // 后续所有 workflow 静默不执行。
+      if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
         info.future.cancel(false);
-        remainingTasks.decrementAndGet();
+        decrementRemainingTasks();
+      } else if (state.status.get() == TaskStatus.CANCELLED) {
+        info.future.cancel(false);
       }
       return;
     }
@@ -1147,7 +1170,7 @@ public final class AsyncTaskRegistry {
         // 仅在任务真正结束且仍为本代次时递减计数器
         // （过期代次的 abort 路径已在 isStaleGeneration 处直接 return，
         //  没有 decrement，新代次结束时会再次落入这里）
-        remainingTasks.decrementAndGet();
+        decrementRemainingTasks();
       }
     }
   }
@@ -1349,7 +1372,7 @@ public final class AsyncTaskRegistry {
     // isStaleGeneration 提前 return，永远到不了 finally。
     // 由于此前的 CAS 成功才进入这里（`updated == true`），decrement
     // 必然唯一对应一次 register，不会双减。
-    remainingTasks.decrementAndGet();
+    decrementRemainingTasks();
   }
 
   /**
