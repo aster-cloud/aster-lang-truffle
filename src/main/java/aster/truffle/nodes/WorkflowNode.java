@@ -105,6 +105,11 @@ public final class WorkflowNode extends Node {
     PostgresEventStore eventStore = registry.getEventStore();
     WorkflowScheduler scheduler = new WorkflowScheduler(registry, workflowId, eventStore);
 
+    // 注册、收集结果、清理一律按 step 下标走 idByIndex；nameToId 只登记**有名字**的 step，
+    // 仅供依赖解析用。step 名在 Core IR 里并非必填（Loader 对 null step / 缺 name 都会产出
+    // null），若以 name 为键，两个未命名 step 会共用 null 键互相覆盖，随后对同一 taskId
+    // 注册两次而报 "Task already exists"——错误指向 registry 而非缺 name 的真实原因。
+    String[] idByIndex = new String[taskExprs.length];
     Map<String, String> nameToId = new LinkedHashMap<>();
     MaterializedFrame[] capturedFrames = new MaterializedFrame[taskExprs.length];
     Set<String>[] effectSnapshots = new Set[taskExprs.length];
@@ -120,13 +125,13 @@ public final class WorkflowNode extends Node {
           ? Collections.emptySet()
           : new LinkedHashSet<>(currentEffects);
       String taskId = context.generateTaskId();
+      idByIndex[i] = taskId;
 
-      // 检测重复任务名称，避免静默数据错乱
-      if (taskNames[i] != null && nameToId.containsKey(taskNames[i])) {
-        throw new IllegalArgumentException("Duplicate workflow step name: " + taskNames[i]);
-      }
-      nameToId.put(taskNames[i], taskId);
       if (taskNames[i] != null) {
+        // 检测重复任务名称，避免静默数据错乱
+        if (nameToId.putIfAbsent(taskNames[i], taskId) != null) {
+          throw new IllegalArgumentException("Duplicate workflow step name: " + taskNames[i]);
+        }
         env.set(taskNames[i], taskId);
       }
       capturedFrames[i] = materializedFrame;
@@ -149,7 +154,7 @@ public final class WorkflowNode extends Node {
     for (int i = 0; i < taskExprs.length; i++) {
       Node expr = taskExprs[i];
       String stepName = taskNames[i];
-      String taskId = nameToId.get(stepName);
+      String taskId = idByIndex[i];
       MaterializedFrame materializedFrame = capturedFrames[i];
       Set<String> capturedEffects = effectSnapshots[i];
       final int stepIndex = i;
@@ -251,13 +256,12 @@ public final class WorkflowNode extends Node {
       // 5. 收集结果（成功时）
       if (success) {
         for (int i = 0; i < taskNames.length; i++) {
-          String taskId = nameToId.get(taskNames[i]);
-          results[i] = registry.getResult(taskId);
+          results[i] = registry.getResult(idByIndex[i]);
         }
       }
     } finally {
       // 6. 清理所有注册的任务，避免内存泄漏和状态污染
-      for (String taskId : nameToId.values()) {
+      for (String taskId : idByIndex) {
         registry.removeTask(taskId);
       }
     }
