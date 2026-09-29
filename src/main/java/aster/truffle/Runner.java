@@ -105,7 +105,18 @@ public final class Runner {
         // Print result if available
         if (result != null && !result.isNull()) {
           if (result.isNumber()) {
-            System.out.println(result.asInt());
+            // Core IR 同时有 Int/Long/Double 字面量；asInt() 对无法无损转 int 的值抛
+            // ClassCastException。按精度从窄到宽逐级判定，兜底交给 Value.toString()
+            // 覆盖 BigInteger 等任何新增数值类型。
+            if (result.fitsInInt()) {
+              System.out.println(result.asInt());
+            } else if (result.fitsInLong()) {
+              System.out.println(result.asLong());
+            } else if (result.fitsInDouble()) {
+              System.out.println(result.asDouble());
+            } else {
+              System.out.println(result);
+            }
           } else if (result.isString()) {
             System.out.println(result.asString());
           } else if (result.isBoolean()) {
