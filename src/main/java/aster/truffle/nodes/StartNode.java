@@ -56,6 +56,9 @@ public final class StartNode extends Node {
       try {
         // 保存当前 effect 权限
         Set<String> previousEffects = context.getAllowedEffects();
+        // ★同 WorkflowNode：任务体在 worker 线程上跑 Exec.exec，不经过任何根节点，
+        // 不接线则分配预算在异步路径上完全失效；不配对则额度在该 worker 上只增不清。
+        final boolean outermostFrame = aster.truffle.runtime.AllocationBudget.enterFrame();
         try {
           // 恢复捕获的 effect 权限，使任务体能够执行需要特定 effect 的操作
           context.setAllowedEffects(capturedEffects);
@@ -67,6 +70,7 @@ public final class StartNode extends Node {
         } finally {
           // 恢复之前的 effect 权限
           context.setAllowedEffects(previousEffects);
+          aster.truffle.runtime.AllocationBudget.exitFrame(outermostFrame);
         }
       } catch (Throwable t) {
         // 异常会被 AsyncTaskRegistry.executeNext() 捕获并存储在 TaskState

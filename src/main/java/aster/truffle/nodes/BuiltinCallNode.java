@@ -274,7 +274,11 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object a = argNodes[0].executeGeneric(frame);
     Object b = argNodes[1].executeGeneric(frame);
     if (a instanceof String left && b instanceof String right) {
-      return left + right;
+      String joined = left + right;
+      // 内联路径不经过 Builtins.call，必须自己记账——否则 Text.concat 反复翻倍
+      // 可零成本造出上亿字符（实测 292ms 即 Java heap space，快过 5 秒看门狗）。
+      Builtins.chargeForResult(joined);
+      return joined;
     }
     return (String) doGenericWithArgs(a, b);
   }
@@ -332,6 +336,8 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     if (src != null) {
       List<Object> mutable = new ArrayList<>(src);
       mutable.add(element);
+      // 内联路径不经过 Builtins.call，自行记账（同 doTextConcat）。
+      Builtins.chargeForResult(mutable);
       return mutable;
     }
 
@@ -393,7 +399,21 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     boolean pureLambda = PurityAnalyzer.isPure(callTarget);
     ParallelListMapNode parallelNode = getParallelListMapNode();
     if (pureLambda && parallelNode.shouldParallelize(list.size())) {
-      return parallelNode.execute(list, lambda);
+      List<Object> parallelResult = parallelNode.execute(list, lambda);
+      // 内联路径不经过 Builtins.call，自行记账（同 doTextConcat）。
+      //
+      // ★遗留陷阱（当前不可达，改动前务必先读）：ParallelListMapNode 用
+      // ForkJoinPool.commonPool()，回调跑在**别的线程**上，而分配预算是 ThreadLocal
+      // ——那些线程各自持有独立的满额预算，回调内部的分配不计入本次执行的额度，
+      // 这里只能补记最终结果列表的顶层规模。
+      //
+      // 之所以现在不是漏洞：PurityAnalyzer.isPure() 恒返回 false
+      // （purity/PurityAnalyzer.java:69「目前没有可信的纯度来源，一律按不纯处理」），
+      // 本分支是死代码。**一旦有人实现 isPure，这条就立刻变成真实绕过路径**：
+      // 300 个回调 × 每个 1e6 元素 = 3e8，而每个 FJP 线程都认为自己满额。
+      // 届时必须把预算改为可跨线程传递（把父线程额度快照传进 MapTask 并汇总回扣）。
+      Builtins.chargeForResult(parallelResult);
+      return parallelResult;
     }
 
     Object[] capturedValues = lambda.getCapturedValues();
@@ -414,6 +434,8 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
       result.add(mapped);
     }
 
+    // 内联路径不经过 Builtins.call，自行记账（同 doTextConcat）。
+    Builtins.chargeForResult(result);
     return result;
   }
 
@@ -473,6 +495,11 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
         }
       }
       Profiler.inc("builtin_list_filter_parallel");
+      // 内联路径不经过 Builtins.call，自行记账。filter 只会缩小列表、无放大能力，
+      // 计量是为了与其它内联路径口径一致（防御纵深），不是这条向量的必需品。
+      // 同 doListMap 的并行分支：谓词跑在 ForkJoinPool 线程上、ThreadLocal 预算不跨线程，
+      // 当前因 isPure() 恒 false 而不可达——详见那里的「遗留陷阱」说明。
+      Builtins.chargeForResult(filtered);
       return filtered;
     }
 
@@ -498,6 +525,8 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
       }
     }
 
+    // 内联路径不经过 Builtins.call，自行记账（同上，防御纵深）。
+    Builtins.chargeForResult(result);
     return result;
   }
 

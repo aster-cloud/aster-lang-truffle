@@ -163,6 +163,12 @@ public final class WorkflowNode extends Node {
 
       Callable<Object> callable = () -> {
         Set<String> previousEffects = context.getAllowedEffects();
+        // ★step 体在 executor worker 线程上执行，**既不经过 AsterRootNode 也不经过
+        // LambdaRootNode** → 不接线的话分配预算在整条 workflow 路径上等于没上线
+        // （实测：把放大逻辑放进 step，1174ms 抛 Java heap space，与修复前同形）。
+        // 同时 worker 线程跨 workflow/跨租户复用，不配对 exitFrame 还会让额度只增不清，
+        // 一旦触线该 worker 此后**永久拒绝一切 step**——漏防与误杀并存。
+        final boolean outermostFrame = aster.truffle.runtime.AllocationBudget.enterFrame();
         try {
           context.setAllowedEffects(capturedEffects);
           Object result = Exec.exec(expr, materializedFrame);
@@ -181,6 +187,7 @@ public final class WorkflowNode extends Node {
           throw new RuntimeException("workflow step failed: " + stepName, t);
         } finally {
           context.setAllowedEffects(previousEffects);
+          aster.truffle.runtime.AllocationBudget.exitFrame(outermostFrame);
         }
       };
 

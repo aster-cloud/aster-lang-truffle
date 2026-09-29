@@ -73,6 +73,14 @@ public final class AsterRootNode extends RootNode {
     // 入口函数返回值跨宿主边界：null 须规整为 guest-null（toInteropValue），否则
     // 裸 null 经 asGuestValue 触发 NPE/契约违例。adapt 仍只做集合/结构归一，保留
     // 嵌套 raw null（底层 Map/List 内部消费依赖它）。
+    //
+    // 分配预算：ThreadLocal 跨执行存活（GraalVM 单线程策略拒并发但**允许串行交接**，
+    // 池线程跨执行复用），不重置就是跨执行污染——表现为完全合法的规则随机失败。
+    // 用与 LambdaRootNode 同一套深度计数，两者都只在最外层帧清零；
+    // 无参入口经本节点执行，有参入口经 LambdaRootNode，二者各自都是最外层。
+    // ★enterFrame 必须紧贴 try：若它与 try 之间夹着任何会抛的语句，exitFrame 就不执行，
+    // depth 永久 +1 → 该池线程此后恒非最外层 → 额度永不重置 → 后续请求全被误拒。
+    final boolean outermostFrame = aster.truffle.runtime.AllocationBudget.enterFrame();
     try {
       Object result = Exec.exec(body, frame);
       Object adapted = AsterInteropAdapter.adapt(result);
@@ -85,6 +93,7 @@ public final class AsterRootNode extends RootNode {
     } finally {
       // 恢复本次 eval 之前的线程权限视图，防止残留跨顺序 eval 泄漏（fail-closed）。
       context.setAllowedEffects(previousEffects);
+      aster.truffle.runtime.AllocationBudget.exitFrame(outermostFrame);
     }
   }
 
