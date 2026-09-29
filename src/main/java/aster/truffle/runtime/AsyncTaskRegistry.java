@@ -1076,14 +1076,12 @@ public final class AsyncTaskRegistry {
     }
 
     if (!state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.RUNNING)) {
-      // 与本文件其余扣减点同一契约：只有把 PENDING 推进到 CANCELLED 成功的那一次才扣减。
-      // 若 CANCELLED 是 terminateExternally 写入的，它已经扣过一次；这里再扣就会把计数器
-      // 压成负数，executeUntilComplete 的 while (remainingTasks > 0) 从此一次都不进，
-      // 后续所有 workflow 静默不执行。
-      if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
-        info.future.cancel(false);
-        decrementRemainingTasks();
-      } else if (state.status.get() == TaskStatus.CANCELLED) {
+      // CAS 失败说明状态已被别处推进（通常是 terminateExternally 写入 CANCELLED），而每一条
+      // 把状态推进到终态的路径都已各自扣过 remainingTasks；这里绝不能再扣，否则计数器压成
+      // 负数，executeUntilComplete 的 while (remainingTasks > 0) 从此一次都不进。
+      // 也不要在此处再试 CAS(PENDING→CANCELLED)：它只会在重试路径把状态重置回 PENDING 的
+      // 瞬间成功，把一个合法重试中的任务误判为取消。
+      if (state.status.get() == TaskStatus.CANCELLED) {
         info.future.cancel(false);
       }
       return;
