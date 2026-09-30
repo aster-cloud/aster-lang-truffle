@@ -347,7 +347,10 @@ public final class Loader {
     Node[] stepBodies = new Node[steps.size()];
     Node[] compensateBodies = new Node[steps.size()];  // 补偿代码块数组
     String[] stepNames = new String[steps.size()];
-    java.util.Map<String, java.util.Set<String>> dependencies = new java.util.LinkedHashMap<>();
+    // 依赖按 step 下标登记（与 WorkflowNode 的 idByIndex 同一约定）：Core IR 中
+    // Step.dependencies 与 Step.name 相互独立，未命名 step 的依赖声明同样有效，
+    // 若以 name 为键登记就只能丢弃它们，导致该 step 不等待前置 step、依赖拼错也不报错。
+    java.util.List<java.util.Set<String>> dependencies = new java.util.ArrayList<>(steps.size());
     boolean hasAnyCompensation = false;  // 跟踪是否存在任何补偿逻辑
 
     for (int i = 0; i < steps.size(); i++) {
@@ -356,6 +359,7 @@ public final class Loader {
         stepBodies[i] = LiteralNode.create(null);
         compensateBodies[i] = null;
         stepNames[i] = null;
+        dependencies.add(java.util.Set.of());
         continue;
       }
       stepBodies[i] = buildBlock(step.body);
@@ -369,18 +373,15 @@ public final class Loader {
         compensateBodies[i] = null;
       }
 
-      java.util.List<String> deps = step.dependencies;
-      if (deps != null && !deps.isEmpty() && step.name != null) {
-        java.util.LinkedHashSet<String> depSet = new java.util.LinkedHashSet<>();
-        for (String dep : deps) {
+      java.util.LinkedHashSet<String> depSet = new java.util.LinkedHashSet<>();
+      if (step.dependencies != null) {
+        for (String dep : step.dependencies) {
           if (dep != null && !dep.isEmpty()) {
             depSet.add(dep);
           }
         }
-        if (!depSet.isEmpty()) {
-          dependencies.put(step.name, depSet);
-        }
       }
+      dependencies.add(depSet);
     }
 
     long timeoutMs = 0L;

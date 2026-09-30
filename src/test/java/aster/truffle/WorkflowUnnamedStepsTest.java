@@ -16,6 +16,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 多个未命名 step 的 workflow 必须照常执行（issue #128）。
@@ -37,6 +39,16 @@ class WorkflowUnnamedStepsTest {
   void registerProbe() {
     // 与 WorkflowRegistrationRollbackTest 同一手法：guest 侧回调 host builtin 采集证据
     Builtins.register("__recordStep", new Builtins.BuiltinDef(args -> {
+      recorded.add(args[0]);
+      return args[0];
+    }));
+    // 先睡再记录：给依赖它的 step 留出足够的抢跑窗口，让「未等待前置 step」表现为顺序颠倒
+    Builtins.register("__slowRecordStep", new Builtins.BuiltinDef(args -> {
+      try {
+        Thread.sleep(400);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
       recorded.add(args[0]);
       return args[0];
     }));
@@ -107,5 +119,39 @@ class WorkflowUnnamedStepsTest {
       run(ctx, probe, "probe");
     }
     assertEquals(0, captured[0], "三次 workflow 后 registry 不得残留任务");
+  }
+
+  // ── 未命名 step 的 dependencies 不得被静默丢弃（issue #133）──────────────────
+  // Core IR 里 Step.dependencies 与 Step.name 相互独立，「有依赖但无名字」是合法输入。
+  // 原 Loader 只在 step.name != null 时登记依赖，未命名 step 既不等待前置 step、
+  // 依赖名拼错也不报错——同一份依赖声明因是否带 name 而语义翻转。
+
+  @Test
+  void unnamedStepWaitsForNamedDependency() throws Exception {
+    // 未命名 step 依赖 "slow"（sleep 400ms 后记 1），自身记 2：依赖生效则必为 [1, 2]。
+    // 依赖方故意放在下标 0：修复前依赖被丢弃，无论线程池大小（含 size=1 的内联顺序）
+    // 都会先记 2，得 [2, 1]——红灯不依赖线程数或 sleep 时长。
+    String json = fixture("unnamed-dep-order.json");
+
+    try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
+      assertEquals(0, assertDoesNotThrow(() -> run(ctx, json, "dep-order")).asInt());
+    }
+    assertEquals(List.of(1, 2),
+        recorded.stream().map(o -> ((Number) o).intValue()).toList(),
+        "未命名 step 必须等待其声明依赖的具名 step 完成后再执行");
+  }
+
+  @Test
+  void unnamedStepWithUnknownDependencyIsRejected() throws Exception {
+    // 未命名 step 引用不存在的 "ghost"：必须与具名 step 一样报 Unknown workflow dependency，
+    // 且整个 workflow 不得执行任何 step（修复前静默成功、alpha 与 ghost step 都跑了）。
+    String json = fixture("unnamed-ghost-dep.json");
+
+    try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
+      var ex = assertThrows(Exception.class, () -> run(ctx, json, "ghost-dep"));
+      assertTrue(String.valueOf(ex.getMessage()).contains("Unknown workflow dependency: ghost"),
+          "未命名 step 的未知依赖必须被拒绝；实际: " + ex.getMessage());
+    }
+    assertTrue(recorded.isEmpty(), "注册阶段失败的 workflow 不得执行任何 step；实际: " + recorded);
   }
 }

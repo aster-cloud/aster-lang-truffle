@@ -20,6 +20,11 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static aster.truffle.EnvTestSupport.restoreEnv;
@@ -791,6 +796,72 @@ public class AsyncTaskRegistryTest {
       assertEquals(TaskStatus.COMPLETED, registry.getStatus("a"));
       assertEquals(TaskStatus.COMPLETED, registry.getStatus("b"));
     } finally {
+      registry.shutdown();
+    }
+  }
+
+  // ── 工作线程上的双减必须钳零并记 SEVERE（issue #134）────────────────────────
+  // #127 让 decrementRemainingTasks 在结果为负时抛 IllegalStateException，但 runTask 的
+  // 扣减跑在 executor.submit 提交的工作线程上：submit 把异常存进无人 get 的 Future，
+  // 异常被静默吞掉，而 decrementAndGet 早已把负值写入——症状与修复前完全一样：
+  // executeUntilComplete 一次都不进，后续 workflow 静默不执行，且没有任何日志。
+
+  @Test
+  void doubleDecrementOnWorkerThreadIsClampedAndLogged() throws Exception {
+    Logger registryLogger = Logger.getLogger(AsyncTaskRegistry.class.getName());
+    List<LogRecord> severe = Collections.synchronizedList(new ArrayList<>());
+    Handler capture = new Handler() {
+      @Override public void publish(LogRecord record) {
+        if (record.getLevel() == Level.SEVERE) severe.add(record);
+      }
+      @Override public void flush() {}
+      @Override public void close() {}
+    };
+    registryLogger.addHandler(capture);
+
+    // 线程池 >1：任务真正跑在 executor 工作线程上（size=1 会内联跑在调用线程）
+    AsyncTaskRegistry registry = new AsyncTaskRegistry(2);
+    Method decrement = AsyncTaskRegistry.class.getDeclaredMethod("decrementRemainingTasks");
+    decrement.setAccessible(true);
+    Thread testThread = Thread.currentThread();
+    AtomicReference<Thread> taskThread = new AtomicReference<>();
+    try {
+      // 任务体内多扣一次，runTask 的 finally 再扣一次 → 工作线程上的双减
+      registry.registerTaskWithDependencies("dup", () -> {
+        taskThread.set(Thread.currentThread());
+        decrement.invoke(registry);
+        return 1;
+      }, Set.of());
+      assertEquals(1, remainingTasks(registry));
+
+      registry.executeUntilComplete();
+      assertNotSame(testThread, taskThread.get(), "前置条件：任务必须跑在 executor 工作线程上");
+
+      // finally 里的扣减落在 future.complete 之后，轮询等它发生（负值或日志二者其一）
+      long deadline = System.currentTimeMillis() + 5000;
+      while (severe.isEmpty() && remainingTasks(registry) >= 0
+          && System.currentTimeMillis() < deadline) {
+        Thread.sleep(5);
+      }
+
+      assertEquals(0, remainingTasks(registry), "重复扣减不得把计数器写成负数");
+      assertEquals(1, severe.size(), "重复扣减必须记录 SEVERE 日志；实际: " + severe);
+      assertEquals(1, registry.doubleDecrementCount(), "重复扣减计数器必须与日志同步");
+      assertTrue(severe.get(0).getMessage().contains("重复扣减"),
+          "日志须指明重复扣减；实际: " + severe.get(0).getMessage());
+
+      // 业务护栏：计数器未被毒化，后续合法任务仍会被真正调度执行
+      AtomicBoolean ran = new AtomicBoolean(false);
+      registry.registerTaskWithDependencies("fresh", () -> {
+        ran.set(true);
+        return 42;
+      }, Set.of());
+      registry.executeUntilComplete();
+      assertTrue(ran.get(), "计数器一旦为负，executeUntilComplete 会静默跳过全部任务");
+      assertEquals(TaskStatus.COMPLETED, registry.getStatus("fresh"));
+      assertEquals(42, registry.getResult("fresh"));
+    } finally {
+      registryLogger.removeHandler(capture);
       registry.shutdown();
     }
   }

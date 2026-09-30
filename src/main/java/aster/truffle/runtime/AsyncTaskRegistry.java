@@ -67,6 +67,13 @@ public final class AsyncTaskRegistry {
   private PostgresEventStore eventStore;
   // 剩余待完成任务计数
   private final AtomicInteger remainingTasks = new AtomicInteger();
+  /** 重复扣减次数：SEVERE 日志对测试框架不可见，混沌/回归测试用它断言为 0。 */
+  private final AtomicInteger doubleDecrementCount = new AtomicInteger();
+
+  /** 诊断用：自建以来被钳制的重复扣减次数（SEVERE 日志对测试框架不可见，混沌/回归测试据此断言为 0）。 */
+  public int doubleDecrementCount() {
+    return doubleDecrementCount.get();
+  }
   // 线程池（默认 CPU 核数，可配置），size=1 时即单线程回退模式
   private final ExecutorService executor;
   /**
@@ -868,14 +875,21 @@ public final class AsyncTaskRegistry {
    * <p>每次 registerInternal 递增恰好对应一次终态扣减；计数器一旦变负，
    * executeUntilComplete 的 {@code while (remainingTasks.get() > 0)} 会整体跳过，
    * 后续 workflow 全部静默不执行——对决策引擎而言这比异常危险得多。
-   * 因此这里直接抛 IllegalStateException 而非 {@code assert}：测试 JVM 以 -da 运行，
-   * 断言不会触发；抛异常才能让任何新的双减在第一时间暴露。
+   *
+   * <p>因此重复扣减时**不写入负值**：计数器钳在 0，并记录 SEVERE（附调用栈，
+   * 用于定位多扣的那条路径）。这里不抛异常：runTask 既可能在单线程模式下内联跑在
+   * 调用线程，也可能跑在 {@code executor.submit} 提交的工作线程上——后者抛出的
+   * 异常只会存进无人 get 的 Future 里被静默吞掉，而 decrementAndGet 早已把负值写入，
+   * 症状与没有守卫时完全一样。同一入口在不同线程上「有时响、有时哑」，
+   * 不如统一为不毒化计数器 + 日志可见；测试 JVM 以 -da 运行，{@code assert} 同样不可用。
    */
   private void decrementRemainingTasks() {
-    int remaining = remainingTasks.decrementAndGet();
-    if (remaining < 0) {
-      throw new IllegalStateException(
-          "remainingTasks 被扣成负数 (" + remaining + ")：存在重复扣减路径");
+    int before = remainingTasks.getAndUpdate(v -> Math.max(0, v - 1));
+    if (before <= 0) {
+      doubleDecrementCount.incrementAndGet();
+      logger.log(Level.SEVERE,
+          "remainingTasks 重复扣减（扣减前已为 " + before + "，已钳制为 0）：存在重复扣减路径",
+          new IllegalStateException("remainingTasks 重复扣减路径"));
     }
   }
 
