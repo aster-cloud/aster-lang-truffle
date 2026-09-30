@@ -846,6 +846,7 @@ public class AsyncTaskRegistryTest {
 
       assertEquals(0, remainingTasks(registry), "重复扣减不得把计数器写成负数");
       assertEquals(1, severe.size(), "重复扣减必须记录 SEVERE 日志；实际: " + severe);
+      assertEquals(1, registry.doubleDecrementCount(), "重复扣减计数器必须与日志同步");
       assertTrue(severe.get(0).getMessage().contains("重复扣减"),
           "日志须指明重复扣减；实际: " + severe.get(0).getMessage());
 

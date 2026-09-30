@@ -129,7 +129,8 @@ class WorkflowUnnamedStepsTest {
   @Test
   void unnamedStepWaitsForNamedDependency() throws Exception {
     // 未命名 step 依赖 "slow"（sleep 400ms 后记 1），自身记 2：依赖生效则必为 [1, 2]。
-    // 修复前依赖被丢弃，两个 step 并发起跑，记录为 [2, 1]。
+    // 依赖方故意放在下标 0：修复前依赖被丢弃，无论线程池大小（含 size=1 的内联顺序）
+    // 都会先记 2，得 [2, 1]——红灯不依赖线程数或 sleep 时长。
     String json = fixture("unnamed-dep-order.json");
 
     try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {

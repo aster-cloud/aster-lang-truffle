@@ -67,6 +67,13 @@ public final class AsyncTaskRegistry {
   private PostgresEventStore eventStore;
   // 剩余待完成任务计数
   private final AtomicInteger remainingTasks = new AtomicInteger();
+  /** 重复扣减次数：SEVERE 日志对测试框架不可见，混沌/回归测试用它断言为 0。 */
+  private final AtomicInteger doubleDecrementCount = new AtomicInteger();
+
+  /** 诊断用：自建以来被钳制的重复扣减次数（SEVERE 日志对测试框架不可见，混沌/回归测试据此断言为 0）。 */
+  public int doubleDecrementCount() {
+    return doubleDecrementCount.get();
+  }
   // 线程池（默认 CPU 核数，可配置），size=1 时即单线程回退模式
   private final ExecutorService executor;
   /**
@@ -879,6 +886,7 @@ public final class AsyncTaskRegistry {
   private void decrementRemainingTasks() {
     int before = remainingTasks.getAndUpdate(v -> Math.max(0, v - 1));
     if (before <= 0) {
+      doubleDecrementCount.incrementAndGet();
       logger.log(Level.SEVERE,
           "remainingTasks 重复扣减（扣减前已为 " + before + "，已钳制为 0）：存在重复扣减路径",
           new IllegalStateException("remainingTasks 重复扣减路径"));
