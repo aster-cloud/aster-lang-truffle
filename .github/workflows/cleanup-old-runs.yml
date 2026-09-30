@@ -46,12 +46,15 @@ jobs:
           echo "仓库: $REPO  保留天数: $RETENTION_DAYS  截止(早于则删): $cutoff  dry-run: $DRY_RUN"
 
           deleted=0; skipped_active=0; scanned=0
-          # 分页拉取所有 run（每页 100,最多扫 40 页=4000 条,足够覆盖一周以上积压）。
+          # 先分页扫完全部 run 收集待删 id，再统一删除（每页 100,最多扫 40 页=4000 条,足够覆盖一周以上积压）。
+          # 分开做的原因：边翻页边删会让后续页整体前移，跳过一批本该删的 run；
+          # 且 list 接口按 created_at 倒序只是常态而非契约（重跑/re-run 会让旧 run 混进新页），
+          # 「本页无更旧 run 就停」会漏删。
+          to_delete=()
           for page in $(seq 1 40); do
             runs="$(gh api "repos/${REPO}/actions/runs?per_page=100&page=${page}" \
                      --jq '.workflow_runs[] | {id, status, created_at} | @base64' 2>/dev/null || true)"
             [ -z "$runs" ] && break
-            page_had_old=false
             for row in $runs; do
               scanned=$((scanned + 1))
               j="$(echo "$row" | base64 -d)"
@@ -62,21 +65,22 @@ jobs:
               if [ "$status" != "completed" ]; then
                 skipped_active=$((skipped_active + 1)); continue
               fi
-              # created_at 早于 cutoff → 删。字符串比较对 ISO8601 UTC 有效。
+              # created_at 早于 cutoff → 待删。字符串比较对 ISO8601 UTC 有效。
               if [[ "$created" < "$cutoff" ]]; then
-                page_had_old=true
-                if [ "$DRY_RUN" = "true" ]; then
-                  echo "  [dry-run] would delete run $id (created $created)"
-                else
-                  gh api --method DELETE "repos/${REPO}/actions/runs/${id}" >/dev/null 2>&1 \
-                    && { echo "  deleted run $id (created $created)"; deleted=$((deleted + 1)); } \
-                    || echo "  ::warning::删除 run $id 失败（可能已删/无权限）"
-                fi
+                to_delete+=("${id} ${created}")
               fi
             done
-            # API 按 created_at 倒序返回:某页全是「新于 cutoff」且非首页,则后续页更新,可提前停。
-            # 但保守起见继续翻页,直到空页（上面 break）。
-            [ "$page_had_old" = "false" ] && [ "$page" -gt 1 ] && { echo "本页无更旧 run,停止翻页"; break; }
+          done
+
+          for entry in "${to_delete[@]}"; do
+            id="${entry%% *}"; created="${entry#* }"
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "  [dry-run] would delete run $id (created $created)"
+            else
+              gh api --method DELETE "repos/${REPO}/actions/runs/${id}" >/dev/null 2>&1 \
+                && { echo "  deleted run $id (created $created)"; deleted=$((deleted + 1)); } \
+                || echo "  ::warning::删除 run $id 失败（可能已删/无权限）"
+            fi
           done
 
           echo "扫描 ${scanned} 条; 删除 ${deleted}; 跳过进行中 ${skipped_active}。"

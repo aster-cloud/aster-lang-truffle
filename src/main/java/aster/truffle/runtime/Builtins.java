@@ -519,11 +519,13 @@ public final class Builtins {
     // 数值序：用 toDouble 比较（与算术/比较运算符一致）；排序**稳定、升序**。
 
     // List.sum(list)：数值求和（空列表 → 0；任一元素浮点 → double）。
+    // 字符串元素先经 sumOperand 换算：接受集与 TS toNum 对齐（aster-lang-ts#199），
+    // 不再走 numericAdd 内部的 toLong（那只认整数文本，"1.5" 会裸抛 NumberFormatException）。
     register("List.sum", new BuiltinDef(args -> {
       checkArity("List.sum", args, 1);
       List<Object> l = requireList("List.sum", args[0]);
       Object acc = 0;
-      for (Object x : l) acc = numericAdd(acc, x);
+      for (Object x : l) acc = numericAdd(acc, sumOperand(x));
       return acc;
     }));
 
@@ -1457,10 +1459,45 @@ public final class Builtins {
     throw new BuiltinException(ErrorMessages.typeExpectedGot("Int", typeName(o)));
   }
 
+  /**
+   * 严格十进制数值字面量（可选符号、整数/小数、可选指数），与 aster-lang-ts
+   * {@code NUMERIC_LITERAL_RE} 逐字一致，是双引擎数值字符串接受集的唯一来源。
+   *
+   * <p>★为什么不直接信 {@code Double.parseDouble}（issue #74 / aster-lang-ts#199）：
+   *   它会吃掉 Java 类型后缀（"1d"/"1f"）、十六进制浮点（"0x1p3"）以及
+   *   "NaN"/"Infinity" 文本，而 TS 的 {@code Number("1d")} 得 NaN → 拒绝。
+   *   合规引擎里这些只可能是坏输入，静默接受就是静默错答案。
+   *
+   * <p>★无歧义写法（非捕获组 + 整数/小数分支不重叠），避免 ReDoS：
+   *   原先的 (\d+\.?\d*|\.\d+) 对 "000…0!" 会灾难性回溯——实测 2 万个 '0'
+   *   需 101 秒（TS 侧同一模式被 CodeQL 判 high：js/polynomial-redos）。
+   *   字符串可由宿主传入，属不可控输入。
+   */
+  private static final java.util.regex.Pattern NUMERIC_LITERAL =
+      java.util.regex.Pattern.compile("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?");
+
+  /**
+   * 数值换算，接受集与 aster-lang-ts {@code toNum} 逐条一致（aster-lang-ts#199）：
+   * <ul>
+   *   <li>Number → {@code doubleValue()}，真实的 NaN/Infinity 原样放行——它们只能来自
+   *       算术，不是坏输入；</li>
+   *   <li>String → trim 后须匹配 {@link #NUMERIC_LITERAL} 且结果有限；空串、"NaN"、
+   *       "Infinity"、类型后缀、十六进制一律以 {@link BuiltinException} 拒绝，
+   *       而不是让 {@code NumberFormatException} 裸奔到调用方；</li>
+   *   <li>其他类型 → 抛错。</li>
+   * </ul>
+   */
   private static double toDouble(Object o) {
     Object value = unwrap(o);
     if (value instanceof Number n) return n.doubleValue();
-    if (value instanceof String s) return Double.parseDouble(s);
+    if (value instanceof String s) {
+      String t = s.trim();
+      if (NUMERIC_LITERAL.matcher(t).matches()) {
+        double d = Double.parseDouble(t);
+        if (Double.isFinite(d)) return d;
+      }
+      throw new BuiltinException(ErrorMessages.typeExpectedGot("Number", "Text \"" + s + "\""));
+    }
     throw new BuiltinException(ErrorMessages.typeExpectedGot("Number", typeName(o)));
   }
 
@@ -1540,32 +1577,11 @@ public final class Builtins {
   private static int decimalScale(Object scale) {
     Object value = unwrap(scale);
     double d;
-    if (value instanceof Number n) {
-      d = n.doubleValue();
-    } else if (value instanceof String s) {
-      // 保留原有的数字字符串路径（此前走 Integer.parseInt），TS 侧 Number("2") 同样接受。
-      //
-      // ★但必须先用严格数字正则筛一道（issue #74）：Double.parseDouble 会吃掉
-      //   Java 的类型后缀（"2d"/"2f"/"2D"）与 "0x1p3" 之类十六进制浮点，
-      //   而 TS 的 Number("2d") 得 NaN → 拒绝。实测此前 Java 把 "2d" 静默接受为 2，
-      //   与本方法「响亮失败」的立意相悖，也与 TS 分叉。
-      String t = s.trim();
-      // ★无歧义写法（非捕获组 + 整数/小数分支不重叠），避免 ReDoS：
-      //   原先的 (\d+\.?\d*|\.\d+) 对 "000…0!" 会灾难性回溯——
-      //   实测 2 万个 '0' 需 **101 秒**（TS 侧同一模式被 CodeQL 判 high：
-      //   js/polynomial-redos）。scale 可由宿主传入，属不可控输入。
-      //   改写后语义完全一致，2 万字符降到毫秒级。
-      if (!t.matches("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?")) {
-        throw new BuiltinException(
-            "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
-      }
-      try {
-        d = Double.parseDouble(t);
-      } catch (NumberFormatException e) {
-        throw new BuiltinException(
-            "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
-      }
-    } else {
+    try {
+      // 数字字符串路径（TS 侧 Number("2") 同样接受）与 toDouble 共用同一严格接受集
+      // （issue #74："2d"/"0x1p3" 必须被拒），错误统一改写成 scale 语义的消息。
+      d = toDouble(value);
+    } catch (BuiltinException e) {
       throw new BuiltinException(
           "Decimal: scale must be an integer in [0, 18], got " + formatScale(value) + ".");
     }
@@ -1599,6 +1615,18 @@ public final class Builtins {
   // #43：整数算术提升到 long（match TS 统一 number；原 toInt 返回 int，|结果| > 2^31
   // 时静默溢出回绕，与已修为 long 的 intdiv 不一致）。CoreIrEvalCli.valueToJson 的
   // fitsInInt 会把可容纳的 long 值收敛回 int，与 TS JSON 序列化逐位一致。
+  /**
+   * List.sum 的元素换算：非字符串原样进入 numericAdd；字符串经严格 {@link #toDouble}
+   * 解析，整数值收敛回 Long——"10"+"2" 此前经 toLong 得 Int 12，输出类型必须保持，
+   * 否则既有 golden/parity 输出会从 12 变成 12.0；小数值保持 Double（"1.5" → 1.5）。
+   */
+  private static Object sumOperand(Object x) {
+    if (!(unwrap(x) instanceof String)) return x;
+    double d = toDouble(x);
+    boolean integral = d == Math.rint(d) && Math.abs(d) < 0x1p63;
+    return integral ? (Object) (long) d : (Object) d;
+  }
+
   private static Object numericAdd(Object a, Object b) {
     if (isDecimal(a) || isDecimal(b)) return wrapDecimal(toDecimal(a).add(toDecimal(b)));
     if (isFractional(a) || isFractional(b)) return toDouble(a) + toDouble(b);
