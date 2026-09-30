@@ -11,6 +11,7 @@ import com.oracle.truffle.api.nodes.NodeInfo;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -40,7 +41,7 @@ public final class WorkflowNode extends Node {
   @Children private final Node[] taskExprs;  // 任务表达式
   @Children private final Node[] compensateExprs;  // 补偿表达式（可为 null）
   private final String[] taskNames;
-  private final Map<String, Set<String>> dependencies;  // name -> dep names
+  private final List<Set<String>> dependencies;  // step 下标 -> 依赖的 step 名集合
   private final long timeoutMs;
 
   /**
@@ -49,18 +50,19 @@ public final class WorkflowNode extends Node {
    * @param env 环境对象（用于变量绑定）
    * @param taskExprs 任务表达式数组
    * @param compensateExprs 补偿表达式数组（可为 null，与 taskExprs 一一对应）
-   * @param taskNames 任务名称数组（与 taskExprs 一一对应）
-   * @param dependencies 依赖关系映射（任务名 -> 依赖的任务名集合）
+   * @param taskNames 任务名称数组（与 taskExprs 一一对应，未命名 step 为 null）
+   * @param dependencies 依赖声明（与 taskExprs 一一对应：第 i 项是第 i 个 step 依赖的 step 名集合，
+   *                     无依赖为空集）。按下标而非按名字挂载，未命名 step 的依赖才不会丢失
    * @param timeoutMs 工作流全局超时时间（毫秒）
    */
   public WorkflowNode(Env env, Node[] taskExprs, Node[] compensateExprs, String[] taskNames,
-                      Map<String, Set<String>> dependencies, long timeoutMs) {
-    if (taskExprs == null || taskNames == null) {
-      throw new IllegalArgumentException("taskExprs and taskNames cannot be null");
+                      List<Set<String>> dependencies, long timeoutMs) {
+    if (taskExprs == null || taskNames == null || dependencies == null) {
+      throw new IllegalArgumentException("taskExprs, taskNames and dependencies cannot be null");
     }
-    if (taskExprs.length != taskNames.length) {
+    if (taskExprs.length != taskNames.length || taskExprs.length != dependencies.size()) {
       throw new IllegalArgumentException(
-          "taskExprs and taskNames must have the same length"
+          "taskExprs, taskNames and dependencies must have the same length"
       );
     }
     if (compensateExprs != null && compensateExprs.length != taskExprs.length) {
@@ -72,7 +74,7 @@ public final class WorkflowNode extends Node {
     this.taskExprs = taskExprs;
     this.compensateExprs = compensateExprs;
     this.taskNames = taskNames;
-    this.dependencies = (dependencies == null) ? Collections.emptyMap() : dependencies;
+    this.dependencies = List.copyOf(dependencies);
     this.timeoutMs = timeoutMs;
   }
 
@@ -182,7 +184,7 @@ public final class WorkflowNode extends Node {
         }
       };
 
-      Set<String> depIds = resolveDependencyIds(stepName, nameToId);
+      Set<String> depIds = resolveDependencyIds(i, nameToId);
       // 使用显式 workflowId 注册，避免并发 workflow 时全局字段被覆盖
       registry.registerTaskWithWorkflowId(taskId, callable, depIds, workflowId);
       // 只记录**注册成功**的 id：registerTaskWithWorkflowId 自身抛出时
@@ -277,13 +279,13 @@ public final class WorkflowNode extends Node {
     return results;
   }
 
-  private Set<String> resolveDependencyIds(String name, Map<String, String> nameToId) {
-    Set<String> depNames = dependencies.get(name);
-    if (depNames == null || depNames.isEmpty()) {
-      return Collections.emptySet();
-    }
+  /**
+   * 把第 {@code stepIndex} 个 step 声明的依赖名解析为 taskId。
+   * 依赖按下标取、依赖目标按名字查：只有具名 step 才能被别人依赖，但任何 step 都可以声明依赖。
+   */
+  private Set<String> resolveDependencyIds(int stepIndex, Map<String, String> nameToId) {
     LinkedHashSet<String> ids = new LinkedHashSet<>();
-    for (String dep : depNames) {
+    for (String dep : dependencies.get(stepIndex)) {
       String taskId = nameToId.get(dep);
       if (taskId == null) {
         throw new RuntimeException("Unknown workflow dependency: " + dep);
