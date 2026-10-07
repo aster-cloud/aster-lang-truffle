@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,37 @@ class VerdictBuiltinsTest {
   @Test
   void 空reason抛异常() {
     assertThrows(Builtins.BuiltinException.class, () -> Builtins.call("Verdict.deny", new Object[] {""}));
+  }
+
+  @Test
+  void 空白reason与role抛异常() {
+    assertThrows(Builtins.BuiltinException.class, () -> Builtins.call("Verdict.deny", new Object[] {"   "}));
+    assertThrows(
+        Builtins.BuiltinException.class,
+        () -> Builtins.call("Verdict.require_approval", new Object[] {" \t", "over cap"}));
+  }
+
+  @Test
+  void Verdict在布尔上下文直接失败() throws Exception {
+    Object deny = Builtins.call("Verdict.deny", new Object[] {"no"});
+    var e = assertThrows(Builtins.BuiltinException.class, () -> Builtins.toBool(deny));
+    assertTrue(e.getMessage().contains("Verdict cannot be used as Bool"), e.getMessage());
+    assertThrows(Builtins.BuiltinException.class, () -> Builtins.call("not", new Object[] {deny}));
+  }
+
+  @Test
+  void If条件为Verdict时求值失败而非放行() throws Exception {
+    String json = Files.readString(Path.of("src/test/resources/verdict/verdict-if-condition_core.json"));
+    try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
+      var e =
+          assertThrows(
+              PolyglotException.class,
+              () -> {
+                Value r = ctx.eval(Source.newBuilder("aster", json, "verdict-if").build());
+                if (r.canExecute()) r.execute();
+              });
+      assertTrue(e.getMessage().contains("Verdict cannot be used as Bool"), e.getMessage());
+    }
   }
 
   @Test

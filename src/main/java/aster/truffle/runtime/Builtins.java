@@ -1427,12 +1427,12 @@ public final class Builtins {
     return m;
   }
 
-  /** 校验 Verdict 的文本参数：必须是非空 String，不做隐式类型转换。 */
+  /** 校验 Verdict 的文本参数：必须是非空白 String（与 @id 拒空白同口径），不做隐式类型转换。 */
   private static String verdictText(Object v, String fn, String field) {
     if (!(v instanceof String s)) {
       throw new BuiltinException(fn + ": " + field + " must be Text, got " + typeName(v));
     }
-    if (s.isEmpty()) {
+    if (s.isBlank()) {
       throw new BuiltinException(fn + ": " + field + " must not be empty");
     }
     return s;
@@ -1497,7 +1497,17 @@ public final class Builtins {
     if (value == null) return false;
     if (value instanceof Number n) return n.doubleValue() != 0.0;
     if (value instanceof String s) return !s.isEmpty();
+    // Verdict 不可当布尔用（ADR 0039 §2.2）：DENY 若按「非空对象为真」放行即 fail-open，必须直接失败（与 TS isTruthy 同文）
+    if (isVerdictValue(value)) throw new BuiltinException(VERDICT_AS_BOOL_ERROR);
     return true;
+  }
+
+  /** 布尔上下文遇到 Verdict 时的统一错误信息（与 TS 解释器同文）。 */
+  static final String VERDICT_AS_BOOL_ERROR = "Verdict cannot be used as Bool; compare its outcome field instead";
+
+  /** 运行时 Verdict 值：带 {@code __type == "Verdict"} 标记的 Map。 */
+  private static boolean isVerdictValue(Object value) {
+    return value instanceof java.util.Map<?, ?> m && "Verdict".equals(m.get("__type"));
   }
 
   private static int toInt(Object o) {
