@@ -1134,6 +1134,27 @@ public final class Builtins {
       return args[0];
     }));
 
+    // === Verdict（ADR 0039）===
+    // 运行时值形状与 aster-lang-ts interpreter 逐键一致：__type, outcome, [role], reason。
+    // reason/role 必须是非空 Text：空理由等于没有决策；非 Text 不做隐式转换。
+    register("Verdict.allow", new BuiltinDef(args -> {
+      checkArity("Verdict.allow", args, 0);
+      return verdict("ALLOW", null, null);
+    }));
+    register("Verdict.deny", new BuiltinDef(args -> {
+      checkArity("Verdict.deny", args, 1);
+      return verdict("DENY", null, verdictText(args[0], "Verdict.deny", "reason"));
+    }));
+    register("Verdict.require_approval", new BuiltinDef(args -> {
+      checkArity("Verdict.require_approval", args, 2);
+      return verdict("REQUIRE_APPROVAL", verdictText(args[0], "Verdict.require_approval", "role"),
+          verdictText(args[1], "Verdict.require_approval", "reason"));
+    }));
+    register("Verdict.escalate", new BuiltinDef(args -> {
+      checkArity("Verdict.escalate", args, 1);
+      return verdict("ESCALATE", null, verdictText(args[0], "Verdict.escalate", "reason"));
+    }));
+
     // === IO Operations (需要 IO effect) ===
     // 每个 IO.* builtin 先做 effect 校验（IO effect 必须在当前 AsterContext 的允许
     // 列表里，见 AsterContext.isEffectAllowed），未授权时抛出清晰的 guest 错误
@@ -1395,6 +1416,27 @@ public final class Builtins {
   }
 
   // ===  辅助方法 ===
+
+  /** 构造 Verdict 记录；键序固定为 __type, outcome, role, reason，缺省键不写入（与 TS 解释器序列化一致）。 */
+  private static java.util.Map<String, Object> verdict(String outcome, String role, String reason) {
+    java.util.LinkedHashMap<String, Object> m = new java.util.LinkedHashMap<>();
+    m.put("__type", "Verdict");
+    m.put("outcome", outcome);
+    if (role != null) m.put("role", role);
+    if (reason != null) m.put("reason", reason);
+    return m;
+  }
+
+  /** 校验 Verdict 的文本参数：必须是非空 String，不做隐式类型转换。 */
+  private static String verdictText(Object v, String fn, String field) {
+    if (!(v instanceof String s)) {
+      throw new BuiltinException(fn + ": " + field + " must be Text, got " + typeName(v));
+    }
+    if (s.isEmpty()) {
+      throw new BuiltinException(fn + ": " + field + " must not be empty");
+    }
+    return s;
+  }
 
   private static void checkArity(String name, Object[] args, int expected) {
     if (args.length != expected) {
