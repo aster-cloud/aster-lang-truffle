@@ -1206,7 +1206,103 @@ public final class Builtins {
   public static Object call(String name, Object[] args) throws BuiltinException {
     BuiltinDef def = lookup(name);
     if (def == null) return null;
-    return def.impl.call(args);
+    Object result = def.impl.call(args);
+    // 累计分配预算：在通用分发口统一计量本次调用物化出的规模。放这里而不是逐个
+    // builtin 内部，是因为「造集合的 builtin」有 30+ 个（concat/map/filter/distinct/
+    // sort/groupBy/keys/values/split…），逐个打补丁必然漏掉新增的那个。
+    // ★但这里**不是唯一入口**：BuiltinCallNode 的内联快速路径直接返回、不经过
+    // 本方法，那几处各自补了 chargeForResult。详见该方法与 AllocationBudget 注释。
+    chargeForResult(result);
+    return result;
+  }
+
+  /**
+   * 按返回值的规模扣减分配预算。
+   *
+   * <p>逐个顶层元素计量。嵌套结构（如 {@code List.groupBy} 的 Map&lt;K, List&gt;）
+   * 的内层元素本身来自已被计过的入参列表——内层每个 {@code List.range} 都各自
+   * 经过本方法单独计量，故不会漏计，也不会因重复计量误拒合法的分组操作。
+   *
+   * <p>★**字符串必须一并计量**：{@code Text.concat} 同样能翻倍
+   * （{@code Let s1 be Text.concat(s0, s0).} 重复 25 次 → 3.35 亿字符），
+   * 而它返回 {@code String}——若只认 Collection/Map 则扣 0 通过。
+   * 实测：Java 的 {@code String +} 急切物化真实 char 数组，292ms 即抛
+   * {@code Java heap space}，**远快于宿主 5 秒看门狗**；TS 侧因 V8 用 rope 表示
+   * 更隐蔽（concat 近乎零成本，直到 toUpper 之类强制扁平化才吃满内存）。
+   * 该向量与集合向量同构，必须同防，否则两引擎判定分叉。
+   *
+   * <p>与 TS {@code chargeAllocation} 口径逐条对齐：Collection↔Array、Map↔Map、
+   * CharSequence↔string。★两边判据必须保持等价——Java 的 {@code Set} 是 Collection
+   * 会被计量，而 TS 的 {@code Set} 不是 Array 不会被计量，若将来有 builtin 返回 Set
+   * 即是 parity 分叉。现已确认两侧均无 builtin 返回 Set。
+   *
+   * <p>公开可见：除 {@link #call} 外，{@code BuiltinCallNode} 的**内联快速路径**
+   * （{@code Text.concat}/{@code List.append}/{@code List.map}/{@code List.filter}）
+   * 直接返回结果而不经过 {@link #call}，必须各自显式调用本方法补记账。
+   * ★「所有 builtin 都经过 call()」这个假设是**错的**——Truffle 的
+   * {@code @Specialization} 内联特化绕开了它。
+   */
+  public static void chargeForResult(Object result) throws BuiltinException {
+    AllocationBudget.charge(countElements(result, 0));
+  }
+
+  /**
+   * 递归统计返回值物化出的元素总数（深度有界）。
+   *
+   * <p>★<b>为什么必须递归、不能只计顶层</b>：只计顶层的版本有一个 Critical 绕过——
+   * {@code List.groupBy(a, one)} 把 1e6 元素全归进同一组，返回的 Map 顶层 size=1，
+   * **只扣 1 点额度而真实物化 1e6**。重复 20 次即 840 字节源码 → 实测 Java 侧
+   * 1972ms 物化 210MB 且 {@code SUCCESS}，预算形同虚设。
+   *
+   * <p>此前那版注释写的「内层元素来自已被计过的入参列表，故不会漏计」是**错的**：
+   * 入参只被扣过**一次**，但它可以被**重新物化任意多次**——同一个 {@code a} 被
+   * groupBy 20 次就产生 20 份真实副本，而顶层计量只记 20 点。
+   *
+   * <p>深度上限固定 {@value #CHARGE_MAX_DEPTH}，与 {@code VALUE_EQUALS_MAX_DEPTH}
+   * 同理由：**固定常量、不跟随运行时栈**，否则同一规则在不同机器给出不同结果。
+   * 超深时不再下探（返回已累计值），宁可少算也不抛——深层嵌套本身受其它上限约束，
+   * 而在计量函数里抛新异常会把「超预算」和「结构过深」两类错误混在一起。
+   */
+  private static final int CHARGE_MAX_DEPTH = 8;
+
+  private static long countElements(Object value, int depth) {
+    if (depth > CHARGE_MAX_DEPTH) {
+      return 0L;
+    }
+    if (value instanceof java.util.Collection<?> c) {
+      long n = c.size();
+      for (Object e : c) {
+        n += countElements(e, depth + 1);
+      }
+      return n;
+    }
+    if (value instanceof java.util.Map<?, ?> m) {
+      // AsterMapValue implements Map，天然命中这一分支。
+      long n = m.size();
+      for (Object e : m.values()) {
+        n += countElements(e, depth + 1);
+      }
+      return n;
+    }
+    if (value instanceof aster.truffle.runtime.interop.AsterListValue gl) {
+      // ★guest 列表载体必须单列：AsterListValue 只 implements TruffleObject，
+      // **不是 Collection**，落不到上面第一个分支（而 AsterMapValue 恰好 implements Map
+      // 所以一直是命中的——两个载体口径此前不一致）。
+      //
+      // 这不是理论缺口：LambdaRootNode 对每个返回值调 AsterInteropAdapter.adapt，
+      // 那里 `new ArrayList<>(list.size())` **真实拷贝一份**。即每次用户 Rule 返回列表
+      // 都会物化一份副本，而它此前零记账。
+      java.util.List<Object> es = gl.elements();
+      long n = es.size();
+      for (Object e : es) {
+        n += countElements(e, depth + 1);
+      }
+      return n;
+    }
+    if (value instanceof CharSequence s) {
+      return s.length();
+    }
+    return 0L;
   }
 
   /**
