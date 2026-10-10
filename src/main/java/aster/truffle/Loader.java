@@ -295,6 +295,23 @@ public final class Loader {
    */
   private java.util.Set<String> userFunctionNames = java.util.Set.of();
 
+  /**
+   * 把二元 {@code and}/{@code or} 调用构建成短路节点；其它调用返回 null 交由常规路径。
+   * 中缀与前缀写法在 Core IR 中同为 {@code Call{Name "and"|"or"}}，此处一并覆盖。
+   * 参数个数不为 2 时仍走 builtin 路径，由 builtin 的 arity 检查报错。
+   */
+  private AsterExpressionNode buildShortCircuit(CoreModel.Call c) {
+    if (!(c.target instanceof CoreModel.Name n) || c.args == null || c.args.size() != 2) return null;
+    if (userFunctionNames.contains(n.name)) return null;
+    boolean isAnd = "and".equals(n.name);
+    if (!isAnd && !"or".equals(n.name)) return null;
+    AsterExpressionNode left = buildExpr(c.args.get(0));
+    AsterExpressionNode right = buildExpr(c.args.get(1));
+    return isAnd
+        ? new aster.truffle.nodes.ShortCircuitNode.AndNode(left, right)
+        : new aster.truffle.nodes.ShortCircuitNode.OrNode(left, right);
+  }
+
   private Node buildBlock(CoreModel.Block b) {
     if (b == null || b.statements == null || b.statements.isEmpty()) return LiteralNode.create(null);
     var list = new java.util.ArrayList<Node>();
@@ -483,6 +500,9 @@ public final class Loader {
     }
     if (e instanceof CoreModel.Name n) return buildName(n.name);
     if (e instanceof CoreModel.Call c) {
+      // and/or 必须短路，不能走先求值全部参数的 BuiltinCallNode
+      AsterExpressionNode shortCircuit = buildShortCircuit(c);
+      if (shortCircuit != null) return shortCircuit;
       // 检测 builtin 调用：如果 target 是 Name 且是已注册的 builtin，使用 BuiltinCallNode 优化
       // **但**用户定义的函数（如 `Rule add ...`）必须优先于同名 builtin —— 不然
       // user 的 `add(request)` 会被识别为算术 add(a,b) 然后 arity 失配。
