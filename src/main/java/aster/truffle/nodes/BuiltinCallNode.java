@@ -26,7 +26,7 @@ import java.util.List;
  * 消除 CallTarget 调用开销。仅处理已知的 builtin，其他情况 fallback 到 Builtins.call。
  *
  * Phase 2A：算术运算 add/sub/mul/div/mod、比较运算 eq/lt/gt/lte/gte、
- *           逻辑运算 and/or/not (共 13 个 builtin)
+ *           逻辑运算 not；and/or 需短路，由 Loader 构建为 {@link ShortCircuitNode}，不经本节点
  * Phase 2B Batch 1：文本运算 Text.concat/Text.length (新增 2 个 builtin，累计 15 个)
  * Phase 2B Batch 2：集合运算 List.length/List.append (新增 2 个 builtin，累计 17 个)
  * Phase 3B：高阶函数优化 List.map/List.filter (引入 InvokeNode + DirectCallNode 缓存，累计 19 个)
@@ -70,16 +70,6 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
   @Idempotent
   protected boolean isGte() {
     return Builtins.isCanonicalName(builtinName, "gte");
-  }
-
-  @Idempotent
-  protected boolean isAnd() {
-    return "and".equals(builtinName);
-  }
-
-  @Idempotent
-  protected boolean isOr() {
-    return "or".equals(builtinName);
   }
 
   @Idempotent
@@ -217,34 +207,6 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object b = argNodes[1].executeGeneric(frame);
     if (a instanceof Integer ai && b instanceof Integer bi) {
       return ai.intValue() >= bi.intValue();
-    }
-    return expectBoolean(doGenericWithArgs(a, b));
-  }
-
-  /**
-   * 内联 and (boolean && boolean)
-   */
-  @Specialization(guards = {"isAnd()", "hasTwoArgs()"})
-  protected boolean doAndBoolean(VirtualFrame frame) {
-    Profiler.inc("builtin_and_inlined");
-    Object a = argNodes[0].executeGeneric(frame);
-    Object b = argNodes[1].executeGeneric(frame);
-    if (a instanceof Boolean ab && b instanceof Boolean bb) {
-      return ab && bb;
-    }
-    return expectBoolean(doGenericWithArgs(a, b));
-  }
-
-  /**
-   * 内联 or (boolean || boolean)
-   */
-  @Specialization(guards = {"isOr()", "hasTwoArgs()"})
-  protected boolean doOrBoolean(VirtualFrame frame) {
-    Profiler.inc("builtin_or_inlined");
-    Object a = argNodes[0].executeGeneric(frame);
-    Object b = argNodes[1].executeGeneric(frame);
-    if (a instanceof Boolean ab && b instanceof Boolean bb) {
-      return ab || bb;
     }
     return expectBoolean(doGenericWithArgs(a, b));
   }
@@ -535,7 +497,7 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
    * 处理所有未内联的 builtin 或类型不匹配的情况
    */
   @Specialization(replaces = {"doEqInt", "doLtInt", "doGtInt", "doLteInt", "doGteInt",
-                               "doAndBoolean", "doOrBoolean", "doNotBoolean",
+                               "doNotBoolean",
                                "doTextConcat", "doTextLength", "doListLength", "doListAppend",
                                "doListMap", "doListFilter"})
   protected Object doGeneric(VirtualFrame frame) {
