@@ -1875,37 +1875,39 @@ public class BenchmarkTest {
   }
 
   /**
-   * 调度基准：对比 PriorityQueue 与 LinkedHashSet 就绪队列实现的 95th percentile 开销。
+   * 调度基准：PriorityQueue 就绪队列相对 LinkedHashSet 的额外开销只应是 O(log n) 倍。
+   * <p>
+   * 以比较次数 / hashCode 次数计量而非墙钟：两者都由种子决定，结果确定；墙钟比值在全量
+   * 测试的 CPU 负载下会抖动到阈值之外，造成与代码无关的失败。
    */
   @Test
   public void benchmarkPriorityQueueOverhead() {
     Random random = new Random(42L);
-    int iterations = 300;
+    int iterations = 30;
     int taskCount = 4000;
-    double[] pqTimes = new double[iterations];
-    double[] linkedTimes = new double[iterations];
+    // 二叉堆的算法上界：offer 至多 log2(n) 次比较，poll 的下沉每层至多 2 次
+    long heapBound = 3L * taskCount * floorLog2(taskCount);
+    // 哈希集合每个元素插入时取一次 hashCode（迭代器删除复用缓存的 hash），上界留 2 倍余量
+    long hashBound = 2L * taskCount;
+    long maxComparisons = 0L;
+    long maxHashes = 0L;
 
     for (int i = 0; i < iterations; i++) {
       long seed = random.nextLong();
-      pqTimes[i] = measurePriorityQueueCost(seed, taskCount);
-      linkedTimes[i] = measureLinkedHashSetCost(seed, taskCount);
+      long pqComparisons = countPriorityQueueComparisons(seed, taskCount);
+      long linkedHashes = countLinkedHashSetHashes(seed, taskCount);
+      assertTrue(pqComparisons <= heapBound,
+          String.format("PriorityQueue regression: %d comparisons > O(n log n) bound %d (seed=%d)",
+              pqComparisons, heapBound, seed));
+      assertTrue(linkedHashes <= hashBound,
+          String.format("LinkedHashSet regression: %d hashCode calls > O(n) bound %d (seed=%d)",
+              linkedHashes, hashBound, seed));
+      maxComparisons = Math.max(maxComparisons, pqComparisons);
+      maxHashes = Math.max(maxHashes, linkedHashes);
     }
-
-    java.util.Arrays.sort(pqTimes);
-    java.util.Arrays.sort(linkedTimes);
-    double pqP95 = percentile95(pqTimes);
-    double linkedP95 = percentile95(linkedTimes);
-
     System.out.printf(
-        "Ready queue overhead benchmark (95th%%): PriorityQueue=%.4f ms, LinkedHashSet=%.4f ms%n",
-        pqP95, linkedP95);
-
-    // 允许 PriorityQueue 比 LinkedHashSet 慢 200%，因为：
-    // 1. 优先级调度需要 O(log n) 排序开销 vs O(1) 插入
-    // 2. CI 环境性能波动较大
-    assertTrue(pqP95 <= linkedP95 * 3.0,
-        String.format("PriorityQueue regression: %.4f ms vs LinkedHashSet %.4f ms (ratio=%.2fx)",
-            pqP95, linkedP95, pqP95 / linkedP95));
+        "Ready queue overhead benchmark: PriorityQueue max %d comparisons (bound %d), LinkedHashSet max %d hashes (bound %d)%n",
+        maxComparisons, heapBound, maxHashes, hashBound);
   }
 
   private static final long WORK_SIMULATION_NANOS = TimeUnit.MICROSECONDS.toNanos(200);
@@ -2009,32 +2011,62 @@ public class BenchmarkTest {
     return sortedValues[index];
   }
 
-  private static double measurePriorityQueueCost(long seed, int taskCount) {
+  private static int floorLog2(int n) {
+    return 31 - Integer.numberOfLeadingZeros(n);
+  }
+
+  /** 按种子生成 taskCount 个随机优先级，全部入队再全部出队，返回比较器调用次数。 */
+  private static long countPriorityQueueComparisons(long seed, int taskCount) {
     Random random = new Random(seed);
-    PriorityQueue<int[]> queue = new PriorityQueue<>(Comparator.comparingInt(entry -> entry[1]));
-    long start = System.nanoTime();
+    long[] comparisons = {0L};
+    Comparator<int[]> byPriority = (left, right) -> {
+      comparisons[0]++;
+      return Integer.compare(left[1], right[1]);
+    };
+    PriorityQueue<int[]> queue = new PriorityQueue<>(byPriority);
     for (int i = 0; i < taskCount; i++) {
       queue.offer(new int[]{i, random.nextInt(taskCount)});
     }
     while (!queue.isEmpty()) {
       queue.poll();
     }
-    long end = System.nanoTime();
-    return (end - start) / 1_000_000.0;
+    return comparisons[0];
   }
 
-  private static double measureLinkedHashSetCost(long seed, int taskCount) {
+  /** 同一种子下的 LinkedHashSet 就绪集合：全部插入再按插入序删除，返回 hashCode 调用次数。 */
+  private static long countLinkedHashSetHashes(long seed, int taskCount) {
     Random random = new Random(seed);
-    LinkedHashSet<Integer> ready = new LinkedHashSet<>();
-    long start = System.nanoTime();
+    long[] hashes = {0L};
+    LinkedHashSet<CountingKey> ready = new LinkedHashSet<>();
     for (int i = 0; i < taskCount; i++) {
-      ready.add(random.nextInt(taskCount * 2));
+      ready.add(new CountingKey(random.nextInt(taskCount * 2), hashes));
     }
-    for (Iterator<Integer> iterator = ready.iterator(); iterator.hasNext(); ) {
+    for (Iterator<CountingKey> iterator = ready.iterator(); iterator.hasNext(); ) {
       iterator.next();
       iterator.remove();
     }
-    long end = System.nanoTime();
-    return (end - start) / 1_000_000.0;
+    return hashes[0];
+  }
+
+  /** 记录 hashCode 调用次数的键，用于计量哈希集合的操作数。 */
+  private static final class CountingKey {
+    private final int value;
+    private final long[] hashes;
+
+    CountingKey(int value, long[] hashes) {
+      this.value = value;
+      this.hashes = hashes;
+    }
+
+    @Override
+    public int hashCode() {
+      hashes[0]++;
+      return Integer.hashCode(value);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      return other instanceof CountingKey key && key.value == value;
+    }
   }
 }
