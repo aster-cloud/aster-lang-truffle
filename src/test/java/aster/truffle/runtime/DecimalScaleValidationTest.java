@@ -1,11 +1,14 @@
 package aster.truffle.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import aster.truffle.runtime.interop.AsterDecimalValue;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -131,22 +134,72 @@ class DecimalScaleValidationTest {
    * scale 的数字校验正则必须**线性**匹配，不得因病态输入灾难性回溯（ReDoS）。
    *
    * <p>原先写法 {@code (\d+\.?\d*|\.\d+)} 的两个分支对 "000…0" 存在歧义，
-   * 遇到「大量 0 + 一个非法字符」会指数级回溯——实测 2 万个 '0' 需 **101 秒**
+   * 遇到「大量 0 + 一个非法字符」会回溯——实测 2 万个 '0' 需 **101 秒**
    * （TS 侧同一模式被 CodeQL 判 high: js/polynomial-redos）。
    * scale 可由宿主传入，属**不可控输入**，必须线性。
    *
-   * <p>本用例给 2 万字符的病态输入设 5 秒上限：修好后实测 ~7ms，
-   * 回退到旧正则则会远超上限而失败。
+   * <p>工作量用匹配器读取字符的次数计量：{@code java.util.regex} 只经 {@code charAt} 读输入，
+   * 读数由输入唯一决定，不受机器负载影响。输入长度翻倍时线性正则读数约翻倍，
+   * 二次回溯约翻四倍，以比值 &lt;3 判定。
    */
   @Test
-  void pathologicalScaleStringRejectedQuickly() {
+  void pathologicalScaleStringRejectedQuickly() throws ReflectiveOperationException {
     String pathological = "0".repeat(20_000) + "!";
-    long start = System.nanoTime();
     assertThrows(Builtins.BuiltinException.class, () -> round(pathological),
         "病态输入仍应被拒（行为不变）");
-    long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-    org.junit.jupiter.api.Assertions.assertTrue(elapsedMs < 5_000,
-        "★scale 正则必须线性匹配：2 万字符耗时 " + elapsedMs + "ms（上限 5000ms）。"
-            + "超限说明正则又退回了会灾难性回溯的写法。");
+
+    Pattern numericLiteral = numericLiteralPattern();
+    long reads = countMatcherReads(numericLiteral, 1_000);
+    long doubledReads = countMatcherReads(numericLiteral, 2_000);
+    double ratio = (double) doubledReads / reads;
+    System.out.printf("scale 正则字符读取次数：1000 个 0 → %d，2000 个 0 → %d（比值 %.2f）%n",
+        reads, doubledReads, ratio);
+    assertTrue(ratio < 3.0,
+        String.format("★scale 正则必须线性匹配：输入翻倍后字符读取次数 %d → %d（比值 %.2f，上限 3）。"
+            + "超限说明正则又退回了会回溯的写法。", reads, doubledReads, ratio));
+  }
+
+  private static Pattern numericLiteralPattern() throws ReflectiveOperationException {
+    Field field = Builtins.class.getDeclaredField("NUMERIC_LITERAL");
+    field.setAccessible(true);
+    return (Pattern) field.get(null);
+  }
+
+  /** 对「zeros 个 '0' + 一个非法字符」做整串匹配，返回匹配器读取字符的次数。 */
+  private static long countMatcherReads(Pattern pattern, int zeros) {
+    CountingSequence input = new CountingSequence("0".repeat(zeros) + "!");
+    assertFalse(pattern.matcher(input).matches(), "病态输入不应匹配数字字面量");
+    return input.reads;
+  }
+
+  /** 统计 charAt 调用次数的字符序列，用来计量正则匹配的工作量。 */
+  private static final class CountingSequence implements CharSequence {
+    private final String text;
+    private long reads;
+
+    CountingSequence(String text) {
+      this.text = text;
+    }
+
+    @Override
+    public int length() {
+      return text.length();
+    }
+
+    @Override
+    public char charAt(int index) {
+      reads++;
+      return text.charAt(index);
+    }
+
+    @Override
+    public CharSequence subSequence(int start, int end) {
+      return text.subSequence(start, end);
+    }
+
+    @Override
+    public String toString() {
+      return text;
+    }
   }
 }
