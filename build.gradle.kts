@@ -91,8 +91,8 @@ tasks.withType<JavaCompile>().configureEach {
     options.isDeprecation = true
 }
 
-tasks.test {
-    useJUnitPlatform()
+// 所有 Test 任务（默认 test 与 benchmark）共用的 JVM 与日志配置
+tasks.withType<Test>().configureEach {
     testLogging {
         events("passed", "skipped", "failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
@@ -114,6 +114,14 @@ tasks.test {
         val v = System.getProperty(key)
         if (v != null) systemProperty(key, v)
     }
+}
+
+// 带 @Tag("benchmark") 的用例只断言墙钟耗时，结果随机器负载漂移，不作为默认测试的门禁；
+// 需要时用 ./gradlew benchmark 单独运行
+tasks.test {
+    useJUnitPlatform {
+        excludeTags("benchmark")
+    }
 
     // CI 模式：通过 -PexcludeBenchmarks=true 排除耗时测试
     val excludeBenchmarks: String? by project
@@ -121,11 +129,20 @@ tasks.test {
         filter {
             excludeTestsMatching("aster.truffle.GraalVMJitBenchmark")
             excludeTestsMatching("aster.truffle.CrossBackendBenchmark")
-            excludeTestsMatching("aster.truffle.BenchmarkTest")
             excludeTestsMatching("aster.truffle.ChaosSchedulerTest")
             excludeTestsMatching("aster.truffle.ExecutionTestSuite.testWorkflowError")
         }
         println("[CI Mode] Excluding slow/flaky tests")
+    }
+}
+
+tasks.register<Test>("benchmark") {
+    description = "运行带 benchmark 标签的墙钟性能基准（不参与 check）"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform {
+        includeTags("benchmark")
     }
 }
 

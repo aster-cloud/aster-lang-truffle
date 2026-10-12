@@ -6,6 +6,7 @@ import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 
@@ -38,6 +39,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * 1. Warmup 阶段：让 JIT 编译器优化代码
  * 2. 测量阶段：多次迭代测量平均性能
  * 3. 阈值验证：确保性能在可接受范围内
+ *
+ * 墙钟阈值随机器负载漂移，相关用例标记为 {@code @Tag("benchmark")}，不进入默认 test 任务，
+ * 用 {@code ./gradlew benchmark} 单独运行；只有确定性计数的用例留在默认测试中。
  *
  * 性能指标：
  * - 简单算术: < 1 ms/iteration (10000 iterations)
@@ -82,6 +86,7 @@ public class BenchmarkTest {
    * 测试场景：递归函数调用优化
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkFactorial() throws IOException {
     String json = """
         {
@@ -189,6 +194,7 @@ public class BenchmarkTest {
    * 测试场景：重复递归调用优化
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkFibonacci() throws IOException {
     String json = """
         {
@@ -307,6 +313,7 @@ public class BenchmarkTest {
    * 测试场景：Builtin 函数调用优化
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkArithmetic() throws IOException {
     String json = """
         {
@@ -400,6 +407,7 @@ public class BenchmarkTest {
    * 测试场景：Lambda 创建和调用开销
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkLambdaCall() throws IOException {
     String json = """
         {
@@ -717,6 +725,7 @@ public class BenchmarkTest {
    * Phase 2B: Text builtin 内联优化
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkTextConcat() throws IOException {
     String json = """
         {
@@ -846,6 +855,7 @@ public class BenchmarkTest {
    * Phase 2B: Text builtin 内联优化
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkTextLength() throws IOException {
     String json = """
         {
@@ -956,6 +966,7 @@ public class BenchmarkTest {
    * 目标：量化 instanceof 检查的性能开销
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkListLength() throws IOException {
     String json = """
         {
@@ -1105,6 +1116,7 @@ public class BenchmarkTest {
    * 目标：验证 executeGeneric + instanceof + 对象分配 模式的性能可行性
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkListAppend() throws IOException {
     String json = """
         {
@@ -1260,6 +1272,7 @@ public class BenchmarkTest {
    * Profiler: builtin_list_map_called
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkListMapSimple() throws IOException {
     String json = """
         {
@@ -1364,6 +1377,7 @@ public class BenchmarkTest {
    * Profiler: builtin_list_map_called
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkListMapCaptured() throws IOException {
     String json = """
         {
@@ -1488,6 +1502,7 @@ public class BenchmarkTest {
    * Profiler: builtin_list_filter_called
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkListFilterSimple() throws IOException {
     String json = """
         {
@@ -1606,6 +1621,7 @@ public class BenchmarkTest {
    * Profiler: builtin_list_filter_called
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkListFilterCaptured() throws IOException {
     String json = """
         {
@@ -1743,6 +1759,7 @@ public class BenchmarkTest {
    * 目的: 观察性能随列表长度的扩展性
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkListMapScaling() throws IOException {
     // 使用辅助函数生成 10 元素列表的 JSON
     StringBuilder listBuilder = new StringBuilder();
@@ -1847,6 +1864,7 @@ public class BenchmarkTest {
    * 调度基准：验证 AsyncTaskRegistry 单次 workflow 的吞吐量（95th percentile ≥ 100 workflows/sec）。
    */
   @Test
+  @Tag("benchmark")
   public void benchmarkSchedulerThroughput() {
     int workflows = 150;
     double[] timingsMs = new double[workflows];

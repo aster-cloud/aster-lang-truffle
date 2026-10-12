@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -90,42 +92,53 @@ public class ChaosSchedulerTest {
     }
   }
 
+  /**
+   * 高并发：120 个独立任务全部完成，且确有两个任务同时在执行。
+   * <p>
+   * 并发用会合门闩证明（两个任务互相等到对方才继续），不用墙钟吞吐量：
+   * 吞吐量在满负载机器上会抖动，而且完全串行时 120×5ms 仍能达到 200/s，根本拦不住串行化回归。
+   */
   @Test
   public void testHighConcurrency() throws InterruptedException {
     AsyncTaskRegistry registry = new AsyncTaskRegistry(16);
     registry.setWorkflowId("high-concurrency-test");
     List<String> executionOrder = Collections.synchronizedList(new ArrayList<>());
+    CountDownLatch twoRunning = new CountDownLatch(2);
+    AtomicBoolean rendezvousTimedOut = new AtomicBoolean(false);
     int workflows = 120;
 
     try {
       for (int i = 0; i < workflows; i++) {
         String taskId = "wf-" + i;
-        final int taskIndex = i;
         registry.registerTaskWithDependencies(
             taskId,
             () -> {
-              // 修复：移除 CountDownLatch，简化并发测试避免死锁
-              Thread.sleep(5);
+              awaitSecondRunningTask(twoRunning, rendezvousTimedOut);
               executionOrder.add(taskId);
               return taskId;
             },
             Collections.emptySet(),
             0L,
             null,
-            taskIndex % 4);
+            i % 4);
       }
 
-      long startNs = System.nanoTime();
       registry.executeUntilComplete();
-      long endNs = System.nanoTime();
 
-      double elapsedSeconds = Math.max((endNs - startNs) / 1_000_000_000.0, 1e-6);
-      double throughput = workflows / elapsedSeconds;
       assertEquals(workflows, executionOrder.size());
-      assertTrue(throughput >= 100.0,
-          String.format("Expected >=100 workflows/sec but got %.2f", throughput));
+      assertFalse(rendezvousTimedOut.get(),
+          "16 线程调度器应让至少两个任务同时执行，但首个任务等满 30 秒也没有等到第二个任务");
     } finally {
       registry.shutdown();
+    }
+  }
+
+  /** 登记本任务已开始，并等待另一个任务同时开始；超时说明任务被串行执行。 */
+  private static void awaitSecondRunningTask(CountDownLatch twoRunning, AtomicBoolean timedOut)
+      throws InterruptedException {
+    twoRunning.countDown();
+    if (!twoRunning.await(30, TimeUnit.SECONDS)) {
+      timedOut.set(true);
     }
   }
 
