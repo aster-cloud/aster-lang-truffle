@@ -238,7 +238,10 @@ public final class Builtins {
     // === Text Operations (纯函数) ===
     register("Text.concat", new BuiltinDef(args -> {
       checkArity("Text.concat", args, 2);
-      return textValue(args[0]) + textValue(args[1]);
+      String left = textValue(args[0]);
+      String right = textValue(args[1]);
+      chargeKnownSize((long) left.length() + right.length());
+      return left + right;
     }));
 
     // ★2026-08-17 审计：本 builtin 此前在 Truffle **完全缺失**，而 TS 侧三处齐全
@@ -373,6 +376,7 @@ public final class Builtins {
       checkArity("List.append", args, 2);
       List<Object> l = asList(args[0]);
       if (l != null) {
+        chargeKnownListSize(l, args[1]);
         List<Object> mutable = new ArrayList<>(l);
         mutable.add(args[1]);
         return mutable;
@@ -385,6 +389,7 @@ public final class Builtins {
       List<Object> l1 = asList(args[0]);
       List<Object> l2 = asList(args[1]);
       if (l1 != null && l2 != null) {
+        chargeKnownListSizes(l1, l2);
         List<Object> result = new ArrayList<>(l1);
         result.addAll(l2);
         return result;
@@ -569,6 +574,7 @@ public final class Builtins {
       if (size > MAX_RANGE_SIZE) {
         throw new RuntimeException("List.range: 长度过大（" + size + " > " + MAX_RANGE_SIZE + "），拒绝以防内存耗尽 DoS");
       }
+      chargeKnownSize(Math.max(0L, size));
       List<Object> out = new ArrayList<>(size > 0 ? (int) size : 0);
       for (int i = start; i < end; i++) out.add(i);
       return out;
@@ -1232,8 +1238,9 @@ public final class Builtins {
     // builtin 内部，是因为「造集合的 builtin」有 30+ 个（concat/map/filter/distinct/
     // sort/groupBy/keys/values/split…），逐个打补丁必然漏掉新增的那个。
     // ★但这里**不是唯一入口**：BuiltinCallNode 的内联快速路径直接返回、不经过
-    // 本方法，那几处各自补了 chargeForResult。详见该方法与 AllocationBudget 注释。
-    chargeForResult(result);
+    // 本方法，那几处各自记账。规模可预知的 builtin 已在物化前准入记账，此处跳过以免双计。
+    // 详见 chargeForResult 与 AllocationBudget 注释。
+    if (!isAdmissionChargedBuiltin(name)) chargeForResult(result);
     return result;
   }
 
@@ -1259,12 +1266,34 @@ public final class Builtins {
    *
    * <p>公开可见：除 {@link #call} 外，{@code BuiltinCallNode} 的**内联快速路径**
    * （{@code Text.concat}/{@code List.append}/{@code List.map}/{@code List.filter}）
-   * 直接返回结果而不经过 {@link #call}，必须各自显式调用本方法补记账。
+   * 直接返回结果而不经过 {@link #call}。其中规模可预知的路径在物化前准入记账，
+   * 其余路径在返回前调用本方法事后记账。
    * ★「所有 builtin 都经过 call()」这个假设是**错的**——Truffle 的
    * {@code @Specialization} 内联特化绕开了它。
    */
   public static void chargeForResult(Object result) throws BuiltinException {
     AllocationBudget.charge(countElements(result, 0));
+  }
+
+  /** 在可预知规模的结果物化前，按结果计量规则准入预算。 */
+  public static void chargeKnownSize(long count) throws BuiltinException {
+    AllocationBudget.charge(count);
+  }
+
+  /** List.append 的输出计量包含原列表中的嵌套容器及新增元素。 */
+  public static void chargeKnownListSize(List<?> list, Object added) throws BuiltinException {
+    // 与事后计量 countElements(结果, 0) 逐项相等：原列表计量 + 新增的 1 个元素位 + 新元素自身（处于下一层深度）。
+    AllocationBudget.charge(countElements(list, 0) + 1 + countElements(added, 1));
+  }
+
+  /** List.concat 的输出计量与事后递归计量完全一致。 */
+  public static void chargeKnownListSizes(List<?> left, List<?> right) throws BuiltinException {
+    AllocationBudget.charge(countElements(left, 0) + countElements(right, 0));
+  }
+
+  private static boolean isAdmissionChargedBuiltin(String name) {
+    return "Text.concat".equals(name) || "List.append".equals(name)
+        || "List.concat".equals(name) || "List.range".equals(name);
   }
 
   /**
