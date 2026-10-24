@@ -236,10 +236,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
     Object a = argNodes[0].executeGeneric(frame);
     Object b = argNodes[1].executeGeneric(frame);
     if (a instanceof String left && b instanceof String right) {
+      // 内联路径不经过 Builtins.call，须在拼接前准入预算，避免先分配再拒绝。
+      Builtins.chargeKnownSize((long) left.length() + right.length());
       String joined = left + right;
-      // 内联路径不经过 Builtins.call，必须自己记账——否则 Text.concat 反复翻倍
-      // 可零成本造出上亿字符（实测 292ms 即 Java heap space，快过 5 秒看门狗）。
-      Builtins.chargeForResult(joined);
       return joined;
     }
     return (String) doGenericWithArgs(a, b);
@@ -296,10 +295,9 @@ public abstract class BuiltinCallNode extends AsterExpressionNode {
 
     List<Object> src = Builtins.asList(listObj);
     if (src != null) {
+      Builtins.chargeKnownListSize(src, element);
       List<Object> mutable = new ArrayList<>(src);
       mutable.add(element);
-      // 内联路径不经过 Builtins.call，自行记账（同 doTextConcat）。
-      Builtins.chargeForResult(mutable);
       return mutable;
     }
 

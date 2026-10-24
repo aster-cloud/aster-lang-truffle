@@ -32,8 +32,9 @@ package aster.truffle.runtime;
  *
  * <p>★<b>但记账点不止一处</b>：主入口是 {@link Builtins#call}，然而
  * {@code BuiltinCallNode} 的**内联快速路径**（Truffle {@code @Specialization}）
- * 直接返回结果、**不经过** {@code call}，那几处必须各自调
- * {@link Builtins#chargeForResult}。新增会物化集合/字符串的内联特化时**必须一并补记账**
+ * 直接返回结果、**不经过** {@code call}，也必须各自记账。规模可预知的特化在结果物化前
+ * 调准入计量，其余路径调 {@link Builtins#chargeForResult}。新增会物化集合/字符串的
+ * 内联特化时**必须一并补记账**
  * ——「进了 call 就自动计量」这个直觉是错的，本机制第一次漏掉 {@code Text.concat}
  * 正是栽在这里。
  *

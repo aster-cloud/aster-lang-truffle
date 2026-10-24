@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import aster.truffle.runtime.Builtins;
 import java.io.InputStream;
+import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
@@ -221,6 +222,75 @@ class AllocationBudgetTest {
         1_000L,
         aster.truffle.runtime.AllocationBudget.spent() - before,
         "guest 列表载体必须按元素数扣减——否则 Rule 返回列表的 adapt 拷贝全部逃出预算");
+  }
+
+  /** 准入拒绝必须发生在 List.concat 复制输入之前。 */
+  @Test
+  void concatAdmissionRejectsBeforeCopyingInputs() {
+    java.util.List<Object> oversized = new java.util.AbstractList<>() {
+      @Override public Object get(int index) {
+        throw new AssertionError("拒绝预算前不应读取或复制列表元素");
+      }
+      @Override public int size() {
+        return (int) aster.truffle.runtime.AllocationBudget.MAX_ALLOCATION_BUDGET + 1;
+      }
+      @Override public java.util.Iterator<Object> iterator() {
+        return java.util.Collections.emptyIterator();
+      }
+      @Override public Object[] toArray() {
+        throw new AssertionError("拒绝预算前不应物化 concat 结果");
+      }
+    };
+    boolean outermost = aster.truffle.runtime.AllocationBudget.enterFrame();
+    try {
+      Builtins.BuiltinException ex = assertThrows(
+          Builtins.BuiltinException.class,
+          () -> Builtins.call("List.concat", new Object[] {oversized, java.util.List.of()}));
+      assertTrue(ex.getMessage().contains("分配预算耗尽"), ex.getMessage());
+      assertEquals(
+          aster.truffle.runtime.AllocationBudget.MAX_ALLOCATION_BUDGET + 1,
+          aster.truffle.runtime.AllocationBudget.spent());
+    } finally {
+      aster.truffle.runtime.AllocationBudget.exitFrame(outermost);
+    }
+  }
+
+  /** 准入计量成功后不应再对同一结果事后重复扣减。 */
+  @Test
+  void knownSizeBuiltinsAreChargedExactlyOnce() {
+    boolean outermost = aster.truffle.runtime.AllocationBudget.enterFrame();
+    try {
+      assertEquals(List.of(1, 2, 3), Builtins.call("List.concat", new Object[] {List.of(1), List.of(2, 3)}));
+      assertEquals(3L, aster.truffle.runtime.AllocationBudget.spent());
+      assertEquals(List.of(1, 2), Builtins.call("List.append", new Object[] {List.of(1), 2}));
+      assertEquals(5L, aster.truffle.runtime.AllocationBudget.spent());
+      assertEquals("abcd", Builtins.call("Text.concat", new Object[] {"ab", "cd"}));
+      assertEquals(9L, aster.truffle.runtime.AllocationBudget.spent());
+      assertEquals(List.of(4, 5), Builtins.call("List.range", new Object[] {4, 6}));
+      assertEquals(11L, aster.truffle.runtime.AllocationBudget.spent());
+    } finally {
+      aster.truffle.runtime.AllocationBudget.exitFrame(outermost);
+    }
+  }
+
+  /** List.range 的既有单体上限错误优先于累计预算错误。 */
+  @Test
+  void rangeMaximumSizeErrorPrecedesBudgetError() {
+    boolean outermost = aster.truffle.runtime.AllocationBudget.enterFrame();
+    try {
+      aster.truffle.runtime.AllocationBudget.charge(
+          aster.truffle.runtime.AllocationBudget.MAX_ALLOCATION_BUDGET);
+      RuntimeException ex = assertThrows(
+          RuntimeException.class,
+          () -> Builtins.call("List.range", new Object[] {0, 1_000_001}));
+      assertTrue(ex.getMessage().contains("长度过大"), ex.getMessage());
+      assertTrue(!ex.getMessage().contains("分配预算耗尽"), ex.getMessage());
+      assertEquals(
+          aster.truffle.runtime.AllocationBudget.MAX_ALLOCATION_BUDGET,
+          aster.truffle.runtime.AllocationBudget.spent());
+    } finally {
+      aster.truffle.runtime.AllocationBudget.exitFrame(outermost);
+    }
   }
 
   /**
