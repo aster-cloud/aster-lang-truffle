@@ -800,6 +800,26 @@ public class AsyncTaskRegistryTest {
     }
   }
 
+  @Test
+  void executeUntilCompleteTreatsAllTerminalStatusesAsCompletion() throws Exception {
+    AsyncTaskRegistry registry = new AsyncTaskRegistry(1);
+    try {
+      registry.registerTaskWithDependencies("finished", () -> 1, Set.of());
+      registry.executeNext();
+      assertEquals(TaskStatus.COMPLETED, registry.getStatus("finished"));
+
+      // 对应 markCompleted 已推进状态、finally 尚未扣减的真实窗口。
+      Field remainingField = AsyncTaskRegistry.class.getDeclaredField("remainingTasks");
+      remainingField.setAccessible(true);
+      ((AtomicInteger) remainingField.get(registry)).set(1);
+      assertEquals(1, remainingTasks(registry));
+      assertDoesNotThrow(registry::executeUntilComplete,
+          "任务已全部终结时，计数器短暂滞后不得触发死锁误报");
+    } finally {
+      registry.shutdown();
+    }
+  }
+
   // ── 工作线程上的双减必须钳零并记 SEVERE（issue #134）────────────────────────
   // #127 让 decrementRemainingTasks 在结果为负时抛 IllegalStateException，但 runTask 的
   // 扣减跑在 executor.submit 提交的工作线程上：submit 把异常存进无人 get 的 Future，
