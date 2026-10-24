@@ -499,6 +499,10 @@ public final class AsyncTaskRegistry {
             throw new RuntimeException("Task failed: " + failed.get().taskId, failed.get().exception);
           }
 
+          if (!tasks.isEmpty() && tasks.values().stream().allMatch(AsyncTaskRegistry::isTerminal)) {
+            break;
+          }
+
           // 2. 收集详细诊断信息（增强）
           List<String> runningTasks = new ArrayList<>();
           Map<String, Set<String>> pendingTaskDeps = new LinkedHashMap<>();
@@ -598,6 +602,12 @@ public final class AsyncTaskRegistry {
       }
       throw ex;
     }
+  }
+
+  private static boolean isTerminal(TaskState state) {
+    TaskStatus status = state.getStatus();
+    return status == TaskStatus.COMPLETED || status == TaskStatus.FAILED
+        || status == TaskStatus.CANCELLED;
   }
 
   /**
@@ -1090,14 +1100,7 @@ public final class AsyncTaskRegistry {
     }
 
     if (!state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.RUNNING)) {
-      // 与本文件其余扣减点同一契约：只有把 PENDING 推进到 CANCELLED 成功的那一次才扣减。
-      // 若 CANCELLED 是 terminateExternally 写入的，它已经扣过一次；这里再扣就会把计数器
-      // 压成负数，executeUntilComplete 的 while (remainingTasks > 0) 从此一次都不进，
-      // 后续所有 workflow 静默不执行。
-      if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
-        info.future.cancel(false);
-        decrementRemainingTasks();
-      } else if (state.status.get() == TaskStatus.CANCELLED) {
+      if (state.status.get() == TaskStatus.CANCELLED) {
         info.future.cancel(false);
       }
       return;
