@@ -1,6 +1,9 @@
 package aster.truffle.dualengine;
 
+import aster.core.identifier.VocabularyLoader;
+import aster.core.identifier.VocabularyScopes;
 import aster.core.ir.CoreModel;
+import aster.core.lexicon.Lexicon;
 import aster.core.lexicon.LexiconRegistry;
 import aster.truffle.CnlCompiler;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -41,6 +44,10 @@ import java.nio.file.Paths;
  * <pre>
  *   {"samplePath":"/abs/path/to/foo.aster","entry":"add","input":[1,2],"caseName":"…","caseIndex":0}
  * </pre>
+ *
+ * <p>语料自带词汇（ADR 0051 §8）的请求另带 {@code "lexicon":"de-DE"} 与
+ * {@code "vocabulary":"/abs/path/to/foo.vocab.json"}（DomainVocabulary JSON）：按该词法表规范化关键词，
+ * 并以该词汇做名称解析（{@link CnlCompiler#compileToCore}）。两者缺省时保持默认词法表、无词汇。
  *
  * <p>The output file is JSONL — one record per line:
  * <pre>
@@ -154,8 +161,7 @@ class CoreIrEvalCli {
         String source = Files.readString(Paths.get(samplePath), StandardCharsets.UTF_8);
         // 与生产 truffle 源码入口同一流水线：canonicalize → 解析 → R1 → lower → R2（ADR 0051）；
         // E8xx 抛 CompilationException，本行记为失败、不执行。
-        CoreModel.Module coreModule = CnlCompiler.compileToCore(
-            source, LexiconRegistry.getInstance().getDefault(), null);
+        CoreModel.Module coreModule = CnlCompiler.compileToCore(source, lexiconOf(request), vocabularyOf(request));
 
         // The language's parse() picks the entry function via DEFAULT_FUNCTION
         // (env ASTER_TRUFFLE_FUNC, default "main"); when absent it falls back to
@@ -238,6 +244,19 @@ class CoreIrEvalCli {
 
             return valueToJson(result);
         }
+    }
+
+    /** 请求声明的词法表；未声明时为默认词法表（与既有请求行为一致）。 */
+    private static Lexicon lexiconOf(JsonNode request) {
+        String id = request.path("lexicon").asText("");
+        LexiconRegistry registry = LexiconRegistry.getInstance();
+        return id.isEmpty() ? registry.getDefault() : registry.getOrThrow(id);
+    }
+
+    /** 请求携带的领域词汇（DomainVocabulary JSON 文件）；未携带时为 null（无词汇）。 */
+    private static VocabularyScopes vocabularyOf(JsonNode request) throws java.io.IOException {
+        String path = request.path("vocabulary").asText("");
+        return path.isEmpty() ? null : VocabularyScopes.build(VocabularyLoader.loadFromFile(Paths.get(path)));
     }
 
     /**
