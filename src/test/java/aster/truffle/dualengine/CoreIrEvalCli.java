@@ -1,16 +1,11 @@
 package aster.truffle.dualengine;
 
-import aster.core.canonicalizer.Canonicalizer;
 import aster.core.ir.CoreModel;
-import aster.core.lowering.CoreLowering;
-import aster.core.parser.AstBuilder;
-import aster.core.parser.AsterCustomLexer;
-import aster.core.parser.AsterParser;
+import aster.core.lexicon.LexiconRegistry;
+import aster.truffle.CnlCompiler;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CommonTokenStream;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.HostAccess;
 import org.graalvm.polyglot.Source;
@@ -35,8 +30,8 @@ import java.nio.file.Paths;
  * full Java pipeline:
  *
  * <pre>
- *   source (.aster)  →  Canonicalize  →  ANTLR parse  →  AstBuilder
- *                    →  CoreLowering   →  Core IR JSON
+ *   source (.aster)  →  CnlCompiler.compileToCore（Canonicalize → ANTLR → AstBuilder
+ *                       → R1 → CoreLowering → R2，ADR 0051）  →  Core IR JSON
  *                    →  Truffle Context.eval("aster", coreIrJson)
  *                    →  (with args) Value.execute(args)
  *                    →  normalized JSON
@@ -101,9 +96,6 @@ class CoreIrEvalCli {
             throw new IllegalStateException("parity.eval.input not found: " + inputPath);
         }
 
-        Canonicalizer canonicalizer = new Canonicalizer();
-        CoreLowering lowering = new CoreLowering();
-
         try (BufferedReader reader = Files.newBufferedReader(inputPath, StandardCharsets.UTF_8);
              BufferedWriter writer = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8)) {
             String line;
@@ -131,7 +123,7 @@ class CoreIrEvalCli {
                 record.put("caseIndex", caseIndex);
 
                 try {
-                    JsonNode value = evalOne(canonicalizer, lowering, request);
+                    JsonNode value = evalOne(request);
                     record.put("ok", true);
                     record.set("value", value);
                 } catch (Throwable t) {
@@ -150,7 +142,7 @@ class CoreIrEvalCli {
      * the result as a JsonNode. Each request gets a fresh polyglot
      * Context so test ordering can't leak state across samples.
      */
-    private JsonNode evalOne(Canonicalizer canonicalizer, CoreLowering lowering, JsonNode request)
+    private JsonNode evalOne(JsonNode request)
             throws Exception {
         String samplePath = request.path("samplePath").asText("");
         JsonNode inputArr = request.path("input");
@@ -160,20 +152,10 @@ class CoreIrEvalCli {
         }
 
         String source = Files.readString(Paths.get(samplePath), StandardCharsets.UTF_8);
-        String canonical = canonicalizer.canonicalize(source);
-
-        AsterCustomLexer lexer = new AsterCustomLexer(CharStreams.fromString(canonical));
-        CommonTokenStream tokens = new CommonTokenStream(lexer);
-        tokens.fill();
-        tokens.seek(0);
-
-        AsterParser parser = new AsterParser(tokens);
-        AsterParser.ModuleContext moduleCtx = parser.module();
-
-        AstBuilder builder = new AstBuilder();
-        aster.core.ast.Module ast = builder.visitModule(moduleCtx);
-
-        CoreModel.Module coreModule = lowering.lowerModule(ast);
+        // 与生产 truffle 源码入口同一流水线：canonicalize → 解析 → R1 → lower → R2（ADR 0051）；
+        // E8xx 抛 CompilationException，本行记为失败、不执行。
+        CoreModel.Module coreModule = CnlCompiler.compileToCore(
+            source, LexiconRegistry.getInstance().getDefault(), null);
 
         // The language's parse() picks the entry function via DEFAULT_FUNCTION
         // (env ASTER_TRUFFLE_FUNC, default "main"); when absent it falls back to

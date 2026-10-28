@@ -21,13 +21,21 @@ dependencyResolutionManagement {
     }
 }
 
-// Composite Build 支持（用于本地开发调试）
-// 如需同时修改 aster-core/aster-runtime，取消注释以下行：
-// includeBuild("../aster-lang-core") {
-//     dependencySubstitution {
-//         substitute(module("cloud.aster-lang:aster-lang-core")).using(project(":"))
-//     }
-// }
+// Composite Build：用本地 aster-lang-core 源码替换已发布制品（本地联调未发布的 core 改动）。
+// 显式开启才生效：-PasterCoreDir=../aster-lang-core 或环境变量 ASTER_CORE_DIR；
+// 未设置时 CI 与默认构建仍解析已发布的 cloud.aster-lang:aster-lang-core。
+// 不按「兄弟目录存在」自动启用：core 兄弟目录常停在与 catalog 版本不一致的分支上，静默替换会让构建结果不可复现。
+val asterCoreDir = (providers.gradleProperty("asterCoreDir").orNull ?: System.getenv("ASTER_CORE_DIR"))
+    ?.takeIf { it.isNotBlank() }
+    ?.let { file(it) }
+if (asterCoreDir != null) {
+    require(asterCoreDir.isDirectory) { "asterCoreDir 不是目录: $asterCoreDir" }
+    includeBuild(asterCoreDir) {
+        dependencySubstitution {
+            substitute(module("cloud.aster-lang:aster-lang-core")).using(project(":"))
+        }
+    }
+}
 
 // 语言包模块（通过 SPI 注册到 LexiconRegistry）。en/zh/de 已从已归档的
 // aster-lang-{en,zh,de} 迁到多模块仓 aster-lang-locales（坐标

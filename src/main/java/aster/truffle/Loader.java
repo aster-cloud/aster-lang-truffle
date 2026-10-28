@@ -60,7 +60,11 @@ public final class Loader {
     }
     // collect enum variants mapping
     this.enumVariantToEnum = new java.util.HashMap<>();
-    if (mod.decls != null) for (var d : mod.decls) if (d instanceof CoreModel.Enum en) for (var v : en.variants) enumVariantToEnum.put(v, en.name);
+    this.enumVariants = new java.util.HashMap<>();
+    if (mod.decls != null) for (var d : mod.decls) if (d instanceof CoreModel.Enum en) {
+      for (var v : en.variants) enumVariantToEnum.put(v, en.name);
+      enumVariants.put(en.name, java.util.Set.copyOf(en.variants));
+    }
     // Group functions by name for possible overloading
     java.util.Map<String, java.util.List<CoreModel.Func>> funcGroups = new java.util.LinkedHashMap<>();
     if (mod.decls != null) for (var d : mod.decls) if (d instanceof CoreModel.Func fn) funcGroups.computeIfAbsent(fn.name, k -> new java.util.ArrayList<>()).add(fn);
@@ -278,6 +282,8 @@ public final class Loader {
 
   private Env env;
   private java.util.Map<String,String> enumVariantToEnum;
+  /** 枚举名 → 变体集合；限定写法 E.M 按此判定，不受不同枚举同名变体覆盖影响。 */
+  private java.util.Map<String, java.util.Set<String>> enumVariants = java.util.Map.of();
   private CoreModel.Func entryFunction;
   private java.util.Map<String,Integer> entryParamSlots;
   private final java.util.Deque<java.util.Map<String,Integer>> paramSlotStack = new java.util.ArrayDeque<>();
@@ -675,12 +681,9 @@ public final class Loader {
   }
 
   private AsterExpressionNode buildName(String name) {
-    // If name is an enum variant, return an enum value object
-    if (enumVariantToEnum != null) {
-      String en = enumVariantToEnum.get(name);
-      if (en != null) {
-        return LiteralNode.create(new AsterEnumValue(en, name));
-      }
+    AsterEnumValue enumValue = enumMember(name);
+    if (enumValue != null) {
+      return LiteralNode.create(enumValue);
     }
     // If name contains '.', build member access chain
     if (name.contains(".")) {
@@ -695,6 +698,24 @@ public final class Loader {
       }
     }
     return buildSimpleName(name);
+  }
+
+  /**
+   * 名称若指枚举成员则返回其值，否则 null。
+   * 裸成员 M 与限定成员 E.M（ADR 0051 R18：解析保留原写法）求值为同一枚举值；
+   * E 为当前作用域的局部 / 参数时让位于字段访问，未知的 E.X 仍按成员访问链处理。
+   */
+  private AsterEnumValue enumMember(String name) {
+    String bareEnum = enumVariantToEnum == null ? null : enumVariantToEnum.get(name);
+    if (bareEnum != null) return new AsterEnumValue(bareEnum, name);
+    int dot = name.indexOf('.');
+    if (dot <= 0 || dot != name.lastIndexOf('.')) return null;
+    String enumName = name.substring(0, dot);
+    String variant = name.substring(dot + 1);
+    if (!enumVariants.getOrDefault(enumName, java.util.Set.of()).contains(variant)) return null;
+    java.util.Map<String,Integer> slots = currentParamSlots();
+    if (slots != null && slots.containsKey(enumName)) return null;
+    return new AsterEnumValue(enumName, variant);
   }
 
   private AsterExpressionNode buildSimpleName(String name) {
