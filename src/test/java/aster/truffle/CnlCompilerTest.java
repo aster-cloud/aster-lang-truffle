@@ -182,9 +182,9 @@ class CnlCompilerTest {
 
             规则 check 给定 value as Int:
               如果 value > 0
-                返回 真.
+                返回 真值.
               否则
-                返回 假.
+                返回 假值.
             """;
 
         String json = CnlCompiler.compile(source, "zh-CN");

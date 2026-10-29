@@ -2,20 +2,27 @@ package aster.truffle;
 
 import aster.core.ast.Module;
 import aster.core.canonicalizer.Canonicalizer;
+import aster.core.identifier.VocabularyScopes;
 import aster.core.ir.CoreModel;
 import aster.core.lexicon.Lexicon;
 import aster.core.lexicon.LexiconRegistry;
-import aster.core.lowering.CoreLowering;
 import aster.core.parser.AstBuilder;
 import aster.core.parser.AsterCustomLexer;
 import aster.core.parser.AsterParser;
+import aster.core.resolve.NameResolution;
+import aster.core.resolve.NameResolutionException;
+import aster.core.resolve.ResolutionContext;
+import aster.core.typecheck.model.Diagnostic;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import org.antlr.v4.runtime.CharStream;
+import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.RecognitionException;
+import org.antlr.v4.runtime.Recognizer;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,8 +33,11 @@ import java.util.logging.Logger;
  * <p>
  * 编译管道：
  * <pre>
- * CNL 源码 → Canonicalizer（规范化） → ANTLR Lexer → ANTLR Parser
- *          → AstBuilder（构建 AST） → CoreLowering（降级）→ Core IR JSON
+ * CNL 源码 → Canonicalizer（规范化 + 字面量宏） → ANTLR Lexer → ANTLR Parser
+ *          → AstBuilder（构建 AST） → R1 → CoreLowering（降级）→ R2 → Core IR JSON
+ * </pre>
+ * 名称解析（ADR 0051）把本地化写法按位置解析为规范名；任一 E8xx 即编译失败、不产出 IR。
+ * <pre>
  * </pre>
  * <p>
  * <b>多语言支持</b>：
@@ -63,7 +73,7 @@ public final class CnlCompiler {
     }
 
     /**
-     * 使用指定词法表编译 CNL 源码
+     * 使用指定词法表编译 CNL 源码（无领域词汇）
      *
      * @param source  CNL 源码
      * @param lexicon 词法表
@@ -71,56 +81,81 @@ public final class CnlCompiler {
      * @throws CompilationException 编译失败时抛出
      */
     public static String compileWithLexicon(String source, Lexicon lexicon) throws CompilationException {
+        return compileWithVocabulary(source, lexicon, null);
+    }
+
+    /**
+     * 使用指定词法表与领域词汇编译 CNL 源码为 Core IR JSON
+     *
+     * @param source     CNL 源码
+     * @param lexicon    词法表
+     * @param vocabulary 领域词汇作用域；为 null 表示无词汇
+     * @return Core IR JSON 字符串（只含规范名）
+     * @throws CompilationException 语法错误、名称解析错误（E8xx，附诊断）或其它编译失败
+     */
+    public static String compileWithVocabulary(String source, Lexicon lexicon, VocabularyScopes vocabulary)
+            throws CompilationException {
+        CoreModel.Module core = compileToCore(source, lexicon, vocabulary);
         try {
-            // 1. 规范化（使用 Lexicon 处理多语言关键字）
-            Canonicalizer canonicalizer = new Canonicalizer(lexicon);
-            String canonicalized = canonicalizer.canonicalize(source);
-
-            // 2. ANTLR 词法分析
-            CharStream charStream = CharStreams.fromString(canonicalized);
-            AsterCustomLexer antlrLexer = new AsterCustomLexer(charStream);
-            CommonTokenStream tokens = new CommonTokenStream(antlrLexer);
-
-            // 3. ANTLR 语法分析
-            AsterParser parser = new AsterParser(tokens);
-
-            // 收集解析错误
-            StringBuilder parseErrors = new StringBuilder();
-            parser.removeErrorListeners();
-            parser.addErrorListener(new org.antlr.v4.runtime.BaseErrorListener() {
-                @Override
-                public void syntaxError(org.antlr.v4.runtime.Recognizer<?, ?> recognizer,
-                                        Object offendingSymbol,
-                                        int line, int charPositionInLine,
-                                        String msg,
-                                        org.antlr.v4.runtime.RecognitionException e) {
-                    parseErrors.append(String.format("语法错误 (行 %d:%d): %s\n", line, charPositionInLine, msg));
-                }
-            });
-
-            AsterParser.ModuleContext moduleCtx = parser.module();
-
-            // 检查解析错误
-            if (parseErrors.length() > 0) {
-                throw new CompilationException("CNL 语法解析失败:\n" + parseErrors);
-            }
-
-            // 4. 构建 AST
-            AstBuilder builder = new AstBuilder();
-            Module ast = builder.visitModule(moduleCtx);
-
-            // 5. 降级到 Core IR
-            CoreLowering lowering = new CoreLowering();
-            CoreModel.Module coreModule = lowering.lowerModule(ast);
-
-            // 6. 序列化为 JSON
-            return MAPPER.writeValueAsString(coreModule);
-
-        } catch (CompilationException e) {
-            throw e;
+            return MAPPER.writeValueAsString(core);
         } catch (IOException e) {
             throw new CompilationException("JSON 序列化失败: " + e.getMessage(), e);
-        } catch (Exception e) {
+        }
+    }
+
+    /**
+     * 编译 CNL 源码为 Core 模型（ADR 0051 §4 流水线）：
+     * canonicalize → 词法 → 语法 → AST → R1 → lower → R2。
+     * <p>
+     * 任一 E8xx 时抛出带诊断的 {@link CompilationException}，不产出 Core，调用方因此无从执行。
+     *
+     * @param source     CNL 源码
+     * @param lexicon    词法表
+     * @param vocabulary 领域词汇作用域；为 null 表示无词汇
+     * @return 名称解析后的 Core 模块
+     * @throws CompilationException 编译失败时抛出
+     */
+    public static CoreModel.Module compileToCore(String source, Lexicon lexicon, VocabularyScopes vocabulary)
+            throws CompilationException {
+        Module ast = parse(canonicalize(source, lexicon, vocabulary));
+        try {
+            return NameResolution.resolveAndLowerChecked(ast, new ResolutionContext(vocabulary, null)).core();
+        } catch (NameResolutionException e) {
+            throw new CompilationException("CNL 名称解析失败:\n" + e.getMessage(), e.diagnostics(), e);
+        } catch (RuntimeException e) {
+            throw new CompilationException("CNL 编译失败: " + e.getMessage(), e);
+        }
+    }
+
+    /** 关键词 / 别名 / 字面量宏规范化；不翻译标识符（由名称解析按位置处理）。 */
+    private static String canonicalize(String source, Lexicon lexicon, VocabularyScopes vocabulary)
+            throws CompilationException {
+        try {
+            return new Canonicalizer(lexicon, vocabulary).canonicalize(source);
+        } catch (RuntimeException e) {
+            throw new CompilationException("CNL 编译失败: " + e.getMessage(), e);
+        }
+    }
+
+    /** 规范化后的源码 → AST；语法错误汇总为一条 {@link CompilationException}。 */
+    private static Module parse(String canonicalized) throws CompilationException {
+        AsterParser parser = new AsterParser(new CommonTokenStream(new AsterCustomLexer(CharStreams.fromString(canonicalized))));
+        StringBuilder parseErrors = new StringBuilder();
+        parser.removeErrorListeners();
+        parser.addErrorListener(new BaseErrorListener() {
+            @Override
+            public void syntaxError(Recognizer<?, ?> recognizer, Object offendingSymbol, int line,
+                                    int charPositionInLine, String msg, RecognitionException e) {
+                parseErrors.append(String.format("语法错误 (行 %d:%d): %s\n", line, charPositionInLine, msg));
+            }
+        });
+        AsterParser.ModuleContext moduleCtx = parser.module();
+        if (parseErrors.length() > 0) {
+            throw new CompilationException("CNL 语法解析失败:\n" + parseErrors);
+        }
+        try {
+            return new AstBuilder().visitModule(moduleCtx);
+        } catch (RuntimeException e) {
             throw new CompilationException("CNL 编译失败: " + e.getMessage(), e);
         }
     }
@@ -421,12 +456,24 @@ public final class CnlCompiler {
      * CNL 编译异常
      */
     public static class CompilationException extends Exception {
+        private final List<Diagnostic> diagnostics;
+
         public CompilationException(String message) {
-            super(message);
+            this(message, List.of(), null);
         }
 
         public CompilationException(String message, Throwable cause) {
+            this(message, List.of(), cause);
+        }
+
+        public CompilationException(String message, List<Diagnostic> diagnostics, Throwable cause) {
             super(message, cause);
+            this.diagnostics = List.copyOf(diagnostics);
+        }
+
+        /** 名称解析诊断（E8xx / W8xx）；非名称解析失败时为空。 */
+        public List<Diagnostic> diagnostics() {
+            return diagnostics;
         }
     }
 }

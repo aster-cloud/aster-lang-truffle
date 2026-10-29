@@ -1,16 +1,14 @@
 package aster.truffle.dualengine;
 
-import aster.core.canonicalizer.Canonicalizer;
+import aster.core.identifier.VocabularyLoader;
+import aster.core.identifier.VocabularyScopes;
 import aster.core.ir.CoreModel;
-import aster.core.lowering.CoreLowering;
-import aster.core.parser.AstBuilder;
-import aster.core.parser.AsterCustomLexer;
-import aster.core.parser.AsterParser;
+import aster.core.lexicon.Lexicon;
+import aster.core.lexicon.LexiconRegistry;
+import aster.truffle.CnlCompiler;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CommonTokenStream;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.HostAccess;
 import org.graalvm.polyglot.Source;
@@ -35,8 +33,8 @@ import java.nio.file.Paths;
  * full Java pipeline:
  *
  * <pre>
- *   source (.aster)  →  Canonicalize  →  ANTLR parse  →  AstBuilder
- *                    →  CoreLowering   →  Core IR JSON
+ *   source (.aster)  →  CnlCompiler.compileToCore（Canonicalize → ANTLR → AstBuilder
+ *                       → R1 → CoreLowering → R2，ADR 0051）  →  Core IR JSON
  *                    →  Truffle Context.eval("aster", coreIrJson)
  *                    →  (with args) Value.execute(args)
  *                    →  normalized JSON
@@ -46,6 +44,10 @@ import java.nio.file.Paths;
  * <pre>
  *   {"samplePath":"/abs/path/to/foo.aster","entry":"add","input":[1,2],"caseName":"…","caseIndex":0}
  * </pre>
+ *
+ * <p>语料自带词汇（ADR 0051 §8）的请求另带 {@code "lexicon":"de-DE"} 与
+ * {@code "vocabulary":"/abs/path/to/foo.vocab.json"}（DomainVocabulary JSON）：按该词法表规范化关键词，
+ * 并以该词汇做名称解析（{@link CnlCompiler#compileToCore}）。两者缺省时保持默认词法表、无词汇。
  *
  * <p>The output file is JSONL — one record per line:
  * <pre>
@@ -101,9 +103,6 @@ class CoreIrEvalCli {
             throw new IllegalStateException("parity.eval.input not found: " + inputPath);
         }
 
-        Canonicalizer canonicalizer = new Canonicalizer();
-        CoreLowering lowering = new CoreLowering();
-
         try (BufferedReader reader = Files.newBufferedReader(inputPath, StandardCharsets.UTF_8);
              BufferedWriter writer = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8)) {
             String line;
@@ -131,7 +130,7 @@ class CoreIrEvalCli {
                 record.put("caseIndex", caseIndex);
 
                 try {
-                    JsonNode value = evalOne(canonicalizer, lowering, request);
+                    JsonNode value = evalOne(request);
                     record.put("ok", true);
                     record.set("value", value);
                 } catch (Throwable t) {
@@ -150,7 +149,7 @@ class CoreIrEvalCli {
      * the result as a JsonNode. Each request gets a fresh polyglot
      * Context so test ordering can't leak state across samples.
      */
-    private JsonNode evalOne(Canonicalizer canonicalizer, CoreLowering lowering, JsonNode request)
+    private JsonNode evalOne(JsonNode request)
             throws Exception {
         String samplePath = request.path("samplePath").asText("");
         JsonNode inputArr = request.path("input");
@@ -160,20 +159,9 @@ class CoreIrEvalCli {
         }
 
         String source = Files.readString(Paths.get(samplePath), StandardCharsets.UTF_8);
-        String canonical = canonicalizer.canonicalize(source);
-
-        AsterCustomLexer lexer = new AsterCustomLexer(CharStreams.fromString(canonical));
-        CommonTokenStream tokens = new CommonTokenStream(lexer);
-        tokens.fill();
-        tokens.seek(0);
-
-        AsterParser parser = new AsterParser(tokens);
-        AsterParser.ModuleContext moduleCtx = parser.module();
-
-        AstBuilder builder = new AstBuilder();
-        aster.core.ast.Module ast = builder.visitModule(moduleCtx);
-
-        CoreModel.Module coreModule = lowering.lowerModule(ast);
+        // 与生产 truffle 源码入口同一流水线：canonicalize → 解析 → R1 → lower → R2（ADR 0051）；
+        // E8xx 抛 CompilationException，本行记为失败、不执行。
+        CoreModel.Module coreModule = CnlCompiler.compileToCore(source, lexiconOf(request), vocabularyOf(request));
 
         // The language's parse() picks the entry function via DEFAULT_FUNCTION
         // (env ASTER_TRUFFLE_FUNC, default "main"); when absent it falls back to
@@ -256,6 +244,19 @@ class CoreIrEvalCli {
 
             return valueToJson(result);
         }
+    }
+
+    /** 请求声明的词法表；未声明时为默认词法表（与既有请求行为一致）。 */
+    private static Lexicon lexiconOf(JsonNode request) {
+        String id = request.path("lexicon").asText("");
+        LexiconRegistry registry = LexiconRegistry.getInstance();
+        return id.isEmpty() ? registry.getDefault() : registry.getOrThrow(id);
+    }
+
+    /** 请求携带的领域词汇（DomainVocabulary JSON 文件）；未携带时为 null（无词汇）。 */
+    private static VocabularyScopes vocabularyOf(JsonNode request) throws java.io.IOException {
+        String path = request.path("vocabulary").asText("");
+        return path.isEmpty() ? null : VocabularyScopes.build(VocabularyLoader.loadFromFile(Paths.get(path)));
     }
 
     /**

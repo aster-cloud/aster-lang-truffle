@@ -52,6 +52,20 @@ public final class AsterEnumValue implements TruffleObject {
     return enumName + "." + variantName;
   }
 
+  /** 值语义：同一枚举的同一变体（及参数）相等；Loader 每处成员引用各建实例，引用相等会令 {@code Low == Low} 为假。 */
+  @Override
+  public boolean equals(Object o) {
+    return o instanceof AsterEnumValue other
+        && enumName.equals(other.enumName)
+        && variantName.equals(other.variantName)
+        && Arrays.equals(args, other.args);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31 * (31 * enumName.hashCode() + variantName.hashCode()) + Arrays.hashCode(args);
+  }
+
   @ExportMessage
   boolean hasMembers() {
     return true;

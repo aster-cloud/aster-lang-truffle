@@ -1,17 +1,12 @@
 package aster.truffle;
 
-import aster.core.canonicalizer.Canonicalizer;
 import aster.core.identifier.DomainVocabulary;
-import aster.core.identifier.IdentifierIndex;
-import aster.core.ir.CoreModel;
+import aster.core.identifier.VocabularyScopes;
 import aster.core.lexicon.DynamicLexicon;
 import aster.core.lexicon.Lexicon;
-import aster.core.lowering.CoreLowering;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.antlr.v4.runtime.CharStreams;
-import org.antlr.v4.runtime.CommonTokenStream;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.HostAccess;
 import org.graalvm.polyglot.Source;
@@ -53,12 +48,16 @@ class JingYeSiPoemTest {
         }
     }
 
-    /** 字面量宏词汇表：思故乡 → 内容「静夜思」。 */
-    private static IdentifierIndex jingYeSiVocabIndex() {
+    /**
+     * 诗词词汇表：字面量宏 思故乡 → 内容「静夜思」；返回类型位置的 望明月 是 Text 的本地化写法
+     * （名称解析要求类型位置可解析，否则 E800）。
+     */
+    private static VocabularyScopes jingYeSiVocabulary() {
         DomainVocabulary vocab = DomainVocabulary.builder("jingyesi", "静夜思", "jingyesi")
             .addLiteral("静夜思", "思故乡")
+            .addStruct("Text", "望明月")
             .build();
-        return IdentifierIndex.build(vocab);
+        return VocabularyScopes.build(vocab);
     }
 
     private static ArrayNode arr(String... xs) {
@@ -76,21 +75,9 @@ class JingYeSiPoemTest {
               低头 思故乡。
             """;
 
-        // 诗句 → Canonicalizer（别名归一 + 字面量宏展开 思故乡→"静夜思"）→ ANTLR → Core IR。
-        Canonicalizer canon = new Canonicalizer(jingYeSiLexicon(), jingYeSiVocabIndex());
-        String canonical = canon.canonicalize(poem);
-        assertNotNull(canonical);
-
-        var lexer = new aster.core.parser.AsterCustomLexer(CharStreams.fromString(canonical));
-        var tokens = new CommonTokenStream(lexer);
-        tokens.fill();
-        tokens.seek(0);
-        var parser = new aster.core.parser.AsterParser(tokens);
-        parser.removeErrorListeners();
-        var moduleCtx = parser.module();
-        var ast = new aster.core.parser.AstBuilder().visitModule(moduleCtx);
-        CoreModel.Module coreModule = new CoreLowering().lowerModule(ast);
-        String coreJson = MAPPER.writeValueAsString(coreModule);
+        // 诗句 → truffle 编译路径：Canonicalizer（别名归一 + 字面量宏展开 思故乡→"静夜思"）→ ANTLR
+        // → 名称解析 R1 → lower → R2（ADR 0051）→ Core IR。
+        String coreJson = CnlCompiler.compileWithVocabulary(poem, jingYeSiLexicon(), jingYeSiVocabulary());
 
         // 用与生产 TrufflePolicyRuntime 一致的受限沙箱执行 Core IR。入口函数即 rule 名 明月光。
         try (Context context = Context.newBuilder("aster")
