@@ -642,6 +642,7 @@ public final class Loader {
     java.util.Map<String,Integer> slots = currentParamSlots();
     java.util.Set<String> scopeLocals = new java.util.LinkedHashSet<>();
     this.env = scopeEnv;
+    scopeFrames.push(new ScopeFrame(slots, scopeLocals));
     try {
       if (sc.statements != null) for (var s : sc.statements) {
         if (s instanceof CoreModel.Return r) {
@@ -665,7 +666,7 @@ public final class Loader {
         }
         else if (s instanceof CoreModel.Set set) {
           AsterExpressionNode valueNode = buildExpr(set.expr);
-          if (!scopeLocals.contains(set.name) && slots != null && slots.containsKey(set.name)) {
+          if (!isScopeLocal(set.name) && slots != null && slots.containsKey(set.name)) {
             list.add(SetNodeGen.create(set.name, slots.get(set.name), valueNode));
           } else {
             list.add(new SetNodeEnv(set.name, valueNode, scopeEnv));
@@ -676,9 +677,28 @@ public final class Loader {
         else if (s instanceof CoreModel.Workflow wf) list.add(buildWorkflow(wf));
       }
     } finally {
+      scopeFrames.pop();
       this.env = previousEnv;
     }
     return BlockNode.create(list);
+  }
+
+  /** Scope 内已声明的局部变量集合，连同其所处的形参 slot 表（同一 frame 内才会遮蔽形参）。 */
+  private record ScopeFrame(java.util.Map<String,Integer> slots, java.util.Set<String> locals) {}
+
+  private final java.util.ArrayDeque<ScopeFrame> scopeFrames = new java.util.ArrayDeque<>();
+
+  /**
+   * name 是否已被当前 frame 内某层 Scope 的 Let 声明。Scope 局部住在子 Env，并遮蔽同名形参 slot；
+   * 读（Name）、写（Set）都以此为准，保证两者落在同一个变量上。lambda 有自己的 slot 表，
+   * 其形参不会被外层 Scope 局部遮蔽，故按 slot 表身份区分。
+   */
+  private boolean isScopeLocal(String name) {
+    java.util.Map<String,Integer> current = currentParamSlots();
+    for (ScopeFrame frame : scopeFrames) {
+      if (frame.slots() == current && frame.locals().contains(name)) return true;
+    }
+    return false;
   }
 
   private AsterExpressionNode buildConstruct(CoreModel.Construct cons) {
@@ -722,12 +742,13 @@ public final class Loader {
     if (!enumVariants.getOrDefault(enumName, java.util.Set.of()).contains(variant)) return null;
     java.util.Map<String,Integer> slots = currentParamSlots();
     if (slots != null && slots.containsKey(enumName)) return null;
+    if (isScopeLocal(enumName)) return null;
     return new AsterEnumValue(enumName, variant);
   }
 
   private AsterExpressionNode buildSimpleName(String name) {
     java.util.Map<String,Integer> slots = currentParamSlots();
-    if (slots != null && slots.containsKey(name)) {
+    if (slots != null && slots.containsKey(name) && !isScopeLocal(name)) {
       return NameNodeGen.create(name, slots.get(name));
     }
     return new NameNodeEnv(env, name);
