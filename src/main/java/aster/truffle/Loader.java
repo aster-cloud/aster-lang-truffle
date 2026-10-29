@@ -343,6 +343,8 @@ public final class Loader {
         list.add(buildMatch(mm));
       } else if (s instanceof CoreModel.Scope sc) {
         list.add(buildScope(sc));
+      } else if (s instanceof CoreModel.Block nested) {
+        list.add(buildBlock(nested));
       } else if (s instanceof CoreModel.Set set) {
         // 优先使用 frame-based SetNode，回退到 Env-based
         AsterExpressionNode valueNode = buildExpr(set.expr);
@@ -595,6 +597,8 @@ public final class Loader {
         Node body;
         if (c.body instanceof CoreModel.Scope sc) {
           body = buildScope(sc);
+        } else if (c.body instanceof CoreModel.Block block) {
+          body = buildBlock(block);
         } else if (c.body != null) {
           // 将所有非 Scope 的语句包装为单语句 Block,确保正确处理 Let/Set/Start/Wait 等
           CoreModel.Block singleStmtBlock = new CoreModel.Block();
@@ -655,6 +659,9 @@ public final class Loader {
         }
         else if (s instanceof CoreModel.Scope nestedScope) {
           list.add(buildScope(nestedScope));
+        }
+        else if (s instanceof CoreModel.Block nestedBlock) {
+          list.add(buildBlock(nestedBlock));
         }
         else if (s instanceof CoreModel.Set set) {
           AsterExpressionNode valueNode = buildExpr(set.expr);
@@ -792,6 +799,7 @@ public final class Loader {
   private boolean stmtContainsWorkflow(CoreModel.Stmt stmt) {
     if (stmt == null) return false;
     if (stmt instanceof CoreModel.Workflow) return true;
+    if (stmt instanceof CoreModel.Block block) return blockContainsWorkflow(block);
     if (stmt instanceof CoreModel.If iff) {
       if (blockContainsWorkflow(iff.thenBlock) || blockContainsWorkflow(iff.elseBlock)) return true;
     } else if (stmt instanceof CoreModel.Scope sc && sc.statements != null) {
@@ -829,24 +837,27 @@ public final class Loader {
       } else if (stmt instanceof CoreModel.Scope) {
         // Scope 块内声明的变量不逃逸到外层作用域，不纳入 frame slots
         continue;
+      } else if (stmt instanceof CoreModel.Block nested) {
+        collectLocalVariables(nested, locals);
       } else if (stmt instanceof CoreModel.Match match) {
         // Match 语句的每个 case 可能有局部变量
         if (match.cases != null) {
           for (var c : match.cases) {
-            if (c.body instanceof CoreModel.Scope scopeBody) {
-              CoreModel.Block caseBlock = new CoreModel.Block();
-              caseBlock.statements = scopeBody.statements;
-              collectLocalVariables(caseBlock, locals);
-            } else if (c.body != null) {
-              CoreModel.Block caseBlock = new CoreModel.Block();
-              caseBlock.statements = java.util.List.of(c.body);
-              collectLocalVariables(caseBlock, locals);
-            }
+            collectLocalVariables(asBlock(c.body), locals);
           }
         }
       }
       // Set/Return/Wait/Start 不声明新变量，跳过
     }
+  }
+
+  /** 把 case 分支体统一看成语句块：Scope / Block 取其语句，单语句包成单元素块，空体为 null。 */
+  private static CoreModel.Block asBlock(CoreModel.Stmt body) {
+    if (body == null) return null;
+    if (body instanceof CoreModel.Block block) return block;
+    CoreModel.Block out = new CoreModel.Block();
+    out.statements = (body instanceof CoreModel.Scope scope) ? scope.statements : java.util.List.of(body);
+    return out;
   }
 
   private static CoreModel.Type[] extractParamTypes(java.util.List<CoreModel.Param> params) {

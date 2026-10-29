@@ -50,7 +50,14 @@ public final class CoreModel {
   public static final class Field { public String name; public Type type; }
   public static final class Param { public String name; public Type type; }
 
-  public static final class Block { public List<Stmt> statements; }
+  /**
+   * 语句块。既是 Func / If / Step 的 body，也是 Match 分支体与语句列表中的嵌套块
+   * （core 与 ts 的 lowering 对多语句分支体都产出 {@code kind:"Block"}）。
+   * 作为 Func.body 等已声明为 Block 的位置时允许省略 kind，故自带 defaultImpl。
+   */
+  @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind", defaultImpl = Block.class)
+  @JsonTypeName("Block")
+  public static final class Block implements Stmt { public List<Stmt> statements; public Origin origin; }
 
   @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "kind")
   @JsonSubTypes({
@@ -58,13 +65,14 @@ public final class CoreModel {
     @JsonSubTypes.Type(value = If.class, name = "If"),
     @JsonSubTypes.Type(value = Match.class, name = "Match"),
     @JsonSubTypes.Type(value = Scope.class, name = "Scope"),
+    @JsonSubTypes.Type(value = Block.class, name = "Block"),
     @JsonSubTypes.Type(value = Let.class, name = "Let"),
     @JsonSubTypes.Type(value = Set.class, name = "Set"),
     @JsonSubTypes.Type(value = Start.class, name = "Start"),
     @JsonSubTypes.Type(value = Wait.class, name = "Wait"),
     @JsonSubTypes.Type(value = Workflow.class, name = "workflow")
   })
-  public sealed interface Stmt permits Return, If, Match, Scope, Let, Set, Start, Wait, Workflow {}
+  public sealed interface Stmt permits Return, If, Match, Scope, Block, Let, Set, Start, Wait, Workflow {}
   @JsonTypeName("Return") public static final class Return implements Stmt { public Expr expr; public Origin origin; }
   @JsonTypeName("If") public static final class If implements Stmt { public Expr cond; public Block thenBlock; public Block elseBlock; public Origin origin; }
   @JsonTypeName("Let") public static final class Let implements Stmt { public String name; public Expr expr; }
@@ -73,7 +81,7 @@ public final class CoreModel {
   @JsonTypeName("Wait") public static final class Wait implements Stmt { public java.util.List<String> names; }
   @JsonTypeName("Match") public static final class Match implements Stmt { public Expr expr; public java.util.List<Case> cases; public Origin origin; }
   @JsonTypeName("Scope") public static final class Scope implements Stmt { public java.util.List<Stmt> statements; }
-  @JsonTypeName("Case") public static final class Case { public Pattern pattern; public Stmt body; }
+  @JsonTypeName("Case") public static final class Case { public Pattern pattern; public Stmt body; public Origin origin; }
   @JsonTypeName("workflow")
   public static final class Workflow implements Stmt {
     public List<Step> steps;
