@@ -42,6 +42,7 @@ public final class Loader {
     this.entryFunction = null;
     this.entryParamSlots = null;
     this.paramSlotStack.clear();
+    this.scopeFrames.clear();
     // Import 声明在 Core 阶段已展开依赖，这里直接消费合并后的 Module，无需额外处理。
     if (mod.decls != null) {
       for (var d : mod.decls) {
@@ -343,6 +344,8 @@ public final class Loader {
         list.add(buildMatch(mm));
       } else if (s instanceof CoreModel.Scope sc) {
         list.add(buildScope(sc));
+      } else if (s instanceof CoreModel.Block nested) {
+        list.add(buildBlock(nested));
       } else if (s instanceof CoreModel.Set set) {
         // 优先使用 frame-based SetNode，回退到 Env-based
         AsterExpressionNode valueNode = buildExpr(set.expr);
@@ -595,6 +598,8 @@ public final class Loader {
         Node body;
         if (c.body instanceof CoreModel.Scope sc) {
           body = buildScope(sc);
+        } else if (c.body instanceof CoreModel.Block block) {
+          body = buildBlock(block);
         } else if (c.body != null) {
           // 将所有非 Scope 的语句包装为单语句 Block,确保正确处理 Let/Set/Start/Wait 等
           CoreModel.Block singleStmtBlock = new CoreModel.Block();
@@ -638,6 +643,7 @@ public final class Loader {
     java.util.Map<String,Integer> slots = currentParamSlots();
     java.util.Set<String> scopeLocals = new java.util.LinkedHashSet<>();
     this.env = scopeEnv;
+    scopeFrames.push(new ScopeFrame(slots, scopeLocals));
     try {
       if (sc.statements != null) for (var s : sc.statements) {
         if (s instanceof CoreModel.Return r) {
@@ -656,9 +662,12 @@ public final class Loader {
         else if (s instanceof CoreModel.Scope nestedScope) {
           list.add(buildScope(nestedScope));
         }
+        else if (s instanceof CoreModel.Block nestedBlock) {
+          list.add(buildBlock(nestedBlock));
+        }
         else if (s instanceof CoreModel.Set set) {
           AsterExpressionNode valueNode = buildExpr(set.expr);
-          if (!scopeLocals.contains(set.name) && slots != null && slots.containsKey(set.name)) {
+          if (!isScopeLocal(set.name) && slots != null && slots.containsKey(set.name)) {
             list.add(SetNodeGen.create(set.name, slots.get(set.name), valueNode));
           } else {
             list.add(new SetNodeEnv(set.name, valueNode, scopeEnv));
@@ -669,9 +678,28 @@ public final class Loader {
         else if (s instanceof CoreModel.Workflow wf) list.add(buildWorkflow(wf));
       }
     } finally {
+      scopeFrames.pop();
       this.env = previousEnv;
     }
     return BlockNode.create(list);
+  }
+
+  /** Scope 内已声明的局部变量集合，连同其所处的形参 slot 表（同一 frame 内才会遮蔽形参）。 */
+  private record ScopeFrame(java.util.Map<String,Integer> slots, java.util.Set<String> locals) {}
+
+  private final java.util.ArrayDeque<ScopeFrame> scopeFrames = new java.util.ArrayDeque<>();
+
+  /**
+   * name 是否已被当前 frame 内某层 Scope 的 Let 声明。Scope 局部住在子 Env，并遮蔽同名形参 slot；
+   * 读（Name）、写（Set）都以此为准，保证两者落在同一个变量上。lambda 有自己的 slot 表，
+   * 其形参不会被外层 Scope 局部遮蔽，故按 slot 表身份区分。
+   */
+  private boolean isScopeLocal(String name) {
+    java.util.Map<String,Integer> current = currentParamSlots();
+    for (ScopeFrame frame : scopeFrames) {
+      if (frame.slots() == current && frame.locals().contains(name)) return true;
+    }
+    return false;
   }
 
   private AsterExpressionNode buildConstruct(CoreModel.Construct cons) {
@@ -715,12 +743,13 @@ public final class Loader {
     if (!enumVariants.getOrDefault(enumName, java.util.Set.of()).contains(variant)) return null;
     java.util.Map<String,Integer> slots = currentParamSlots();
     if (slots != null && slots.containsKey(enumName)) return null;
+    if (isScopeLocal(enumName)) return null;
     return new AsterEnumValue(enumName, variant);
   }
 
   private AsterExpressionNode buildSimpleName(String name) {
     java.util.Map<String,Integer> slots = currentParamSlots();
-    if (slots != null && slots.containsKey(name)) {
+    if (slots != null && slots.containsKey(name) && !isScopeLocal(name)) {
       return NameNodeGen.create(name, slots.get(name));
     }
     return new NameNodeEnv(env, name);
@@ -792,6 +821,7 @@ public final class Loader {
   private boolean stmtContainsWorkflow(CoreModel.Stmt stmt) {
     if (stmt == null) return false;
     if (stmt instanceof CoreModel.Workflow) return true;
+    if (stmt instanceof CoreModel.Block block) return blockContainsWorkflow(block);
     if (stmt instanceof CoreModel.If iff) {
       if (blockContainsWorkflow(iff.thenBlock) || blockContainsWorkflow(iff.elseBlock)) return true;
     } else if (stmt instanceof CoreModel.Scope sc && sc.statements != null) {
@@ -829,24 +859,27 @@ public final class Loader {
       } else if (stmt instanceof CoreModel.Scope) {
         // Scope 块内声明的变量不逃逸到外层作用域，不纳入 frame slots
         continue;
+      } else if (stmt instanceof CoreModel.Block nested) {
+        collectLocalVariables(nested, locals);
       } else if (stmt instanceof CoreModel.Match match) {
         // Match 语句的每个 case 可能有局部变量
         if (match.cases != null) {
           for (var c : match.cases) {
-            if (c.body instanceof CoreModel.Scope scopeBody) {
-              CoreModel.Block caseBlock = new CoreModel.Block();
-              caseBlock.statements = scopeBody.statements;
-              collectLocalVariables(caseBlock, locals);
-            } else if (c.body != null) {
-              CoreModel.Block caseBlock = new CoreModel.Block();
-              caseBlock.statements = java.util.List.of(c.body);
-              collectLocalVariables(caseBlock, locals);
-            }
+            collectLocalVariables(asBlock(c.body), locals);
           }
         }
       }
       // Set/Return/Wait/Start 不声明新变量，跳过
     }
+  }
+
+  /** 把 case 分支体统一看成语句块：Scope / Block 取其语句，单语句包成单元素块，空体为 null。 */
+  private static CoreModel.Block asBlock(CoreModel.Stmt body) {
+    if (body == null) return null;
+    if (body instanceof CoreModel.Block block) return block;
+    CoreModel.Block out = new CoreModel.Block();
+    out.statements = (body instanceof CoreModel.Scope scope) ? scope.statements : java.util.List.of(body);
+    return out;
   }
 
   private static CoreModel.Type[] extractParamTypes(java.util.List<CoreModel.Param> params) {

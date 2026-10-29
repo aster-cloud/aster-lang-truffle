@@ -1,0 +1,404 @@
+{
+  "kind": "Module",
+  "name": "test.blocknested",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "pick",
+      "typeParams": [],
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          },
+          "constraints": []
+        },
+        {
+          "name": "y",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          },
+          "constraints": []
+        }
+      ],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "effectCaps": [],
+      "effectCapsExplicit": false,
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Match",
+            "expr": {
+              "kind": "Name",
+              "name": "x",
+              "origin": {
+                "start": {
+                  "line": 4,
+                  "col": 9
+                },
+                "end": {
+                  "line": 4,
+                  "col": 10
+                }
+              }
+            },
+            "cases": [
+              {
+                "kind": "Case",
+                "pattern": {
+                  "kind": "PatInt",
+                  "value": 1,
+                  "origin": {
+                    "start": {
+                      "line": 5,
+                      "col": 10
+                    },
+                    "end": {
+                      "line": 5,
+                      "col": 11
+                    }
+                  }
+                },
+                "body": {
+                  "kind": "Block",
+                  "statements": [
+                    {
+                      "kind": "Let",
+                      "name": "base",
+                      "expr": {
+                        "kind": "Int",
+                        "value": 100,
+                        "origin": {
+                          "start": {
+                            "line": 6,
+                            "col": 19
+                          },
+                          "end": {
+                            "line": 6,
+                            "col": 22
+                          }
+                        }
+                      },
+                      "origin": {
+                        "start": {
+                          "line": 6,
+                          "col": 7
+                        },
+                        "end": {
+                          "line": 6,
+                          "col": 23
+                        }
+                      }
+                    },
+                    {
+                      "kind": "Match",
+                      "expr": {
+                        "kind": "Name",
+                        "name": "y",
+                        "origin": {
+                          "start": {
+                            "line": 7,
+                            "col": 13
+                          },
+                          "end": {
+                            "line": 7,
+                            "col": 14
+                          }
+                        }
+                      },
+                      "cases": [
+                        {
+                          "kind": "Case",
+                          "pattern": {
+                            "kind": "PatInt",
+                            "value": 2,
+                            "origin": {
+                              "start": {
+                                "line": 8,
+                                "col": 14
+                              },
+                              "end": {
+                                "line": 8,
+                                "col": 15
+                              }
+                            }
+                          },
+                          "body": {
+                            "kind": "Block",
+                            "statements": [
+                              {
+                                "kind": "Let",
+                                "name": "inner",
+                                "expr": {
+                                  "kind": "Int",
+                                  "value": 20,
+                                  "origin": {
+                                    "start": {
+                                      "line": 9,
+                                      "col": 24
+                                    },
+                                    "end": {
+                                      "line": 9,
+                                      "col": 26
+                                    }
+                                  }
+                                },
+                                "origin": {
+                                  "start": {
+                                    "line": 9,
+                                    "col": 11
+                                  },
+                                  "end": {
+                                    "line": 9,
+                                    "col": 27
+                                  }
+                                }
+                              },
+                              {
+                                "kind": "Return",
+                                "expr": {
+                                  "kind": "Name",
+                                  "name": "inner",
+                                  "origin": {
+                                    "start": {
+                                      "line": 10,
+                                      "col": 18
+                                    },
+                                    "end": {
+                                      "line": 10,
+                                      "col": 23
+                                    }
+                                  }
+                                },
+                                "origin": {
+                                  "start": {
+                                    "line": 10,
+                                    "col": 11
+                                  },
+                                  "end": {
+                                    "line": 10,
+                                    "col": 24
+                                  }
+                                }
+                              }
+                            ],
+                            "origin": {
+                              "start": {
+                                "line": 9,
+                                "col": 11
+                              },
+                              "end": {
+                                "line": 10,
+                                "col": 24
+                              }
+                            }
+                          },
+                          "origin": {
+                            "start": {
+                              "line": 8,
+                              "col": 9
+                            },
+                            "end": {
+                              "line": 10,
+                              "col": 24
+                            }
+                          }
+                        },
+                        {
+                          "kind": "Case",
+                          "pattern": {
+                            "kind": "PatName",
+                            "name": "m",
+                            "origin": {
+                              "start": {
+                                "line": 11,
+                                "col": 14
+                              },
+                              "end": {
+                                "line": 11,
+                                "col": 15
+                              }
+                            }
+                          },
+                          "body": {
+                            "kind": "Return",
+                            "expr": {
+                              "kind": "Name",
+                              "name": "m",
+                              "origin": {
+                                "start": {
+                                  "line": 11,
+                                  "col": 24
+                                },
+                                "end": {
+                                  "line": 11,
+                                  "col": 25
+                                }
+                              }
+                            },
+                            "origin": {
+                              "start": {
+                                "line": 11,
+                                "col": 17
+                              },
+                              "end": {
+                                "line": 11,
+                                "col": 26
+                              }
+                            }
+                          },
+                          "origin": {
+                            "start": {
+                              "line": 11,
+                              "col": 9
+                            },
+                            "end": {
+                              "line": 11,
+                              "col": 26
+                            }
+                          }
+                        }
+                      ],
+                      "origin": {
+                        "start": {
+                          "line": 7,
+                          "col": 7
+                        },
+                        "end": {
+                          "line": 11,
+                          "col": 26
+                        }
+                      }
+                    }
+                  ],
+                  "origin": {
+                    "start": {
+                      "line": 6,
+                      "col": 7
+                    },
+                    "end": {
+                      "line": 11,
+                      "col": 26
+                    }
+                  }
+                },
+                "origin": {
+                  "start": {
+                    "line": 5,
+                    "col": 5
+                  },
+                  "end": {
+                    "line": 11,
+                    "col": 26
+                  }
+                }
+              },
+              {
+                "kind": "Case",
+                "pattern": {
+                  "kind": "PatName",
+                  "name": "n",
+                  "origin": {
+                    "start": {
+                      "line": 12,
+                      "col": 10
+                    },
+                    "end": {
+                      "line": 12,
+                      "col": 11
+                    }
+                  }
+                },
+                "body": {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Name",
+                    "name": "n",
+                    "origin": {
+                      "start": {
+                        "line": 12,
+                        "col": 20
+                      },
+                      "end": {
+                        "line": 12,
+                        "col": 21
+                      }
+                    }
+                  },
+                  "origin": {
+                    "start": {
+                      "line": 12,
+                      "col": 13
+                    },
+                    "end": {
+                      "line": 12,
+                      "col": 22
+                    }
+                  }
+                },
+                "origin": {
+                  "start": {
+                    "line": 12,
+                    "col": 5
+                  },
+                  "end": {
+                    "line": 12,
+                    "col": 22
+                  }
+                }
+              }
+            ],
+            "origin": {
+              "start": {
+                "line": 4,
+                "col": 3
+              },
+              "end": {
+                "line": 12,
+                "col": 22
+              }
+            }
+          }
+        ],
+        "origin": {
+          "start": {
+            "line": 4,
+            "col": 3
+          },
+          "end": {
+            "line": 12,
+            "col": 22
+          }
+        }
+      },
+      "origin": {
+        "start": {
+          "line": 3,
+          "col": 1
+        },
+        "end": {
+          "line": 12,
+          "col": 22
+        }
+      }
+    }
+  ],
+  "origin": {
+    "start": {
+      "line": 1,
+      "col": 1
+    },
+    "end": {
+      "line": 13,
+      "col": 1
+    }
+  }
+}

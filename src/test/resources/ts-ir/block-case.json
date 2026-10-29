@@ -1,0 +1,243 @@
+{
+  "kind": "Module",
+  "name": "test.blockcase",
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "pick",
+      "typeParams": [],
+      "params": [
+        {
+          "name": "x",
+          "type": {
+            "kind": "TypeName",
+            "name": "Int"
+          },
+          "constraints": []
+        }
+      ],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int"
+      },
+      "effects": [],
+      "effectCaps": [],
+      "effectCapsExplicit": false,
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Match",
+            "expr": {
+              "kind": "Name",
+              "name": "x",
+              "origin": {
+                "start": {
+                  "line": 4,
+                  "col": 9
+                },
+                "end": {
+                  "line": 4,
+                  "col": 10
+                }
+              }
+            },
+            "cases": [
+              {
+                "kind": "Case",
+                "pattern": {
+                  "kind": "PatInt",
+                  "value": 1,
+                  "origin": {
+                    "start": {
+                      "line": 5,
+                      "col": 10
+                    },
+                    "end": {
+                      "line": 5,
+                      "col": 11
+                    }
+                  }
+                },
+                "body": {
+                  "kind": "Block",
+                  "statements": [
+                    {
+                      "kind": "Let",
+                      "name": "y",
+                      "expr": {
+                        "kind": "Int",
+                        "value": 10,
+                        "origin": {
+                          "start": {
+                            "line": 6,
+                            "col": 16
+                          },
+                          "end": {
+                            "line": 6,
+                            "col": 18
+                          }
+                        }
+                      },
+                      "origin": {
+                        "start": {
+                          "line": 6,
+                          "col": 7
+                        },
+                        "end": {
+                          "line": 6,
+                          "col": 19
+                        }
+                      }
+                    },
+                    {
+                      "kind": "Return",
+                      "expr": {
+                        "kind": "Name",
+                        "name": "y",
+                        "origin": {
+                          "start": {
+                            "line": 7,
+                            "col": 14
+                          },
+                          "end": {
+                            "line": 7,
+                            "col": 15
+                          }
+                        }
+                      },
+                      "origin": {
+                        "start": {
+                          "line": 7,
+                          "col": 7
+                        },
+                        "end": {
+                          "line": 7,
+                          "col": 16
+                        }
+                      }
+                    }
+                  ],
+                  "origin": {
+                    "start": {
+                      "line": 6,
+                      "col": 7
+                    },
+                    "end": {
+                      "line": 7,
+                      "col": 16
+                    }
+                  }
+                },
+                "origin": {
+                  "start": {
+                    "line": 5,
+                    "col": 5
+                  },
+                  "end": {
+                    "line": 7,
+                    "col": 16
+                  }
+                }
+              },
+              {
+                "kind": "Case",
+                "pattern": {
+                  "kind": "PatName",
+                  "name": "n",
+                  "origin": {
+                    "start": {
+                      "line": 8,
+                      "col": 10
+                    },
+                    "end": {
+                      "line": 8,
+                      "col": 11
+                    }
+                  }
+                },
+                "body": {
+                  "kind": "Return",
+                  "expr": {
+                    "kind": "Name",
+                    "name": "n",
+                    "origin": {
+                      "start": {
+                        "line": 8,
+                        "col": 20
+                      },
+                      "end": {
+                        "line": 8,
+                        "col": 21
+                      }
+                    }
+                  },
+                  "origin": {
+                    "start": {
+                      "line": 8,
+                      "col": 13
+                    },
+                    "end": {
+                      "line": 8,
+                      "col": 22
+                    }
+                  }
+                },
+                "origin": {
+                  "start": {
+                    "line": 8,
+                    "col": 5
+                  },
+                  "end": {
+                    "line": 8,
+                    "col": 22
+                  }
+                }
+              }
+            ],
+            "origin": {
+              "start": {
+                "line": 4,
+                "col": 3
+              },
+              "end": {
+                "line": 8,
+                "col": 22
+              }
+            }
+          }
+        ],
+        "origin": {
+          "start": {
+            "line": 4,
+            "col": 3
+          },
+          "end": {
+            "line": 8,
+            "col": 22
+          }
+        }
+      },
+      "origin": {
+        "start": {
+          "line": 3,
+          "col": 1
+        },
+        "end": {
+          "line": 8,
+          "col": 22
+        }
+      }
+    }
+  ],
+  "origin": {
+    "start": {
+      "line": 1,
+      "col": 1
+    },
+    "end": {
+      "line": 9,
+      "col": 1
+    }
+  }
+}

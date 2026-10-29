@@ -37,8 +37,6 @@ import java.util.logging.Logger;
  *          → AstBuilder（构建 AST） → R1 → CoreLowering（降级）→ R2 → Core IR JSON
  * </pre>
  * 名称解析（ADR 0051）把本地化写法按位置解析为规范名；任一 E8xx 即编译失败、不产出 IR。
- * <pre>
- * </pre>
  * <p>
  * <b>多语言支持</b>：
  * <ul>
