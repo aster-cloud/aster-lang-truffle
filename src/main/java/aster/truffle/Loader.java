@@ -42,6 +42,7 @@ public final class Loader {
     this.entryFunction = null;
     this.entryParamSlots = null;
     this.paramSlotStack.clear();
+    this.scopeFrames.clear();
     // Import 声明在 Core 阶段已展开依赖，这里直接消费合并后的 Module，无需额外处理。
     if (mod.decls != null) {
       for (var d : mod.decls) {

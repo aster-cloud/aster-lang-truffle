@@ -1,6 +1,7 @@
 package aster.truffle;
 
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * 限定枚举成员 {@code E.M}（ADR 0051 R18：解析保留原写法，Core 名为 {@code Level.High}）与裸成员 {@code M}
@@ -96,6 +98,42 @@ class QualifiedEnumMemberTest {
                     "fields": [ { "name": "High", "expr": { "kind": "Int", "value": 9 } } ] } } ]
                 """, "[]"));
             assertEquals(9, run(ctx, module(returnName("Level.High"), params), box).asInt());
+        }
+    }
+
+    @Test
+    void unknownMemberOfKnownEnumIsNotAnEnumValue() throws IOException {
+        // Level 存在但没有 Nope：不得静默返回枚举值，按成员访问链处理；Level 未绑定，求值失败
+        try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
+            assertThrows(PolyglotException.class, () -> run(ctx, module(returnName("Level.Nope"), "[]")));
+        }
+    }
+
+    @Test
+    void unknownEnumQualifierFails() throws IOException {
+        try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
+            assertThrows(PolyglotException.class, () -> run(ctx, module(returnName("Zed.Nope"), "[]")));
+        }
+    }
+
+    @Test
+    void knownMemberQualifiedByWrongEnumFails() throws IOException {
+        // Low 属于 Level 而非 Priority：Priority.Low 不能借用其它枚举的成员
+        try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
+            assertThrows(PolyglotException.class, () -> run(ctx, module(returnName("Priority.Low"), "[]")));
+        }
+    }
+
+    @Test
+    void localNamedLikeEnumWithUnknownFieldFails() throws IOException {
+        // 局部 Level 是 Box（只有 High 字段）：Level.Nope 走字段访问并失败，不回落到枚举
+        String body = """
+            [ { "kind": "Let", "name": "Level", "expr": { "kind": "Construct", "typeName": "Box",
+                  "fields": [ { "name": "High", "expr": { "kind": "Int", "value": 7 } } ] } },
+              { "kind": "Return", "expr": { "kind": "Name", "name": "Level.Nope" } } ]
+            """;
+        try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
+            assertThrows(PolyglotException.class, () -> run(ctx, module(body, "[]")));
         }
     }
 }
