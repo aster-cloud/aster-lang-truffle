@@ -490,10 +490,15 @@ public final class AsyncTaskRegistry {
 
   /**
    * 并发调度主入口：按依赖拓扑批量调度所有任务
+   *
+   * <p>响应中断：调用线程被中断时抛 {@link java.util.concurrent.CancellationException} 并保留中断标志。
+   * 等待延迟重试时这里以 1ms {@code parkNanos} 轮询，中断标志置位后 {@code parkNanos} 立即返回，
+   * 不检查中断会让调用方的超时 / 取消失效，并把轮询退化为 100% CPU 空转（aster-api#414）。
    */
   public void executeUntilComplete() {
     try {
       while (remainingTasks.get() > 0) {
+        throwIfInterrupted();
         List<String> readyTasks = snapshotReadyTasks();
         if (readyTasks.isEmpty()) {
           // 1. 检查失败任务（保持现有逻辑）
@@ -592,10 +597,14 @@ public final class AsyncTaskRegistry {
 
         CompletableFuture<Void> barrier =
             CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]));
+        // 用可中断的 get() 而非 join()：join() 忽略中断，批次卡住时调用方无法取消
         try {
-          barrier.join();
-        } catch (CompletionException ex) {
-          throw unwrapCompletion(ex);
+          barrier.get();
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          throw interrupted();
+        } catch (java.util.concurrent.ExecutionException ex) {
+          throw unwrapCompletion(new CompletionException(ex.getCause()));
         }
       }
     } catch (RuntimeException | Error ex) {
@@ -606,6 +615,17 @@ public final class AsyncTaskRegistry {
       }
       throw ex;
     }
+  }
+
+  /** 调用线程已被中断则抛出（不清除中断标志）。 */
+  private static void throwIfInterrupted() {
+    if (Thread.currentThread().isInterrupted()) {
+      throw interrupted();
+    }
+  }
+
+  private static java.util.concurrent.CancellationException interrupted() {
+    return new java.util.concurrent.CancellationException("executeUntilComplete 被中断");
   }
 
   private static boolean isTerminal(TaskState state) {
