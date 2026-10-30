@@ -90,6 +90,10 @@ public final class AsyncTaskRegistry {
   // 默认超时时间（毫秒），0 表示无限制
   private final long defaultTimeoutMs;
   private final PriorityQueue<DelayedTask> delayQueue = new PriorityQueue<>();
+  /** 延迟任务轮询间隔。 */
+  private static final long POLL_INTERVAL_MS = 100L;
+  /** 轮询连续出错时的退避上限。 */
+  private static final long POLL_ERROR_BACKOFF_MAX_MS = 5_000L;
   private final ReentrantLock delayQueueLock = new ReentrantLock();
   private Thread pollThread;
   private volatile boolean running = false;
@@ -486,10 +490,15 @@ public final class AsyncTaskRegistry {
 
   /**
    * 并发调度主入口：按依赖拓扑批量调度所有任务
+   *
+   * <p>响应中断：调用线程被中断时抛 {@link java.util.concurrent.CancellationException} 并保留中断标志。
+   * 等待延迟重试时这里以 1ms {@code parkNanos} 轮询，中断标志置位后 {@code parkNanos} 立即返回，
+   * 不检查中断会让调用方的超时 / 取消失效，并把轮询退化为 100% CPU 空转（aster-api#414）。
    */
   public void executeUntilComplete() {
     try {
       while (remainingTasks.get() > 0) {
+        throwIfInterrupted();
         List<String> readyTasks = snapshotReadyTasks();
         if (readyTasks.isEmpty()) {
           // 1. 检查失败任务（保持现有逻辑）
@@ -588,10 +597,14 @@ public final class AsyncTaskRegistry {
 
         CompletableFuture<Void> barrier =
             CompletableFuture.allOf(batchFutures.toArray(new CompletableFuture[0]));
+        // 用可中断的 get() 而非 join()：join() 忽略中断，批次卡住时调用方无法取消
         try {
-          barrier.join();
-        } catch (CompletionException ex) {
-          throw unwrapCompletion(ex);
+          barrier.get();
+        } catch (InterruptedException ex) {
+          Thread.currentThread().interrupt();
+          throw interrupted();
+        } catch (java.util.concurrent.ExecutionException ex) {
+          throw unwrapCompletion(new CompletionException(ex.getCause()));
         }
       }
     } catch (RuntimeException | Error ex) {
@@ -602,6 +615,17 @@ public final class AsyncTaskRegistry {
       }
       throw ex;
     }
+  }
+
+  /** 调用线程已被中断则抛出（不清除中断标志）。 */
+  private static void throwIfInterrupted() {
+    if (Thread.currentThread().isInterrupted()) {
+      throw interrupted();
+    }
+  }
+
+  private static java.util.concurrent.CancellationException interrupted() {
+    return new java.util.concurrent.CancellationException("executeUntilComplete 被中断");
   }
 
   private static boolean isTerminal(TaskState state) {
@@ -1725,6 +1749,7 @@ public final class AsyncTaskRegistry {
    * 后台轮询延迟任务队列，触发到期任务
    */
   private void pollDelayedTasks() {
+    int consecutiveErrors = 0;
     while (running) {
       try {
         // ★两处修正（issue #108 正文）：
@@ -1744,7 +1769,7 @@ public final class AsyncTaskRegistry {
         java.util.List<DelayedTask> due = new java.util.ArrayList<>();
         delayQueueLock.lock();
         try {
-          long now = this.determinismContext.clock().now().toEpochMilli();
+          long now = pollerNowMs();
           DelayedTask task;
           while ((task = delayQueue.peek()) != null && task.triggerAtMs <= now) {
             delayQueue.poll();
@@ -1766,16 +1791,54 @@ public final class AsyncTaskRegistry {
           }
         }
 
-        // 轮询间隔 100ms
-        Thread.sleep(100);
+        consecutiveErrors = 0;
+        Thread.sleep(POLL_INTERVAL_MS);
 
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         break;
       } catch (Exception e) {
-        logger.log(Level.SEVERE, "Error polling delayed tasks", e);
+        // 原实现在这里直接进入下一轮、不 sleep：不可恢复的错误（如重放时钟耗尽）会让 poller
+        // 变成紧密循环，每秒刷出上百万条 SEVERE（aster-api#414，测试日志约 340MB）。
+        // 连续失败按指数退避（上限 POLL_ERROR_BACKOFF_MAX_MS），日志只在第 1、2、4、8… 次记录。
+        consecutiveErrors++;
+        if (Integer.bitCount(consecutiveErrors) == 1) {
+          logger.log(Level.SEVERE, "Error polling delayed tasks (consecutive failures: "
+              + consecutiveErrors + ")", e);
+        }
+        if (!sleepAfterPollError(consecutiveErrors)) {
+          break;
+        }
       }
     }
+  }
+
+  /** 连续第 n 次失败后的退避：100ms 起翻倍，封顶 {@link #POLL_ERROR_BACKOFF_MAX_MS}。被中断返回 false。 */
+  private static boolean sleepAfterPollError(int consecutiveErrors) {
+    int shift = Math.min(consecutiveErrors - 1, 6);
+    long backoff = Math.min(POLL_INTERVAL_MS << shift, POLL_ERROR_BACKOFF_MAX_MS);
+    try {
+      Thread.sleep(backoff);
+      return true;
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+      return false;
+    }
+  }
+
+  /**
+   * poller 判断到期用的当前时间（毫秒）。
+   *
+   * <p>「是否到期」是调度基础设施每 100ms 一次的轮询，不是 workflow 的时间决策，
+   * 因此读墙钟而不是 {@code determinismContext.clock()}：后者在录制模式下每次调用都追加一条录制
+   * （poller 存活期间无界增长，且把非确定的轮询次数写进快照），在重放模式下每次调用都消耗一条录制
+   * （很快耗尽并抛 Replay exhausted，到期任务永远触发不了，executeUntilComplete 永久阻塞）。
+   *
+   * <p>录制模式下 triggerAt 本就取自墙钟，语义不变；重放模式下 triggerAt 取自录制的历史时间，
+   * 与墙钟比较即视为已到期——重放不重复等待原始退避，结果由录制的决策序列决定。
+   */
+  private static long pollerNowMs() {
+    return System.currentTimeMillis();
   }
 
   /**
@@ -1853,7 +1916,8 @@ public final class AsyncTaskRegistry {
     if (original.taskId == null || WORKFLOW_RETRY_TASK_ID.equals(original.taskId)) {
       return;
     }
-    long newTrigger = this.determinismContext.clock().now().toEpochMilli() + additionalDelayMs;
+    // 重排发生在 poller 线程上、次数取决于调度时序，同样不属于 workflow 时间决策（见 pollerNowMs）
+    long newTrigger = pollerNowMs() + additionalDelayMs;
     DelayedTask updated = new DelayedTask(original.taskId, original.workflowId, newTrigger,
         original.attemptNumber, original.failureReason);
     pendingRetryTasks.put(original.taskId, updated);

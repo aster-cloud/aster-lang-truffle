@@ -5,7 +5,9 @@ package aster.truffle.runtime;
  *
  * 设计要点：
  * 1. 实现 Comparable<DelayedTask> 接口，按 triggerAtMs 升序排序（PriorityQueue 要求）
- * 2. triggerAtMs 使用绝对时间戳（从 DeterminismContext.clock() 获取，支持重放一致性）
+ * 2. triggerAtMs 为绝对时间戳（毫秒）：scheduleRetry 取自 DeterminismContext.clock()（workflow 时间决策，
+ *    录制/重放一致）；poller 依赖未满足时的重排取自墙钟（调度基础设施，不进入录制序列）。
+ *    poller 一律以墙钟判断到期，重放时取自历史时间的 triggerAt 即视为已到期
  * 3. 不可变对象（所有字段 final），线程安全
  */
 public class DelayedTask implements Comparable<DelayedTask> {
