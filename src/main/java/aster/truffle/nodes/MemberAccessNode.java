@@ -1,6 +1,7 @@
 package aster.truffle.nodes;
 
 import aster.truffle.runtime.AsterDataValue;
+import aster.truffle.runtime.MissingMemberException;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
@@ -47,7 +48,7 @@ public final class MemberAccessNode extends AsterExpressionNode {
 
     private Object accessMember(Object base, String member) {
         if (base == null) {
-            throw new RuntimeException("无法访问 null 对象的成员：" + member);
+            throw missing("无法访问 null 对象的成员：" + member, member, null, null);
         }
 
         // 处理 AsterDataValue
@@ -55,7 +56,8 @@ public final class MemberAccessNode extends AsterExpressionNode {
             if (dataValue.hasField(member)) {
                 return dataValue.getField(member);
             }
-            throw new RuntimeException("类型 " + dataValue.getTypeName() + " 不存在字段：" + member);
+            throw missing("类型 " + dataValue.getTypeName() + " 不存在字段：" + member, member, base,
+                dataValue.getTypeName());
         }
 
         // 处理 Map（用于 JSON 上下文参数）
@@ -75,7 +77,7 @@ public final class MemberAccessNode extends AsterExpressionNode {
                     return map.get(key);
                 }
             }
-            throw new RuntimeException("Map 中不存在键：" + member);
+            throw missing("Map 中不存在键：" + member, member, base, null);
         }
 
         // 优先使用 Polyglot InteropLibrary 处理 TruffleObject
@@ -131,17 +133,26 @@ public final class MemberAccessNode extends AsterExpressionNode {
         //   写错了一个键名。（api#244）
         String available = describeAvailableKeys(interop, base);
         if (available != null) {
-            throw new RuntimeException("无法访问成员：" + member
+            throw missing("无法访问成员：" + member
                 + "。该对象的可用成员为 " + available
                 + "——请检查上下文的键名是否与规则参数一致；"
                 + "若上下文形如 {\"外层键\": {...}}，而规则是 `given x as T`，"
-                + "则整个外层 map 会被当作 x，需要直接传内层对象。");
+                + "则整个外层 map 会被当作 x，需要直接传内层对象。", member, base, null);
         }
 
-        throw new RuntimeException("无法访问成员：对象类型 " + base.getClass().getName()
+        throw missing("无法访问成员：对象类型 " + base.getClass().getName()
             + " 不支持成员访问，成员：" + member
             + "（若为宿主对象，请确认 polyglot Context 配置了恰当的 HostAccess，"
-            + "使其成员/条目/元素可经 InteropLibrary 访问）");
+            + "使其成员/条目/元素可经 InteropLibrary 访问）", member, base, null);
+    }
+
+    /**
+     * 构造成员缺失异常：带成员名与被访问对象引用，供宿主按身份定位（见 {@link MissingMemberException}）。
+     * 文案沿用原 RuntimeException 的措辞。
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private MissingMemberException missing(String message, String member, Object base, String declaredType) {
+        return new MissingMemberException(message, member, base, declaredType, this);
     }
 
     /**
