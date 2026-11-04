@@ -40,9 +40,9 @@ public final class FrameSlotBuilder {
   }
 
   /**
-   * 为局部变量分配槽位
+   * 为局部变量分配槽位，返回槽位索引
    */
-  public void addLocal(String name) {
+  public int addLocal(String name) {
     if (variableToSlot.containsKey(name)) {
       System.err.println("Warning: Re-binding variable: " + name);
     }
@@ -50,6 +50,7 @@ public final class FrameSlotBuilder {
     // R32 P0：见 addParameter 注释，同因同果。
     descriptorBuilder.addSlot(FrameSlotKind.Object, name, null);
     variableToSlot.put(name, slotIndex);
+    return slotIndex;
   }
 
   /**

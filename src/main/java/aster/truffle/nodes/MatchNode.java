@@ -55,7 +55,7 @@ public abstract class MatchNode extends AsterExpressionNode {
       if (AsterConfig.DEBUG) {
         System.err.println("DEBUG: trying case pat=" + c.pat.getClass().getSimpleName());
       }
-      if (c.matchesAndBind(scrutinee, env)) {
+      if (c.matchesAndBind(scrutinee, frame, env)) {
         if (AsterConfig.DEBUG) {
           System.err.println("DEBUG: case matched");
         }
@@ -83,8 +83,21 @@ public abstract class MatchNode extends AsterExpressionNode {
     return value instanceof java.util.Map;
   }
 
+  /**
+   * 模式节点。绑定写入 case 分支所在 frame 的槽位（{@code slot >= 0}，由 Loader 按词法作用域分配，
+   * 同名外层变量因此被遮蔽而非覆盖，ADR 0052 §2.1）；没有槽位时退回写 Env。
+   */
   public static abstract class PatternNode extends Node {
-    public abstract boolean matchesAndBind(Object s, Env env);
+    public abstract boolean matchesAndBind(Object s, VirtualFrame frame, Env env);
+
+    static void bind(VirtualFrame frame, Env env, int slot, String name, Object value) {
+      if (name == null || name.isEmpty() || "_".equals(name)) return;
+      if (slot >= 0) {
+        frame.setObject(slot, value);
+      } else {
+        env.set(name, value);
+      }
+    }
   }
 
   /**
@@ -99,20 +112,27 @@ public abstract class MatchNode extends AsterExpressionNode {
   }
 
   public static final class PatNullNode extends PatternNode {
-    @Override public boolean matchesAndBind(Object s, Env env) { return isGuestNull(s); }
+    @Override public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) { return isGuestNull(s); }
   }
 
   // ctor match: match Data 值或旧 Map，按字段顺序依次绑定
   public static final class PatCtorNode extends PatternNode {
     private final String typeName;
     private final java.util.List<String> bindNames;
+    /** 与 bindNames 一一对应的绑定槽位，-1 表示写 Env。 */
+    private final int[] bindSlots;
     private final java.util.List<PatternNode> args;
-    public PatCtorNode(String typeName, java.util.List<String> bindNames) { this(typeName, bindNames, java.util.List.of()); }
-    public PatCtorNode(String typeName, java.util.List<String> bindNames, java.util.List<PatternNode> args) { this.typeName = typeName; this.bindNames = bindNames; this.args = (args == null ? java.util.List.of() : args); }
-    @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, Env env) {
+    public PatCtorNode(String typeName, java.util.List<String> bindNames) { this(typeName, bindNames, null, java.util.List.of()); }
+    public PatCtorNode(String typeName, java.util.List<String> bindNames, int[] bindSlots, java.util.List<PatternNode> args) {
+      this.typeName = typeName;
+      this.bindNames = bindNames;
+      this.bindSlots = bindSlots;
+      this.args = (args == null ? java.util.List.of() : args);
+    }
+    @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) {
       if (s instanceof AsterDataValue dataValue) {
         if (!typeName.equals(dataValue.getTypeName())) return false;
-        return matchOrderedFields(dataValue.fieldCount(), idx -> dataValue.fieldValue(idx), env);
+        return matchOrderedFields(dataValue.fieldCount(), idx -> dataValue.fieldValue(idx), frame, env);
       }
       if (s instanceof AsterEnumValue enumValue) {
         return typeName.equals(enumValue.getVariantName()) || typeName.equals(enumValue.getEnumName());
@@ -130,25 +150,23 @@ public abstract class MatchNode extends AsterExpressionNode {
         if ("__type".equals(e.getKey())) continue;
         values.add(e.getValue());
       }
-      return matchOrderedFields(values.size(), values::get, env);
+      return matchOrderedFields(values.size(), values::get, frame, env);
     }
 
-    private boolean matchOrderedFields(int fieldCount, java.util.function.IntFunction<Object> valueProvider, Env env) {
+    private boolean matchOrderedFields(int fieldCount, java.util.function.IntFunction<Object> valueProvider, VirtualFrame frame, Env env) {
       int idx = 0;
       for (int i = 0; i < fieldCount; i++) {
         Object value = valueProvider.apply(i);
         if (idx < args.size()) {
           PatternNode pn = args.get(idx);
           if (pn instanceof PatNameNode patName) {
-            if (!(patName.name == null || patName.name.isEmpty() || "_".equals(patName.name))) {
-              env.set(patName.name, value);
-            }
-          } else if (!pn.matchesAndBind(value, env)) {
+            bind(frame, env, patName.slot, patName.name, value);
+          } else if (!pn.matchesAndBind(value, frame, env)) {
             return false;
           }
         } else if (idx < (bindNames == null ? 0 : bindNames.size())) {
           String bn = bindNames.get(idx);
-          if (bn != null && !bn.isEmpty() && !"_".equals(bn)) env.set(bn, value);
+          bind(frame, env, bindSlots == null ? -1 : bindSlots[idx], bn, value);
         }
         idx++;
       }
@@ -165,11 +183,18 @@ public abstract class MatchNode extends AsterExpressionNode {
   //     non-null value and binds it. (A `When null` arm is a separate PatNull.)
   public static final class PatNameNode extends PatternNode {
     private final String name;
-    public PatNameNode(String name) { this.name = name; }
+    /** 绑定槽位，-1 表示写 Env；变体名（大写开头）不绑定。 */
+    private final int slot;
+    public PatNameNode(String name) { this(name, -1); }
+    public PatNameNode(String name, int slot) { this.name = name; this.slot = slot; }
+    /** 名字按绑定语义处理（非变体、非 {@code _}）时才需要槽位。 */
+    public static boolean binds(String name) {
+      return name != null && !name.isEmpty() && !"_".equals(name) && !Character.isUpperCase(name.charAt(0));
+    }
     private boolean isVariant() {
       return name != null && !name.isEmpty() && Character.isUpperCase(name.charAt(0));
     }
-    @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, Env env) {
+    @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) {
       if (AsterConfig.DEBUG) {
         System.err.println("DEBUG: PatNameNode name=" + name + " scrutinee=" + s + " type=" + (s == null ? "null" : s.getClass().getName()));
       }
@@ -195,9 +220,7 @@ public abstract class MatchNode extends AsterExpressionNode {
       // host-injected null) must NOT match here — it belongs to the `When null`
       // arm, same as a Java null.
       if (isGuestNull(s)) return false;
-      if (!(name == null || name.isEmpty() || "_".equals(name))) {
-        env.set(name, s);
-      }
+      bind(frame, env, slot, name, s);
       return true;
     }
   }
@@ -206,7 +229,7 @@ public abstract class MatchNode extends AsterExpressionNode {
   public static final class PatIntNode extends PatternNode {
     private final int value;
     public PatIntNode(int value) { this.value = value; }
-    @Override public boolean matchesAndBind(Object s, Env env) {
+    @Override public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) {
       if (s instanceof Integer i) return value == i.intValue();
       if (s instanceof Long l) return value == l.longValue();
       if (s instanceof Double d) return value == d.doubleValue();
@@ -218,7 +241,7 @@ public abstract class MatchNode extends AsterExpressionNode {
     @Child private PatternNode pat;
     @Child private Node body;
     public CaseNode(PatternNode pat, Node body) { this.pat = pat; this.body = body; }
-    public boolean matchesAndBind(Object s, Env env) { return pat.matchesAndBind(s, env); }
+    public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) { return pat.matchesAndBind(s, frame, env); }
     public Object execute(VirtualFrame frame) { return Exec.exec(body, frame); }
   }
 }

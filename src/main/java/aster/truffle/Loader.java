@@ -5,6 +5,7 @@ import aster.truffle.nodes.*;
 import aster.truffle.runtime.AsterEnumValue;
 import aster.truffle.runtime.Builtins;
 import aster.truffle.runtime.FrameSlotBuilder;
+import aster.truffle.runtime.LexicalSlots;
 import aster.truffle.runtime.PiiSupport;
 import com.fasterxml.jackson.databind.*;
 import com.oracle.truffle.api.nodes.Node;
@@ -39,10 +40,7 @@ public final class Loader {
   }
 
   private Program buildProgramInternal(CoreModel.Module mod, String funcName, java.util.List<String> rawArgs) throws IOException {
-    this.entryFunction = null;
-    this.entryParamSlots = null;
-    this.paramSlotStack.clear();
-    this.scopeFrames.clear();
+    this.frames.clear();
     // Import 声明在 Core 阶段已展开依赖，这里直接消费合并后的 Module，无需额外处理。
     if (mod.decls != null) {
       for (var d : mod.decls) {
@@ -83,25 +81,6 @@ public final class Loader {
       for (var e : funcGroups.entrySet()) { if (!e.getValue().isEmpty()) { entry = selectOverload(e.getValue(), rawArgs); break; } }
     }
     if (entry == null) throw new IOException("No function in module");
-    this.entryFunction = entry;
-    if (entry != null) {
-      FrameSlotBuilder slotBuilder = new FrameSlotBuilder();
-      // Add entry function parameters
-      if (entry.params != null) {
-        for (var p : entry.params) slotBuilder.addParameter(p.name);
-      }
-      // Collect local variables from entry function body (Let statements)
-      java.util.Set<String> entryLocals = new java.util.LinkedHashSet<>();
-      collectLocalVariables(entry.body, entryLocals);
-      for (String local : entryLocals) {
-        if (!slotBuilder.hasVariable(local)) {  // 避免与参数重复
-          slotBuilder.addLocal(local);
-        }
-      }
-      this.entryParamSlots = slotBuilder.getSymbolTable();
-    } else {
-      this.entryParamSlots = null;
-    }
 
     // Build env and predefine all functions as lambdas to enable cross-calls
     this.env = new Env();
@@ -138,26 +117,14 @@ public final class Loader {
 
       if (language != null) {
         // New CallTarget-based approach
-        // Build FrameDescriptor for function parameters and local variables
+        // 形参先占槽位 0..N-1；局部变量（Let、模式绑定）在构建函数体时按词法作用域分配，
+        // 故 FrameDescriptor 在函数体构建完成后再生成。
         FrameSlotBuilder slotBuilder = new FrameSlotBuilder();
         for (String param : params) {
           slotBuilder.addParameter(param);
         }
-
-        // Collect local variables from function body (Let statements)
-        java.util.Set<String> bodyLocals = new java.util.LinkedHashSet<>();
-        collectLocalVariables(fn.body, bodyLocals);
-        for (String local : bodyLocals) {
-          if (!slotBuilder.hasVariable(local)) {  // 避免与参数重复
-            slotBuilder.addLocal(local);
-          }
-        }
-
+        Node body = withFrame(slotBuilder, () -> buildFunctionBody(fn));
         com.oracle.truffle.api.frame.FrameDescriptor frameDescriptor = slotBuilder.build();
-
-        // Build function body with parameter slots in scope
-        java.util.Map<String,Integer> funcParamSlots = slotBuilder.getSymbolTable();
-        Node body = withParamSlots(funcParamSlots, () -> buildFunctionBody(fn));
 
         // Create LambdaRootNode for this function (no captures for top-level functions)
         String lambdaFuncName = "func_" + e.getKey();
@@ -285,9 +252,8 @@ public final class Loader {
   private java.util.Map<String,String> enumVariantToEnum;
   /** 枚举名 → 变体集合；限定写法 E.M 按此判定，不受不同枚举同名变体覆盖影响。 */
   private java.util.Map<String, java.util.Set<String>> enumVariants = java.util.Map.of();
-  private CoreModel.Func entryFunction;
-  private java.util.Map<String,Integer> entryParamSlots;
-  private final java.util.Deque<java.util.Map<String,Integer>> paramSlotStack = new java.util.ArrayDeque<>();
+  /** 正在构建的 frame（规则体 / lambda 体）栈，栈顶为当前 frame 的词法作用域链。 */
+  private final java.util.Deque<LexicalSlots> frames = new java.util.ArrayDeque<>();
   private final java.util.Deque<CoreModel.Type> returnTypeStack = new java.util.ArrayDeque<>();
   private java.util.Map<String, CoreModel.Data> dataTypeIndex;
   /**
@@ -321,10 +287,13 @@ public final class Loader {
 
   private Node buildBlock(CoreModel.Block b) {
     if (b == null || b.statements == null || b.statements.isEmpty()) return LiteralNode.create(null);
-    var list = new java.util.ArrayList<Node>();
-    java.util.Map<String,Integer> slots = currentParamSlots();  // 获取当前 frame slots
+    return buildStatements(b.statements);
+  }
 
-    for (var s : b.statements) {
+  /** 在当前词法作用域内依次构建语句；Block / If 分支不开新层，与所在块共享作用域。 */
+  private Node buildStatements(java.util.List<CoreModel.Stmt> statements) {
+    var list = new java.util.ArrayList<Node>();
+    for (var s : statements) {
       if (s instanceof CoreModel.Return r) {
         AsterExpressionNode returnExpr = buildExpr(r.expr);
         returnExpr = maybeWrapForType(returnExpr, currentReturnType());
@@ -333,10 +302,11 @@ public final class Loader {
         list.add(IfNode.create(buildExpr(iff.cond), buildBlock(iff.thenBlock),
             buildBlock(iff.elseBlock), originLine(iff.origin)));
       } else if (s instanceof CoreModel.Let let) {
-        // 优先使用 frame-based LetNode，回退到 Env-based
+        // 先构建右侧（`Let x be x plus 1` 读的是外层 x），再在当前层声明 x
         AsterExpressionNode valueNode = buildExpr(let.expr);
-        if (slots != null && slots.containsKey(let.name)) {
-          list.add(LetNodeGen.create(let.name, slots.get(let.name), valueNode));
+        LexicalSlots frame = currentFrame();
+        if (frame != null) {
+          list.add(LetNodeGen.create(let.name, frame.declare(let.name), valueNode));
         } else {
           list.add(new LetNodeEnv(let.name, valueNode, env));
         }
@@ -347,10 +317,11 @@ public final class Loader {
       } else if (s instanceof CoreModel.Block nested) {
         list.add(buildBlock(nested));
       } else if (s instanceof CoreModel.Set set) {
-        // 优先使用 frame-based SetNode，回退到 Env-based
+        // 写到词法作用域链上最近的那层绑定（ADR 0052 §2.1）；不是局部名时回退到 Env
         AsterExpressionNode valueNode = buildExpr(set.expr);
-        if (slots != null && slots.containsKey(set.name)) {
-          list.add(SetNodeGen.create(set.name, slots.get(set.name), valueNode));
+        Integer slot = localSlot(set.name);
+        if (slot != null) {
+          list.add(SetNodeGen.create(set.name, slot, valueNode));
         } else {
           list.add(new SetNodeEnv(set.name, valueNode, env));
         }
@@ -455,20 +426,9 @@ public final class Loader {
           slotBuilder.addLocal(captureName);
         }
 
-        // Collect local variables from lambda body (Let statements)
-        java.util.Set<String> bodyLocals = new java.util.LinkedHashSet<>();
-        collectLocalVariables(lam.body, bodyLocals);
-        for (String local : bodyLocals) {
-          if (!slotBuilder.hasVariable(local)) {  // 避免与参数/捕获变量重复
-            slotBuilder.addLocal(local);
-          }
-        }
-
+        // lambda 体是独立的 frame：局部变量在构建 lambda 体时分配，之后再生成 FrameDescriptor
+        Node body = withReturnType(lam.ret, () -> withFrame(slotBuilder, () -> buildBlock(lam.body)));
         com.oracle.truffle.api.frame.FrameDescriptor frameDescriptor = slotBuilder.build();
-
-        // Build body node with parameter and capture slots in scope
-        java.util.Map<String,Integer> lambdaSlots = slotBuilder.getSymbolTable();
-        Node body = withReturnType(lam.ret, () -> withParamSlots(lambdaSlots, () -> buildBlock(lam.body)));
 
         // Create LambdaRootNode
         String lambdaName = "lambda@" + System.identityHashCode(lam);
@@ -594,21 +554,14 @@ public final class Loader {
     var patCases = new java.util.ArrayList<aster.truffle.nodes.MatchNode.CaseNode>();
     if (mm.cases != null) {
       for (var c : mm.cases) {
-        aster.truffle.nodes.MatchNode.PatternNode pn = buildPatternNode(c.pattern);
-        Node body;
-        if (c.body instanceof CoreModel.Scope sc) {
-          body = buildScope(sc);
-        } else if (c.body instanceof CoreModel.Block block) {
-          body = buildBlock(block);
-        } else if (c.body != null) {
-          // 将所有非 Scope 的语句包装为单语句 Block,确保正确处理 Let/Set/Start/Wait 等
-          CoreModel.Block singleStmtBlock = new CoreModel.Block();
-          singleStmtBlock.statements = java.util.List.of(c.body);
-          body = buildBlock(singleStmtBlock);
-        } else {
-          body = LiteralNode.create(null);
+        // 每个 case 是一层词法作用域：模式绑定与分支体内的 Let 只遮蔽外层（ADR 0052 §2.1）
+        LexicalSlots frame = currentFrame();
+        if (frame != null) frame.enter();
+        try {
+          patCases.add(new aster.truffle.nodes.MatchNode.CaseNode(buildPatternNode(c.pattern, false), buildCaseBody(c.body)));
+        } finally {
+          if (frame != null) frame.exit();
         }
-        patCases.add(new aster.truffle.nodes.MatchNode.CaseNode(pn, body));
       }
     }
     return aster.truffle.nodes.MatchNode.create(env, buildExpr(mm.expr), patCases,
@@ -624,82 +577,71 @@ public final class Loader {
     return (origin != null && origin.start != null) ? origin.start.line : 0;
   }
 
-  private aster.truffle.nodes.MatchNode.PatternNode buildPatternNode(CoreModel.Pattern p) {
+  /** case 分支体：Scope 再开一层，Block 与单语句在 case 这一层构建。 */
+  private Node buildCaseBody(CoreModel.Stmt body) {
+    if (body instanceof CoreModel.Scope sc) return buildScope(sc);
+    if (body instanceof CoreModel.Block block) return buildBlock(block);
+    if (body != null) return buildStatements(java.util.List.of(body));
+    return LiteralNode.create(null);
+  }
+
+  /**
+   * 构建模式节点，并在当前层为绑定名分配槽位。顶层名字模式按大小写区分变体与绑定（见 PatNameNode）；
+   * 构造器模式内的名字一律绑定（PatCtorNode 按位置绑定字段值）。
+   */
+  private aster.truffle.nodes.MatchNode.PatternNode buildPatternNode(CoreModel.Pattern p, boolean nested) {
     if (p instanceof CoreModel.PatNull) return new aster.truffle.nodes.MatchNode.PatNullNode();
-    if (p instanceof CoreModel.PatName pn) return new aster.truffle.nodes.MatchNode.PatNameNode(pn.name);
+    if (p instanceof CoreModel.PatName pn) {
+      boolean binds = nested
+          ? pn.name != null && !pn.name.isEmpty() && !"_".equals(pn.name)
+          : aster.truffle.nodes.MatchNode.PatNameNode.binds(pn.name);
+      return new aster.truffle.nodes.MatchNode.PatNameNode(pn.name, binds ? declareLocal(pn.name) : -1);
+    }
     if (p instanceof CoreModel.PatInt pi) return new aster.truffle.nodes.MatchNode.PatIntNode(pi.value);
     if (p instanceof CoreModel.PatCtor pc) {
       java.util.List<aster.truffle.nodes.MatchNode.PatternNode> args = new java.util.ArrayList<>();
-      if (pc.args != null) for (var a : pc.args) args.add(buildPatternNode(a));
-      return new aster.truffle.nodes.MatchNode.PatCtorNode(pc.typeName, pc.names, args);
+      if (pc.args != null) for (var a : pc.args) args.add(buildPatternNode(a, true));
+      int[] bindSlots = null;
+      if (pc.names != null) {
+        bindSlots = new int[pc.names.size()];
+        for (int i = 0; i < bindSlots.length; i++) {
+          String bn = pc.names.get(i);
+          bindSlots[i] = (bn == null || bn.isEmpty() || "_".equals(bn)) ? -1 : declareLocal(bn);
+        }
+      }
+      return new aster.truffle.nodes.MatchNode.PatCtorNode(pc.typeName, pc.names, bindSlots, args);
     }
     return new aster.truffle.nodes.MatchNode.PatNameNode("_");
   }
 
-  private Node buildScope(CoreModel.Scope sc) {
-    java.util.ArrayList<Node> list = new java.util.ArrayList<>();
-    Env previousEnv = this.env;
-    Env scopeEnv = (previousEnv != null) ? previousEnv.createChild() : new Env();
-    java.util.Map<String,Integer> slots = currentParamSlots();
-    java.util.Set<String> scopeLocals = new java.util.LinkedHashSet<>();
-    this.env = scopeEnv;
-    scopeFrames.push(new ScopeFrame(slots, scopeLocals));
-    try {
-      if (sc.statements != null) for (var s : sc.statements) {
-        if (s instanceof CoreModel.Return r) {
-          AsterExpressionNode returnExpr = buildExpr(r.expr);
-          returnExpr = maybeWrapForType(returnExpr, currentReturnType());
-          list.add(new ReturnNode(returnExpr, originLine(r.origin)));
-        }
-        else if (s instanceof CoreModel.Let let) {
-          scopeLocals.add(let.name);
-          list.add(new LetNodeEnv(let.name, buildExpr(let.expr), scopeEnv));
-        }
-        else if (s instanceof CoreModel.If iff) list.add(IfNode.create(buildExpr(iff.cond), buildBlock(iff.thenBlock), buildBlock(iff.elseBlock), originLine(iff.origin)));
-        else if (s instanceof CoreModel.Match match) {
-          list.add(buildMatch(match));
-        }
-        else if (s instanceof CoreModel.Scope nestedScope) {
-          list.add(buildScope(nestedScope));
-        }
-        else if (s instanceof CoreModel.Block nestedBlock) {
-          list.add(buildBlock(nestedBlock));
-        }
-        else if (s instanceof CoreModel.Set set) {
-          AsterExpressionNode valueNode = buildExpr(set.expr);
-          if (!isScopeLocal(set.name) && slots != null && slots.containsKey(set.name)) {
-            list.add(SetNodeGen.create(set.name, slots.get(set.name), valueNode));
-          } else {
-            list.add(new SetNodeEnv(set.name, valueNode, scopeEnv));
-          }
-        }
-        else if (s instanceof CoreModel.Start st) list.add(new StartNode(scopeEnv, st.name, buildExpr(st.expr)));
-        else if (s instanceof CoreModel.Wait wt) list.add(new WaitNode(scopeEnv, ((wt.names != null) ? wt.names : java.util.List.<String>of()).toArray(new String[0])));
-        else if (s instanceof CoreModel.Workflow wf) list.add(buildWorkflow(wf));
-      }
-    } finally {
-      scopeFrames.pop();
-      this.env = previousEnv;
-    }
-    return BlockNode.create(list);
+  /** 在当前层声明局部名并返回槽位；不在 frame 内（无槽位）时返回 -1，由调用方回退到 Env。 */
+  private int declareLocal(String name) {
+    LexicalSlots frame = currentFrame();
+    return frame == null ? -1 : frame.declare(name);
   }
 
-  /** Scope 内已声明的局部变量集合，连同其所处的形参 slot 表（同一 frame 内才会遮蔽形参）。 */
-  private record ScopeFrame(java.util.Map<String,Integer> slots, java.util.Set<String> locals) {}
-
-  private final java.util.ArrayDeque<ScopeFrame> scopeFrames = new java.util.ArrayDeque<>();
+  /** name 在当前 frame 词法作用域链上最近的绑定槽位；不是局部名时为 null。 */
+  private Integer localSlot(String name) {
+    LexicalSlots frame = currentFrame();
+    return frame == null ? null : frame.lookup(name);
+  }
 
   /**
-   * name 是否已被当前 frame 内某层 Scope 的 Let 声明。Scope 局部住在子 Env，并遮蔽同名形参 slot；
-   * 读（Name）、写（Set）都以此为准，保证两者落在同一个变量上。lambda 有自己的 slot 表，
-   * 其形参不会被外层 Scope 局部遮蔽，故按 slot 表身份区分。
+   * Scope 开一层词法作用域：块内 Let 离开后消失，对外层绑定的 Set 写回外层（ADR 0052 §2.1）。
+   * 子 Env 只供 Start / Wait 的任务名与非局部名查找使用；局部变量都在 frame 槽位里。
    */
-  private boolean isScopeLocal(String name) {
-    java.util.Map<String,Integer> current = currentParamSlots();
-    for (ScopeFrame frame : scopeFrames) {
-      if (frame.slots() == current && frame.locals().contains(name)) return true;
+  private Node buildScope(CoreModel.Scope sc) {
+    if (sc.statements == null || sc.statements.isEmpty()) return BlockNode.create(new java.util.ArrayList<>());
+    Env previousEnv = this.env;
+    LexicalSlots frame = currentFrame();
+    this.env = (previousEnv != null) ? previousEnv.createChild() : new Env();
+    if (frame != null) frame.enter();
+    try {
+      return buildStatements(sc.statements);
+    } finally {
+      if (frame != null) frame.exit();
+      this.env = previousEnv;
     }
-    return false;
   }
 
   private AsterExpressionNode buildConstruct(CoreModel.Construct cons) {
@@ -741,42 +683,36 @@ public final class Loader {
     String enumName = name.substring(0, dot);
     String variant = name.substring(dot + 1);
     if (!enumVariants.getOrDefault(enumName, java.util.Set.of()).contains(variant)) return null;
-    java.util.Map<String,Integer> slots = currentParamSlots();
-    if (slots != null && slots.containsKey(enumName)) return null;
-    if (isScopeLocal(enumName)) return null;
+    if (localSlot(enumName) != null) return null;
     return new AsterEnumValue(enumName, variant);
   }
 
   private AsterExpressionNode buildSimpleName(String name) {
-    java.util.Map<String,Integer> slots = currentParamSlots();
-    if (slots != null && slots.containsKey(name) && !isScopeLocal(name)) {
-      return NameNodeGen.create(name, slots.get(name));
-    }
+    Integer slot = localSlot(name);
+    if (slot != null) return NameNodeGen.create(name, slot);
     return new NameNodeEnv(env, name);
   }
 
   private Node buildFunctionBody(CoreModel.Func fn) {
     if (fn == null) return LiteralNode.create(null);
-    return withReturnType(fn.ret, () -> {
-      if (fn == entryFunction && entryParamSlots != null && !entryParamSlots.isEmpty()) {
-        return withParamSlots(entryParamSlots, () -> buildBlock(fn.body));
-      }
-      return buildBlock(fn.body);
-    });
+    return withReturnType(fn.ret, () -> buildBlock(fn.body));
   }
 
-  private <T> T withParamSlots(java.util.Map<String,Integer> slots, java.util.function.Supplier<T> supplier) {
-    if (slots == null || slots.isEmpty()) return supplier.get();
-    paramSlotStack.push(slots);
+  /**
+   * 在新 frame 内构建：最外层绑定为 slots 中已分配的形参 / 捕获变量。
+   * 嵌套 lambda 各自一个 frame，不会解析到外层 frame 的槽位（捕获变量经 captures 传入）。
+   */
+  private <T> T withFrame(FrameSlotBuilder slots, java.util.function.Supplier<T> supplier) {
+    frames.push(new LexicalSlots(slots, slots.getSymbolTable()));
     try {
       return supplier.get();
     } finally {
-      paramSlotStack.pop();
+      frames.pop();
     }
   }
 
-  private java.util.Map<String,Integer> currentParamSlots() {
-    return paramSlotStack.isEmpty() ? null : paramSlotStack.peek();
+  private LexicalSlots currentFrame() {
+    return frames.peek();
   }
 
   private <T> T withReturnType(CoreModel.Type type, java.util.function.Supplier<T> supplier) {
@@ -834,52 +770,6 @@ public final class Loader {
       }
     }
     return false;
-  }
-
-  /**
-   * 收集 Block 中所有 Let 语句声明的局部变量名。
-   *
-   * 递归遍历所有语句，包括 If/Match/Scope 中嵌套的 Block。
-   * 用于在构建 FrameDescriptor 前预先分配所有局部变量的 slots。
-   *
-   * @param block 要扫描的 Block
-   * @param locals 用于收集变量名的 Set
-   */
-  private void collectLocalVariables(CoreModel.Block block, java.util.Set<String> locals) {
-    if (block == null || block.statements == null) return;
-
-    for (var stmt : block.statements) {
-      if (stmt instanceof CoreModel.Let let) {
-        // Let 语句声明新的局部变量
-        locals.add(let.name);
-      } else if (stmt instanceof CoreModel.If iff) {
-        // If 语句的两个分支可能声明局部变量
-        collectLocalVariables(iff.thenBlock, locals);
-        collectLocalVariables(iff.elseBlock, locals);
-      } else if (stmt instanceof CoreModel.Scope) {
-        // Scope 块内声明的变量不逃逸到外层作用域，不纳入 frame slots
-        continue;
-      } else if (stmt instanceof CoreModel.Block nested) {
-        collectLocalVariables(nested, locals);
-      } else if (stmt instanceof CoreModel.Match match) {
-        // Match 语句的每个 case 可能有局部变量
-        if (match.cases != null) {
-          for (var c : match.cases) {
-            collectLocalVariables(asBlock(c.body), locals);
-          }
-        }
-      }
-      // Set/Return/Wait/Start 不声明新变量，跳过
-    }
-  }
-
-  /** 把 case 分支体统一看成语句块：Scope / Block 取其语句，单语句包成单元素块，空体为 null。 */
-  private static CoreModel.Block asBlock(CoreModel.Stmt body) {
-    if (body == null) return null;
-    if (body instanceof CoreModel.Block block) return block;
-    CoreModel.Block out = new CoreModel.Block();
-    out.statements = (body instanceof CoreModel.Scope scope) ? scope.statements : java.util.List.of(body);
-    return out;
   }
 
   private static CoreModel.Type[] extractParamTypes(java.util.List<CoreModel.Param> params) {
