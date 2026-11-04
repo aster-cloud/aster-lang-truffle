@@ -48,6 +48,24 @@ class PatNameAsciiCaseTest {
     }
 
     @Test
+    void bindingNamedLikeAnEnumMemberIsReadAsTheBinding() throws IOException {
+        // 整数主语下 `bei Ärger,` 是绑定（R12）；分支体读 Ärger 取绑定值，局部名优先于同名枚举成员（ADR 0051 §6.2）
+        String json = """
+            { "kind": "Module", "name": "m", "decls": [
+              { "kind": "Enum", "name": "Laune", "variants": ["Übel", "Ärger"] },
+              { "kind": "Func", "name": "entry",
+                "params": [ { "name": "n", "type": { "kind": "TypeName", "name": "Int" } } ],
+                "ret": { "kind": "TypeName", "name": "Int" }, "effects": [],
+                "body": { "kind": "Block", "statements": [
+                  { "kind": "Match", "expr": { "kind": "Name", "name": "n" }, "cases": [
+                    { "kind": "Case", "pattern": { "kind": "PatName", "name": "Ärger" },
+                      "body": { "kind": "Return", "expr": { "kind": "Name", "name": "Ärger" } } } ] },
+                  { "kind": "Return", "expr": { "kind": "Int", "value": -1 } } ] } } ] }
+            """;
+        assertEquals(7, run(json, 7).asInt());
+    }
+
+    @Test
     void asciiUppercaseInitialIsStillAVariantMatch() throws IOException {
         // Int 主语不等于变体名：不匹配，落到 Return -1
         assertEquals(-1, run(module("Red", retName("n")), 7).asInt());

@@ -677,7 +677,9 @@ public final class Loader {
    */
   private AsterEnumValue enumMember(String name) {
     String bareEnum = enumVariantToEnum == null ? null : enumVariantToEnum.get(name);
-    if (bareEnum != null) return new AsterEnumValue(bareEnum, name);
+    // 局部名（Let、形参、模式绑定）优先于同名枚举成员（ADR 0051 §6.2 LOCAL 层优先，与 TS 解释器一致），
+    // 如整数主语下的 `bei Ärger,` 绑定与枚举成员 Ärger 同名
+    if (bareEnum != null) return localSlot(name) != null ? null : new AsterEnumValue(bareEnum, name);
     int dot = name.indexOf('.');
     if (dot <= 0 || dot != name.lastIndexOf('.')) return null;
     String enumName = name.substring(0, dot);
