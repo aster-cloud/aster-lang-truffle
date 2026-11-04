@@ -175,11 +175,11 @@ public abstract class MatchNode extends AsterExpressionNode {
   }
 
   // Name pattern, two meanings distinguished by case (mirrors the TS interpreter):
-  //   - Capitalized name (enum variant / type, e.g. NotFound) → match by name
+  //   - ASCII-capitalized name (enum variant / type, e.g. NotFound) → match by name
   //     equality; does NOT bind. Without this, a lowercase catch-all arm could
   //     never be reached when the scrutinee is an enum-as-string, and a
   //     Capitalized arm would not exclude other variants.
-  //   - lowercase name (binding var, e.g. x / value) → catch-all: matches any
+  //   - any other name (x / value / 其他 / Ärger) → catch-all binding: matches any
   //     non-null value and binds it. (A `When null` arm is a separate PatNull.)
   public static final class PatNameNode extends PatternNode {
     private final String name;
@@ -189,10 +189,17 @@ public abstract class MatchNode extends AsterExpressionNode {
     public PatNameNode(String name, int slot) { this.name = name; this.slot = slot; }
     /** 名字按绑定语义处理（非变体、非 {@code _}）时才需要槽位。 */
     public static boolean binds(String name) {
-      return name != null && !name.isEmpty() && !"_".equals(name) && !Character.isUpperCase(name.charAt(0));
+      return name != null && !name.isEmpty() && !"_".equals(name) && !isVariantName(name);
+    }
+    /**
+     * 只看首字母是否为 ASCII 大写（ADR 0051 裁决 R55），与 TS 解释器 {@code /^[A-Z]/}、R2 判定、parity 归一化一致。
+     * 非 ASCII 大写开头（{@code Ärger}）与无大小写文字的枚举成员由 R2 产出无参数 PatCtor，PatName 一律是绑定。
+     */
+    static boolean isVariantName(String name) {
+      return name != null && !name.isEmpty() && name.charAt(0) >= 'A' && name.charAt(0) <= 'Z';
     }
     private boolean isVariant() {
-      return name != null && !name.isEmpty() && Character.isUpperCase(name.charAt(0));
+      return isVariantName(name);
     }
     @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) {
       if (AsterConfig.DEBUG) {
