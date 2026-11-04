@@ -469,6 +469,50 @@ public final class Loader {
     }
     if (e instanceof CoreModel.Name n) return buildName(n.name);
     if (e instanceof CoreModel.Call c) {
+      // 调用目标与 builtin 同名、又有同名局部时，运行期按局部的值决定调用局部还是 builtin
+      AsterExpressionNode shadowed = buildLocalOrBuiltinCall(c);
+      if (shadowed != null) return shadowed;
+      return buildCall(c);
+    }
+    if (e instanceof CoreModel.Ok ok) return new aster.truffle.nodes.ResultNodes.OkNode(buildExpr(ok.expr));
+    if (e instanceof CoreModel.Err er) return new aster.truffle.nodes.ResultNodes.ErrNode(buildExpr(er.expr));
+    if (e instanceof CoreModel.Some sm) return new aster.truffle.nodes.ResultNodes.SomeNode(buildExpr(sm.expr));
+    if (e instanceof CoreModel.NoneE) return new aster.truffle.nodes.ResultNodes.NoneNode();
+    if (e instanceof CoreModel.Construct cons) return buildConstruct(cons);
+    if (e instanceof CoreModel.IfE ifx) {
+      // ADR 0019 G2b：表达式级 if → IfExprNode（三分支都是表达式节点，求值产出值）。
+      return aster.truffle.nodes.IfExprNode.create(
+          buildExpr(ifx.cond), buildExpr(ifx.thenE), buildExpr(ifx.elseE),
+          originLine(ifx.origin));
+    }
+    if (e instanceof CoreModel.ListE list) {
+      // ADR 0024 C0：列表字面量 → ListLiteralNode（逐元素求值成 ArrayList，
+      // 与 List.* builtin 的运行时列表表示一致）。
+      var elems = list.elements == null ? java.util.List.<CoreModel.Expr>of() : list.elements;
+      AsterExpressionNode[] elNodes = new AsterExpressionNode[elems.size()];
+      for (int i = 0; i < elems.size(); i++) elNodes[i] = buildExpr(elems.get(i));
+      return aster.truffle.nodes.ListLiteralNode.create(elNodes);
+    }
+    return LiteralNode.create(null);
+  }
+
+  /**
+   * 调用目标是单段 builtin 名（含 and / or）、不是用户规则、且作用域内有同名局部时，构建
+   * {@link aster.truffle.nodes.LocalOrBuiltinCallNode}：局部是函数值就调用局部，否则调用 builtin。其余情形返回 null。
+   */
+  private AsterExpressionNode buildLocalOrBuiltinCall(CoreModel.Call c) {
+    if (!(c.target instanceof CoreModel.Name n) || n.name == null || n.name.indexOf('.') >= 0) return null;
+    if (userFunctionNames.contains(n.name) || localSlot(n.name) == null) return null;
+    boolean builtin = Builtins.has(n.name) || "and".equals(n.name) || "or".equals(n.name);
+    if (!builtin) return null;
+    var args = new java.util.ArrayList<Node>();
+    if (c.args != null) for (var a : c.args) args.add(buildExpr(a));
+    Node callPath = CallNode.create(buildSimpleName(n.name), args);
+    return new aster.truffle.nodes.LocalOrBuiltinCallNode(buildSimpleName(n.name), callPath, buildCall(c));
+  }
+
+  /** 普通调用：and / or 短路、builtin 内联、命名空间函数缺失报错，其余走 CallNode。 */
+  private AsterExpressionNode buildCall(CoreModel.Call c) {
       // and/or 必须短路，不能走先求值全部参数的 BuiltinCallNode
       AsterExpressionNode shortCircuit = buildShortCircuit(c);
       if (shortCircuit != null) return shortCircuit;
@@ -528,27 +572,6 @@ public final class Loader {
       if (c.args != null) for (var a : c.args) args.add(buildExpr(a));
       return CallNode.create(target, args);
     }
-    if (e instanceof CoreModel.Ok ok) return new aster.truffle.nodes.ResultNodes.OkNode(buildExpr(ok.expr));
-    if (e instanceof CoreModel.Err er) return new aster.truffle.nodes.ResultNodes.ErrNode(buildExpr(er.expr));
-    if (e instanceof CoreModel.Some sm) return new aster.truffle.nodes.ResultNodes.SomeNode(buildExpr(sm.expr));
-    if (e instanceof CoreModel.NoneE) return new aster.truffle.nodes.ResultNodes.NoneNode();
-    if (e instanceof CoreModel.Construct cons) return buildConstruct(cons);
-    if (e instanceof CoreModel.IfE ifx) {
-      // ADR 0019 G2b：表达式级 if → IfExprNode（三分支都是表达式节点，求值产出值）。
-      return aster.truffle.nodes.IfExprNode.create(
-          buildExpr(ifx.cond), buildExpr(ifx.thenE), buildExpr(ifx.elseE),
-          originLine(ifx.origin));
-    }
-    if (e instanceof CoreModel.ListE list) {
-      // ADR 0024 C0：列表字面量 → ListLiteralNode（逐元素求值成 ArrayList，
-      // 与 List.* builtin 的运行时列表表示一致）。
-      var elems = list.elements == null ? java.util.List.<CoreModel.Expr>of() : list.elements;
-      AsterExpressionNode[] elNodes = new AsterExpressionNode[elems.size()];
-      for (int i = 0; i < elems.size(); i++) elNodes[i] = buildExpr(elems.get(i));
-      return aster.truffle.nodes.ListLiteralNode.create(elNodes);
-    }
-    return LiteralNode.create(null);
-  }
 
   private Node buildMatch(CoreModel.Match mm) {
     var patCases = new java.util.ArrayList<aster.truffle.nodes.MatchNode.CaseNode>();
