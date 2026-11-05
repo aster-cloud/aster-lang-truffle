@@ -8,11 +8,16 @@ import java.lang.reflect.Field;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -23,6 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
  * <p>core 的类型检查据此判断「调用位置的名字是不是由运行期直接分派的 builtin」：命中即不报
  * 「调用非函数局部名」（aster-lang-core#229 / #231 的 E001），因为 Loader 在调用位置先分派 builtin（同名局部不是函数值时）。
  * 两边任一侧增删单段 builtin 而另一侧不跟，类型检查就会对能正常运行的代码报错，或放过运行期才失败的调用。
+ *
+ * <p>{@link CallTargetBuiltins#ALIASES} 同样须与 {@link Builtins#canonicalName} 的单词别名一致（aster-lang-core#234）：
+ * {@code Builtins.has} 先经 canonicalName 归一（别名不区分大小写），{@code given over as Int … over(3, 2)} 在本引擎能运行。
  *
  * <p>core 侧的 {@code CallTargetBuiltinsTruffleSyncTest} 需要 truffle 源码，CI 中找不到时跳过；
  * truffle 依赖 core，所以由本测试在 truffle CI 中做同一项核对。
@@ -47,6 +55,33 @@ class CallTargetBuiltinsSyncTest {
         }
         assertEquals(new TreeSet<>(CallTargetBuiltins.NAMES), truffleNames,
             "aster-lang-core CallTargetBuiltins.NAMES 与 truffle Builtins 的单段注册名不一致，两侧须同步修改");
+    }
+
+    /** canonicalName 中的一个分支：{@code case "/", "divide", "divided by" -> "div";} */
+    private static final Pattern ALIAS_CASE = Pattern.compile("case ((?:\"[^\"]*\",?\\s*)+)->\\s*\"([a-z]+)\";");
+    private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
+
+    @Test
+    void wordAliasesMatchCoreCallTargetBuiltinAliases() throws Exception {
+        // 正向：core 列出的每个别名在本引擎按大小写不敏感归一到同一规范名
+        for (var entry : CallTargetBuiltins.ALIASES.entrySet()) {
+            assertEquals(entry.getValue(), Builtins.canonicalName(entry.getKey()), entry.getKey());
+            assertEquals(entry.getValue(), Builtins.canonicalName(entry.getKey().toUpperCase(Locale.ROOT)), entry.getKey());
+        }
+        // 反向：canonicalName 源码里的单词别名都列进了 core
+        String source = Files.readString(Path.of("src/main/java/aster/truffle/runtime/Builtins.java"));
+        String body = source.substring(source.indexOf("public static String canonicalName("));
+        body = body.substring(0, body.indexOf("default ->"));
+        Map<String, String> truffle = new TreeMap<>();
+        var cases = ALIAS_CASE.matcher(body);
+        while (cases.find()) {
+            var quoted = QUOTED.matcher(cases.group(1));
+            while (quoted.find()) {
+                if (quoted.group(1).matches("[a-z]+")) truffle.put(quoted.group(1), cases.group(2));
+            }
+        }
+        assertEquals(new TreeMap<>(CallTargetBuiltins.ALIASES), truffle,
+            "aster-lang-core CallTargetBuiltins.ALIASES 与 truffle Builtins.canonicalName 的单词别名不一致，两侧须同步修改");
     }
 
     /** 在只以平台类加载器为父的新类加载器中加载 Builtins，得到未被其它测试污染的注册表。 */
