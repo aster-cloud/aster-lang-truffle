@@ -111,6 +111,18 @@ public abstract class MatchNode extends AsterExpressionNode {
     return com.oracle.truffle.api.interop.InteropLibrary.getUncached().isNull(s);
   }
 
+  /**
+   * 值是否为可空 T? 的裸载荷（aster-lang-ts#277）：非 null，且不是 Some / None / Ok / Err 构造值。
+   * data 值、枚举成员等照常算裸载荷（{@code Person?} 位置直接放 Person）。与 TS 解释器 isBareOptionalPayload 一致。
+   */
+  @SuppressWarnings("rawtypes")
+  static boolean isBareOptionalPayload(Object s) {
+    if (isGuestNull(s)) return false;
+    if (!(s instanceof java.util.Map m)) return true;
+    Object tag = m.get("__type");
+    return !("Some".equals(tag) || "None".equals(tag) || "Ok".equals(tag) || "Err".equals(tag));
+  }
+
   public static final class PatNullNode extends PatternNode {
     @Override public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) { return isGuestNull(s); }
   }
@@ -130,6 +142,14 @@ public abstract class MatchNode extends AsterExpressionNode {
       this.args = (args == null ? java.util.List.of() : args);
     }
     @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) {
+      // 可空值 T? 的裸表示（aster-lang-ts#277）：宿主传入或 T → T? 直接传入的值不带 Some/None 标签。
+      // 裸的非 null 值按 Some(值) 匹配，null 按 None 匹配；带 __type 标签的值（Some/None/Ok/Err）仍走下方原逻辑。
+      if ("Some".equals(typeName) && isBareOptionalPayload(s)) {
+        return matchOrderedFields(1, idx -> s, frame, env);
+      }
+      if ("None".equals(typeName) && args.isEmpty() && (bindNames == null || bindNames.isEmpty()) && isGuestNull(s)) {
+        return true;
+      }
       if (s instanceof AsterDataValue dataValue) {
         if (!typeName.equals(dataValue.getTypeName())) return false;
         return matchOrderedFields(dataValue.fieldCount(), idx -> dataValue.fieldValue(idx), frame, env);
@@ -206,6 +226,8 @@ public abstract class MatchNode extends AsterExpressionNode {
         System.err.println("DEBUG: PatNameNode name=" + name + " scrutinee=" + s + " type=" + (s == null ? "null" : s.getClass().getName()));
       }
       if (isVariant()) {
+        // `When None` 也匹配可空值的裸 null（aster-lang-ts#277，见 PatCtorNode）
+        if ("None".equals(name) && isGuestNull(s)) return true;
         if (s == null) return false;
         if (s instanceof String) return name.equals(s);
         if (s instanceof AsterEnumValue enumValue) {
