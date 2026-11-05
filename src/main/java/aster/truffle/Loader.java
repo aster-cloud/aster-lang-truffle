@@ -359,12 +359,12 @@ public final class Loader {
         dependencies.add(java.util.Set.of());
         continue;
       }
-      stepBodies[i] = buildBlock(step.body);
+      stepBodies[i] = buildBlockInNewLayer(step.body);
       stepNames[i] = step.name;
 
       // 构建补偿代码块（如果存在）
       if (step.compensate != null && step.compensate.statements != null && !step.compensate.statements.isEmpty()) {
-        compensateBodies[i] = buildBlock(step.compensate);
+        compensateBodies[i] = buildBlockInNewLayer(step.compensate);
         hasAnyCompensation = true;
       } else {
         compensateBodies[i] = null;
@@ -389,6 +389,22 @@ public final class Loader {
     return new WorkflowNode(env, stepBodies,
         hasAnyCompensation ? compensateBodies : null,
         stepNames, dependencies, timeoutMs);
+  }
+
+  /**
+   * 在新开的一层词法作用域里构建代码块：用于 workflow 的 step 体与 compensate 体（#159）。
+   *
+   * <p>与 case 分支 / Scope 一致（ADR 0052 §2.1）：块内 Let 只遮蔽外层，出块后不可见；块内无同名 Let 时
+   * Set 写回外层。每层的声明分配各自的 slot，所以共用一个 MaterializedFrame 的并行 step 不会写到同一个 slot。
+   */
+  private Node buildBlockInNewLayer(CoreModel.Block block) {
+    LexicalSlots frame = currentFrame();
+    if (frame != null) frame.enter();
+    try {
+      return buildBlock(block);
+    } finally {
+      if (frame != null) frame.exit();
+    }
   }
 
   private AsterExpressionNode buildExpr(CoreModel.Expr e) {

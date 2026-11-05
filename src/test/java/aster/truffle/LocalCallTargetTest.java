@@ -117,4 +117,33 @@ class LocalCallTargetTest {
             ret(call("or", "{ \"kind\": \"Bool\", \"value\": true }", "{ \"kind\": \"Bool\", \"value\": true }"))));
         assertEquals(false, run(json, "main").asBoolean());
     }
+
+    @Test
+    void closureShadowsSameNamedRule() throws IOException {
+        // #161：同名规则 add 与局部闭包 add 并存时按 ADR 0051 §6.2 LOCAL 优先调用局部，得 6 而不是 5
+        String json = module(
+            func("add", param("a", INT) + "," + param("b", INT), INT, ret(call("+", name("a"), name("b")))),
+            func("main", "", INT,
+                let("add", lambda(new String[]{"a", "b"}, call("*", name("a"), name("b")))),
+                ret(call("add", num(2), num(3)))));
+        assertEquals(6, run(json, "main").asInt());
+    }
+
+    @Test
+    void closureShadowsSameNamedNonBuiltinRule() throws IOException {
+        String json = module(
+            func("combine", param("a", INT) + "," + param("b", INT), INT, ret(call("+", name("a"), name("b")))),
+            func("main", "", INT,
+                let("combine", lambda(new String[]{"a", "b"}, call("*", name("a"), name("b")))),
+                ret(call("combine", num(2), num(3)))));
+        assertEquals(6, run(json, "main").asInt());
+    }
+
+    @Test
+    void ruleIsCalledWhenNoLocalShadowsIt() throws IOException {
+        String json = module(
+            func("combine", param("a", INT) + "," + param("b", INT), INT, ret(call("+", name("a"), name("b")))),
+            func("main", "", INT, ret(call("combine", num(2), num(3)))));
+        assertEquals(5, run(json, "main").asInt());
+    }
 }

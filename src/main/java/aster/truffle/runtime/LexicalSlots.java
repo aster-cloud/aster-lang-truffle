@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * 一个 frame（规则体或 lambda 体）在构建期的词法作用域链：名字 → frame 槽位。
  *
- * <p>最外层是 frame 本身（形参、捕获变量与规则体顶层的 Let）。case 分支（含模式绑定）与 Scope
+ * <p>最外层是 frame 本身（形参、捕获变量与规则体顶层的 Let）。case 分支（含模式绑定）、Scope、workflow 的 step 体与 compensate 体
  * 各开一层，离开时弹出（ADR 0052 §2.1）。If 分支不开层：它与所在块共享作用域（E104 规则）。
  *
  * <p>声明（Let、模式绑定）只写当前层：同层重复声明沿用原槽位；外层已有同名绑定时分配新槽位，
@@ -31,7 +31,7 @@ public final class LexicalSlots {
     layers.push(new HashMap<>(base));
   }
 
-  /** 进入一层块作用域（case 分支、Scope）。 */
+  /** 进入一层块作用域（case 分支、Scope、workflow 的 step / compensate 体）。 */
   public void enter() {
     layers.push(new HashMap<>());
   }
