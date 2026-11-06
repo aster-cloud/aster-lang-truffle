@@ -262,7 +262,16 @@ public abstract class MatchNode extends AsterExpressionNode {
       if (s instanceof Integer i) return value == i.intValue();
       if (s instanceof Long l) return value == l.longValue();
       if (s instanceof Double d) return value == d.doubleValue();
+      // Int→Decimal 宽化：Decimal 按精确数值相等匹配（0 / 0.0 / 0.00 均命中 When 0），
+      // 用 compareTo 而非 double 转换，避免精度丢失；Text 等非数值仍不匹配。
+      if (s instanceof aster.truffle.runtime.interop.AsterDecimalValue dv) return matchesDecimal(dv.decimal());
+      if (s instanceof java.math.BigDecimal bd) return matchesDecimal(bd);
       return false;
+    }
+
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private boolean matchesDecimal(java.math.BigDecimal d) {
+      return d.compareTo(java.math.BigDecimal.valueOf(value)) == 0;
     }
   }
 
