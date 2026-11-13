@@ -89,10 +89,6 @@ public final class Loader {
   private Program buildProgramInternal(CoreModel.Module mod, String funcName, java.util.List<String> rawArgs) throws IOException {
     this.frames.clear();
     // Import 声明在 Core 阶段已展开依赖，这里直接消费合并后的 Module，无需额外处理。
-    boolean moduleUsesAsync = false;
-    for (var d : mod.decls) {
-      if (d instanceof CoreModel.Func fn && blockContainsAsync(fn.body)) moduleUsesAsync = true;
-    }
     this.dataTypeIndex = new java.util.LinkedHashMap<>();
     if (mod.decls != null) {
       for (var d : mod.decls) {
@@ -203,7 +199,9 @@ public final class Loader {
       Node target = new NameNodeEnv(env, entry.name);
       root = CallNode.create(target, new java.util.ArrayList<>());
     }
-    return new Program(root, env, entry.params, entry.name, runtimePermissions(entry, moduleUsesAsync));
+    // 入口权限即 IR 声明的 effects（小写 io / cpu 与效应变量，ADR 0055 #5）。效应变量在运行时边界没有实例化来源，
+    // 按原名放进权限集，因而不授权任何具体效应（fail-closed）；需要 io / cpu 的入口必须具体声明。
+    return new Program(root, env, entry.params, entry.name, entry.effects);
   }
 
   private CoreModel.Func selectOverload(java.util.List<CoreModel.Func> funcs, java.util.List<String> rawArgs) {
@@ -809,70 +807,7 @@ public final class Loader {
     return returnTypeStack.isEmpty() ? null : returnTypeStack.peek();
   }
 
-  /**
-   * 入口函数的运行时 effect 权限：IR 声明的 effects（小写的 io / cpu 与效应变量，ADR 0055 #5），
-   * 模块中出现 Start 或 workflow 时再加上 Truffle 内部的 {@link AsterContext#ASYNC_EFFECT}。
-   *
-   * <p>效应变量（如 {@code E}）在运行时边界没有实例化来源，按原名放进权限集，因而不授权任何具体效应：
-   * 入口需要 io / cpu 时必须在 effects 中具体声明。这是 fail-closed 的取舍，不按类型检查推断出的最宽效应放宽。
-   *
-   * <p>v2 IR 不表达 async：它不授权任何效应（schema {@code BuiltinEffect} 只有 io / cpu），lowering 不写入。
-   * 异步语句的权限因此由 Loader 按模块内容授予；按模块而非按函数扫描，是因为权限只在入口设置一次，
-   * 由入口调用的辅助函数里的 Start 同样需要它。
-   */
-  private static java.util.List<String> runtimePermissions(CoreModel.Func entry, boolean moduleUsesAsync) {
-    java.util.List<String> permissions = new java.util.ArrayList<>(entry.effects);
-    if (moduleUsesAsync && !permissions.contains(AsterContext.ASYNC_EFFECT)) permissions.add(AsterContext.ASYNC_EFFECT);
-    return permissions;
-  }
 
-  /**
-   * 是否含 Start / workflow。语句与表达式都要下探：Lambda 体同样是可执行代码，
-   * 写在 Let / Return / 调用实参里的 Lambda 内的 Start 也需要 async 权限。
-   */
-  private static boolean blockContainsAsync(CoreModel.Block block) {
-    return block != null && anyAsync(block.statements, Loader::stmtContainsAsync);
-  }
-
-  private static <T> boolean anyAsync(java.util.List<T> items, java.util.function.Predicate<T> test) {
-    if (items == null) return false;
-    for (T item : items) {
-      if (test.test(item)) return true;
-    }
-    return false;
-  }
-
-  private static boolean stmtContainsAsync(CoreModel.Stmt stmt) {
-    return switch (stmt) {
-      case null -> false;
-      case CoreModel.Workflow w -> true;
-      case CoreModel.Start st -> true;
-      case CoreModel.Block block -> blockContainsAsync(block);
-      case CoreModel.Scope sc -> anyAsync(sc.statements, Loader::stmtContainsAsync);
-      case CoreModel.If iff -> exprContainsAsync(iff.cond) || blockContainsAsync(iff.thenBlock) || blockContainsAsync(iff.elseBlock);
-      case CoreModel.Match mm -> exprContainsAsync(mm.expr) || anyAsync(mm.cases, c -> stmtContainsAsync(c.body));
-      case CoreModel.Let let -> exprContainsAsync(let.expr);
-      case CoreModel.Set set -> exprContainsAsync(set.expr);
-      case CoreModel.Return ret -> exprContainsAsync(ret.expr);
-      case CoreModel.Wait wt -> false;
-    };
-  }
-
-  private static boolean exprContainsAsync(CoreModel.Expr expr) {
-    return switch (expr) {
-      case null -> false;
-      case CoreModel.Lambda lam -> blockContainsAsync(lam.body);
-      case CoreModel.Call call -> exprContainsAsync(call.target) || anyAsync(call.args, Loader::exprContainsAsync);
-      case CoreModel.IfE ife -> exprContainsAsync(ife.cond) || exprContainsAsync(ife.thenE) || exprContainsAsync(ife.elseE);
-      case CoreModel.Ok ok -> exprContainsAsync(ok.expr);
-      case CoreModel.Err err -> exprContainsAsync(err.expr);
-      case CoreModel.Some some -> exprContainsAsync(some.expr);
-      case CoreModel.AwaitE aw -> exprContainsAsync(aw.expr);
-      case CoreModel.Construct cons -> anyAsync(cons.fields, f -> exprContainsAsync(f.expr));
-      case CoreModel.ListE list -> anyAsync(list.elements, Loader::exprContainsAsync);
-      default -> false;
-    };
-  }
 
 
 

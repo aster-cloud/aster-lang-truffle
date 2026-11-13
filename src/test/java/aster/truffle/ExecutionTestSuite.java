@@ -2222,8 +2222,7 @@ public class ExecutionTestSuite {
   // ==================== Effect Violations ====================
 
   /**
-   * v2 IR 不表达 async（ADR 0055 #5：async 不授权任何效应，lowering 不写入 effects），
-   * Start 所需的 Truffle 内部 async 权限由 Loader 在模块含异步语句时授予入口：没有声明任何效应也能执行。
+   * async 不是效应（ADR 0055 #5）：Start 是并发构造，不需要声明任何效应即可执行。
    */
   @Test
   public void testStartNeedsNoDeclaredAsyncEffect() throws Exception {

@@ -1191,12 +1191,12 @@ public final class Builtins {
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.writeFile"));
     }, Set.of(aster.truffle.AsterContext.IO_EFFECT)));
 
-    // === Async Operations (需要 Async effect) ===
+    // === Async Operations（并发构造，不需要 effect 授权，ADR 0055 #5） ===
     register("await", new BuiltinDef(args -> {
       checkArity("await", args, 1);
       // 当前简化实现：直接返回值（与AwaitNode语义一致）
       return args[0];
-    }, Set.of(aster.truffle.AsterContext.ASYNC_EFFECT)));
+    }, Set.of()));
   }
 
   /**
