@@ -1,6 +1,8 @@
 {
   "kind": "Module",
+  "schemaVersion": 2,
   "name": "test.blockcase",
+  "profile": null,
   "decls": [
     {
       "kind": "Func",
@@ -11,18 +13,27 @@
           "name": "x",
           "type": {
             "kind": "TypeName",
-            "name": "Int"
+            "name": "Int",
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
           },
-          "constraints": []
+          "annotations": [],
+          "constraints": [],
+          "typeInferred": false
         }
       ],
       "ret": {
         "kind": "TypeName",
-        "name": "Int"
+        "name": "Int",
+        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
       },
+      "retTypeInferred": false,
+      "annotations": [],
+      "retAnnotations": [],
       "effects": [],
+      "effectParams": [],
       "effectCaps": [],
       "effectCapsExplicit": false,
+      "inputRefs": null,
       "body": {
         "kind": "Block",
         "statements": [
@@ -31,16 +42,7 @@
             "expr": {
               "kind": "Name",
               "name": "x",
-              "origin": {
-                "start": {
-                  "line": 4,
-                  "col": 9
-                },
-                "end": {
-                  "line": 4,
-                  "col": 10
-                }
-              }
+              "origin": {"file": null, "start": {"line": 4, "col": 9}, "end": {"line": 4, "col": 10}, "written": null, "role": null}
             },
             "cases": [
               {
@@ -48,16 +50,7 @@
                 "pattern": {
                   "kind": "PatInt",
                   "value": 1,
-                  "origin": {
-                    "start": {
-                      "line": 5,
-                      "col": 10
-                    },
-                    "end": {
-                      "line": 5,
-                      "col": 11
-                    }
-                  }
+                  "origin": {"file": null, "start": {"line": 5, "col": 10}, "end": {"line": 5, "col": 11}, "written": null, "role": null}
                 },
                 "body": {
                   "kind": "Block",
@@ -68,176 +61,50 @@
                       "expr": {
                         "kind": "Int",
                         "value": 10,
-                        "origin": {
-                          "start": {
-                            "line": 6,
-                            "col": 16
-                          },
-                          "end": {
-                            "line": 6,
-                            "col": 18
-                          }
-                        }
+                        "origin": {"file": null, "start": {"line": 6, "col": 16}, "end": {"line": 6, "col": 18}, "written": null, "role": null}
                       },
-                      "origin": {
-                        "start": {
-                          "line": 6,
-                          "col": 7
-                        },
-                        "end": {
-                          "line": 6,
-                          "col": 19
-                        }
-                      }
+                      "origin": {"file": null, "start": {"line": 6, "col": 7}, "end": {"line": 6, "col": 19}, "written": null, "role": null}
                     },
                     {
                       "kind": "Return",
                       "expr": {
                         "kind": "Name",
                         "name": "y",
-                        "origin": {
-                          "start": {
-                            "line": 7,
-                            "col": 14
-                          },
-                          "end": {
-                            "line": 7,
-                            "col": 15
-                          }
-                        }
+                        "origin": {"file": null, "start": {"line": 7, "col": 14}, "end": {"line": 7, "col": 15}, "written": null, "role": null}
                       },
-                      "origin": {
-                        "start": {
-                          "line": 7,
-                          "col": 7
-                        },
-                        "end": {
-                          "line": 7,
-                          "col": 16
-                        }
-                      }
+                      "origin": {"file": null, "start": {"line": 7, "col": 7}, "end": {"line": 7, "col": 16}, "written": null, "role": null}
                     }
                   ],
-                  "origin": {
-                    "start": {
-                      "line": 6,
-                      "col": 7
-                    },
-                    "end": {
-                      "line": 7,
-                      "col": 16
-                    }
-                  }
+                  "origin": {"file": null, "start": {"line": 6, "col": 7}, "end": {"line": 7, "col": 16}, "written": null, "role": null}
                 },
-                "origin": {
-                  "start": {
-                    "line": 5,
-                    "col": 5
-                  },
-                  "end": {
-                    "line": 7,
-                    "col": 16
-                  }
-                }
+                "origin": {"file": null, "start": {"line": 5, "col": 5}, "end": {"line": 7, "col": 16}, "written": null, "role": null}
               },
               {
                 "kind": "Case",
                 "pattern": {
                   "kind": "PatName",
                   "name": "n",
-                  "origin": {
-                    "start": {
-                      "line": 8,
-                      "col": 10
-                    },
-                    "end": {
-                      "line": 8,
-                      "col": 11
-                    }
-                  }
+                  "origin": {"file": null, "start": {"line": 8, "col": 10}, "end": {"line": 8, "col": 11}, "written": null, "role": null}
                 },
                 "body": {
                   "kind": "Return",
                   "expr": {
                     "kind": "Name",
                     "name": "n",
-                    "origin": {
-                      "start": {
-                        "line": 8,
-                        "col": 20
-                      },
-                      "end": {
-                        "line": 8,
-                        "col": 21
-                      }
-                    }
+                    "origin": {"file": null, "start": {"line": 8, "col": 20}, "end": {"line": 8, "col": 21}, "written": null, "role": null}
                   },
-                  "origin": {
-                    "start": {
-                      "line": 8,
-                      "col": 13
-                    },
-                    "end": {
-                      "line": 8,
-                      "col": 22
-                    }
-                  }
+                  "origin": {"file": null, "start": {"line": 8, "col": 13}, "end": {"line": 8, "col": 22}, "written": null, "role": null}
                 },
-                "origin": {
-                  "start": {
-                    "line": 8,
-                    "col": 5
-                  },
-                  "end": {
-                    "line": 8,
-                    "col": 22
-                  }
-                }
+                "origin": {"file": null, "start": {"line": 8, "col": 5}, "end": {"line": 8, "col": 22}, "written": null, "role": null}
               }
             ],
-            "origin": {
-              "start": {
-                "line": 4,
-                "col": 3
-              },
-              "end": {
-                "line": 8,
-                "col": 22
-              }
-            }
+            "origin": {"file": null, "start": {"line": 4, "col": 3}, "end": {"line": 8, "col": 22}, "written": null, "role": null}
           }
         ],
-        "origin": {
-          "start": {
-            "line": 4,
-            "col": 3
-          },
-          "end": {
-            "line": 8,
-            "col": 22
-          }
-        }
+        "origin": {"file": null, "start": {"line": 4, "col": 3}, "end": {"line": 8, "col": 22}, "written": null, "role": null}
       },
-      "origin": {
-        "start": {
-          "line": 3,
-          "col": 1
-        },
-        "end": {
-          "line": 8,
-          "col": 22
-        }
-      }
+      "origin": {"file": null, "start": {"line": 3, "col": 1}, "end": {"line": 8, "col": 22}, "written": null, "role": null}
     }
   ],
-  "origin": {
-    "start": {
-      "line": 1,
-      "col": 1
-    },
-    "end": {
-      "line": 9,
-      "col": 1
-    }
-  }
+  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 9, "col": 1}, "written": null, "role": null}
 }

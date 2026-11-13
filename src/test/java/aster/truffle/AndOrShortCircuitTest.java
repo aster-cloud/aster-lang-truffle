@@ -19,30 +19,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AndOrShortCircuitTest {
 
-  private static final String XS = """
-      {"kind":"ListLit","elements":[
-        {"kind":"Int","value":1},{"kind":"Int","value":2},
-        {"kind":"Int","value":3},{"kind":"Int","value":4}]}""";
+  private static final String XS = IrV2.listLit(IrV2.intLit(1), IrV2.intLit(2), IrV2.intLit(3), IrV2.intLit(4));
 
   /** 求值即越界的右操作数。 */
   private static final String THROWING_RIGHT =
-      "{\"kind\":\"Call\",\"target\":{\"kind\":\"Name\",\"name\":\"==\"},\"args\":["
-          + "{\"kind\":\"Call\",\"target\":{\"kind\":\"Name\",\"name\":\"List.get\"},\"args\":["
-          + XS + ",{\"kind\":\"Int\",\"value\":4}]},{\"kind\":\"Int\",\"value\":14}]}";
+      call("==", IrV2.call(IrV2.name("List.get"), XS, IrV2.intLit(4)), IrV2.intLit(14));
 
   private static String bool(boolean v) {
-    return "{\"kind\":\"Bool\",\"value\":" + v + "}";
+    return IrV2.bool(v);
   }
 
   private static String call(String op, String left, String right) {
-    return "{\"kind\":\"Call\",\"target\":{\"kind\":\"Name\",\"name\":\"" + op + "\"},\"args\":["
-        + left + "," + right + "]}";
+    return IrV2.call(IrV2.name(op), left, right);
   }
 
   private static Value run(String expr) throws Exception {
-    String json = "{\"name\":\"sc\",\"decls\":[{\"kind\":\"Func\",\"name\":\"main\",\"params\":[],"
-        + "\"ret\":{\"kind\":\"TypeName\",\"name\":\"Bool\"},\"effects\":[],"
-        + "\"body\":{\"kind\":\"Block\",\"statements\":[{\"kind\":\"Return\",\"expr\":" + expr + "}]}}]}";
+    String json = IrV2.module("sc", IrV2.func("main", java.util.List.of(), IrV2.typeName("Bool"), java.util.List.of(),
+        IrV2.block(IrV2.ret(expr))));
     Context context = Context.newBuilder("aster").allowAllAccess(true).build();
     try (context) {
       Value v = context.eval(Source.newBuilder("aster", json, "sc.json").build());
@@ -87,8 +80,8 @@ class AndOrShortCircuitTest {
   void pokerIsWheelGuardProtectsIndex() throws Exception {
     // isWheel 形态：长度守卫在左，越界下标在右；长度为 4 时必须返回 false 而不是抛错
     String guard = call("==",
-        "{\"kind\":\"Call\",\"target\":{\"kind\":\"Name\",\"name\":\"List.length\"},\"args\":[" + XS + "]}",
-        "{\"kind\":\"Int\",\"value\":5}");
+        IrV2.call(IrV2.name("List.length"), XS),
+        IrV2.intLit(5));
     assertEquals(false, run(call("and", guard, THROWING_RIGHT)).asBoolean());
   }
 }

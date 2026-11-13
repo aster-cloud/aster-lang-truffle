@@ -142,14 +142,47 @@ class NullMemberInteropTest {
     // asGuestValue，避免裸 null 触发 NPE。宿主拿到的 Value 应 isNull()==true。
     String program = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.entry.null",
-          "decls": [{
-            "kind": "Func",
-            "name": "evaluate",
-            "params": [],
-            "ret": {"kind": "TypeName", "name": "Any"},
-            "body": {"statements": [{"kind": "Return", "expr": {"kind": "Null"}}]}
-          }]
+          "profile": null,
+          "decls": [
+            {
+              "kind": "Func",
+              "name": "evaluate",
+              "typeParams": [],
+              "params": [],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Any",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
+              "body": {
+                "kind": "Block",
+                "statements": [
+                  {
+                    "kind": "Return",
+                    "expr": {
+                      "kind": "Null",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+            }
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
     try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {

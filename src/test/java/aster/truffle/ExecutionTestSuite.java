@@ -35,14 +35,29 @@ public class ExecutionTestSuite {
   public void testAddition() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.add",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -50,17 +65,34 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "add" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "add",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "Int", "value": 10 },
-                        { "kind": "Int", "value": 20 }
-                      ]
-                    }
+                        {
+                          "kind": "Int",
+                          "value": 10,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 20,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -75,14 +107,29 @@ public class ExecutionTestSuite {
   public void testSubtraction() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.sub",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -90,17 +137,34 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "sub" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "sub",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "Int", "value": 50 },
-                        { "kind": "Int", "value": 20 }
-                      ]
-                    }
+                        {
+                          "kind": "Int",
+                          "value": 50,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 20,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -115,14 +179,29 @@ public class ExecutionTestSuite {
   public void testMultiplication() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.mul",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -130,17 +209,34 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "mul" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "mul",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "Int", "value": 6 },
-                        { "kind": "Int", "value": 7 }
-                      ]
-                    }
+                        {
+                          "kind": "Int",
+                          "value": 6,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 7,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -155,14 +251,29 @@ public class ExecutionTestSuite {
   public void testDivision() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.div",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -170,17 +281,34 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "div" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "div",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "Int", "value": 100 },
-                        { "kind": "Int", "value": 5 }
-                      ]
-                    }
+                        {
+                          "kind": "Int",
+                          "value": 100,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 5,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -197,14 +325,29 @@ public class ExecutionTestSuite {
   public void testEquality() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.eq",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Bool" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Bool",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -212,17 +355,34 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "eq" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "eq",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "Int", "value": 42 },
-                        { "kind": "Int", "value": 42 }
-                      ]
-                    }
+                        {
+                          "kind": "Int",
+                          "value": 42,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 42,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -237,14 +397,29 @@ public class ExecutionTestSuite {
   public void testLessThan() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.lt",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Bool" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Bool",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -252,17 +427,34 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "lt" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "lt",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "Int", "value": 10 },
-                        { "kind": "Int", "value": 20 }
-                      ]
-                    }
+                        {
+                          "kind": "Int",
+                          "value": 10,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 20,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -279,14 +471,29 @@ public class ExecutionTestSuite {
   public void testTextConcat() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.text",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Text" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Text",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -294,17 +501,34 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Text.concat" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "Text.concat",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "String", "value": "Hello" },
-                        { "kind": "String", "value": "World" }
-                      ]
-                    }
+                        {
+                          "kind": "String",
+                          "value": "Hello",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "String",
+                          "value": "World",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -319,14 +543,29 @@ public class ExecutionTestSuite {
   public void testTextLength() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.text.length",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -334,16 +573,29 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Text.length" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "Text.length",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "String", "value": "Hello" }
-                      ]
-                    }
+                        {
+                          "kind": "String",
+                          "value": "Hello",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -358,14 +610,29 @@ public class ExecutionTestSuite {
   public void testTextContains() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.text.contains",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Bool" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Bool",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -373,17 +640,34 @@ public class ExecutionTestSuite {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Text.contains" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "Text.contains",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
-                        { "kind": "String", "value": "Hello World" },
-                        { "kind": "String", "value": "World" }
-                      ]
-                    }
+                        {
+                          "kind": "String",
+                          "value": "Hello World",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "String",
+                          "value": "World",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -400,37 +684,78 @@ public class ExecutionTestSuite {
   public void testIfTrueBranch() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.if.true",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "If",
-                    "cond": { "kind": "Bool", "value": true },
+                    "cond": {
+                      "kind": "Bool",
+                      "value": true,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
                     "thenBlock": {
                       "kind": "Block",
                       "statements": [
-                        { "kind": "Return", "expr": { "kind": "Int", "value": 42 } }
-                      ]
+                        {
+                          "kind": "Return",
+                          "expr": {
+                            "kind": "Int",
+                            "value": 42,
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                     },
                     "elseBlock": {
                       "kind": "Block",
                       "statements": [
-                        { "kind": "Return", "expr": { "kind": "Int", "value": 0 } }
-                      ]
-                    }
+                        {
+                          "kind": "Return",
+                          "expr": {
+                            "kind": "Int",
+                            "value": 0,
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -445,37 +770,78 @@ public class ExecutionTestSuite {
   public void testIfFalseBranch() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.if.false",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "If",
-                    "cond": { "kind": "Bool", "value": false },
+                    "cond": {
+                      "kind": "Bool",
+                      "value": false,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
                     "thenBlock": {
                       "kind": "Block",
                       "statements": [
-                        { "kind": "Return", "expr": { "kind": "Int", "value": 0 } }
-                      ]
+                        {
+                          "kind": "Return",
+                          "expr": {
+                            "kind": "Int",
+                            "value": 0,
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                     },
                     "elseBlock": {
                       "kind": "Block",
                       "statements": [
-                        { "kind": "Return", "expr": { "kind": "Int", "value": 99 } }
-                      ]
-                    }
+                        {
+                          "kind": "Return",
+                          "expr": {
+                            "kind": "Int",
+                            "value": 99,
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -492,30 +858,58 @@ public class ExecutionTestSuite {
   public void testLetBinding() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.let",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": { "kind": "Int", "value": 42 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 42,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Name", "name": "x" }
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -530,35 +924,68 @@ public class ExecutionTestSuite {
   public void testSetVariable() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.set",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": { "kind": "Int", "value": 10 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Set",
                     "name": "x",
-                    "expr": { "kind": "Int", "value": 20 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 20,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Name", "name": "x" }
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -575,14 +1002,29 @@ public class ExecutionTestSuite {
   public void testSimpleLambda() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.lambda",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -592,30 +1034,70 @@ public class ExecutionTestSuite {
                     "expr": {
                       "kind": "Lambda",
                       "params": [
-                        { "name": "x", "type": { "kind": "TypeName", "name": "Int" } }
+                        {
+                          "name": "x",
+                          "type": {
+                            "kind": "TypeName",
+                            "name": "Int",
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
+                          "annotations": [],
+                          "constraints": [],
+                          "typeInferred": false
+                        }
                       ],
-                      "ret": { "kind": "TypeName", "name": "Int" },
-                      "captures": [],
+                      "ret": {
+                        "kind": "TypeName",
+                        "name": "Int",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "body": {
                         "kind": "Block",
                         "statements": [
-                          { "kind": "Return", "expr": { "kind": "Name", "name": "x" } }
-                        ]
-                      }
-                    }
+                          {
+                            "kind": "Return",
+                            "expr": {
+                              "kind": "Name",
+                              "name": "x",
+                              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                            },
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          }
+                        ],
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "captures": [],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "identity" },
-                      "args": [{ "kind": "Int", "value": 42 }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "identity",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Int",
+                          "value": 42,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -632,14 +1114,29 @@ public class ExecutionTestSuite {
   public void testOkConstruction() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.ok",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -648,21 +1145,42 @@ public class ExecutionTestSuite {
                     "name": "result",
                     "expr": {
                       "kind": "Ok",
-                      "expr": { "kind": "Int", "value": 42 }
-                    }
+                      "expr": {
+                        "kind": "Int",
+                        "value": 42,
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Result.unwrap" },
-                      "args": [{ "kind": "Name", "name": "result" }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "Result.unwrap",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "result",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -679,14 +1197,29 @@ public class ExecutionTestSuite {
   public void testResultIsOk() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.result.isok",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Bool" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Bool",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -695,21 +1228,42 @@ public class ExecutionTestSuite {
                     "name": "result",
                     "expr": {
                       "kind": "Ok",
-                      "expr": { "kind": "Int", "value": 100 }
-                    }
+                      "expr": {
+                        "kind": "Int",
+                        "value": 100,
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Result.isOk" },
-                      "args": [{ "kind": "Name", "name": "result" }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "Result.isOk",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "result",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -724,14 +1278,29 @@ public class ExecutionTestSuite {
   public void testResultIsErr() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.result.iserr",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Bool" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Bool",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -740,21 +1309,42 @@ public class ExecutionTestSuite {
                     "name": "result",
                     "expr": {
                       "kind": "Err",
-                      "expr": { "kind": "String", "value": "error" }
-                    }
+                      "expr": {
+                        "kind": "String",
+                        "value": "error",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Result.isErr" },
-                      "args": [{ "kind": "Name", "name": "result" }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "Result.isErr",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "result",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -771,14 +1361,29 @@ public class ExecutionTestSuite {
   public void testOptionIsSome() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.option.issome",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Bool" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Bool",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -787,21 +1392,42 @@ public class ExecutionTestSuite {
                     "name": "option",
                     "expr": {
                       "kind": "Some",
-                      "expr": { "kind": "Int", "value": 42 }
-                    }
+                      "expr": {
+                        "kind": "Int",
+                        "value": 42,
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Option.isSome" },
-                      "args": [{ "kind": "Name", "name": "option" }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "Option.isSome",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "option",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -816,34 +1442,68 @@ public class ExecutionTestSuite {
   public void testOptionIsNone() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.option.isnone",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Bool" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Bool",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "option",
-                    "expr": { "kind": "None" }
+                    "expr": {
+                      "kind": "None",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Option.isNone" },
-                      "args": [{ "kind": "Name", "name": "option" }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "Option.isNone",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "option",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -863,33 +1523,62 @@ public class ExecutionTestSuite {
   public void testAsyncBasic() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.async.basic",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Start",
                     "name": "task1",
-                    "expr": { "kind": "Int", "value": 42 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 42,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Await",
-                      "expr": { "kind": "Name", "name": "task1" }
-                    }
+                      "expr": {
+                        "kind": "Name",
+                        "name": "task1",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -904,51 +1593,96 @@ public class ExecutionTestSuite {
   public void testAsyncMultipleTasks() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.async.multiple",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Start",
                     "name": "task1",
-                    "expr": { "kind": "Int", "value": 10 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Start",
                     "name": "task2",
-                    "expr": { "kind": "Int", "value": 20 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 20,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Let",
                     "name": "result1",
                     "expr": {
                       "kind": "Await",
-                      "expr": { "kind": "Name", "name": "task1" }
-                    }
+                      "expr": {
+                        "kind": "Name",
+                        "name": "task1",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Let",
                     "name": "result2",
                     "expr": {
                       "kind": "Await",
-                      "expr": { "kind": "Name", "name": "task2" }
-                    }
+                      "expr": {
+                        "kind": "Name",
+                        "name": "task2",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Name", "name": "result1" }
+                    "expr": {
+                      "kind": "Name",
+                      "name": "result1",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -963,39 +1697,73 @@ public class ExecutionTestSuite {
   public void testAsyncWaitMultipleTasks() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.async.wait",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Start",
                     "name": "task1",
-                    "expr": { "kind": "Int", "value": 5 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 5,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Start",
                     "name": "task2",
-                    "expr": { "kind": "Int", "value": 10 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Wait",
-                    "names": ["task1", "task2"]
+                    "names": ["task1", "task2"],
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Int", "value": 42 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 42,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -1012,21 +1780,41 @@ public class ExecutionTestSuite {
   public void testScopeVariableShadowing() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.scope.shadowing",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": { "kind": "Int", "value": 10 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Scope",
@@ -1034,18 +1822,32 @@ public class ExecutionTestSuite {
                       {
                         "kind": "Let",
                         "name": "x",
-                        "expr": { "kind": "Int", "value": 20 }
+                        "expr": {
+                          "kind": "Int",
+                          "value": 20,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                       }
-                    ]
+                    ],
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Name", "name": "x" }
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -1060,21 +1862,41 @@ public class ExecutionTestSuite {
   public void testScopeNoVariableLeaking() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.scope.isolation",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "outer",
-                    "expr": { "kind": "Int", "value": 1 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 1,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Scope",
@@ -1082,23 +1904,42 @@ public class ExecutionTestSuite {
                       {
                         "kind": "Let",
                         "name": "inner",
-                        "expr": { "kind": "Int", "value": 2 }
+                        "expr": {
+                          "kind": "Int",
+                          "value": 2,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                       },
                       {
                         "kind": "Set",
                         "name": "outer",
-                        "expr": { "kind": "Int", "value": 3 }
+                        "expr": {
+                          "kind": "Int",
+                          "value": 3,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                       }
-                    ]
+                    ],
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Name", "name": "outer" }
+                    "expr": {
+                      "kind": "Name",
+                      "name": "outer",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -1113,34 +1954,63 @@ public class ExecutionTestSuite {
   public void testWaitSingleTaskResult() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.wait.single",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Start",
                     "name": "task1",
-                    "expr": { "kind": "Int", "value": 42 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 42,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Wait",
-                    "names": ["task1"]
+                    "names": ["task1"],
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Name", "name": "task1" }
+                    "expr": {
+                      "kind": "Name",
+                      "name": "task1",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -1155,57 +2025,110 @@ public class ExecutionTestSuite {
   public void testWaitMultipleTasksResult() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.wait.multi",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "List" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "List",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Start",
                     "name": "task1",
-                    "expr": { "kind": "Int", "value": 10 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Start",
                     "name": "task2",
-                    "expr": { "kind": "Int", "value": 20 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 20,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Wait",
-                    "names": ["task1", "task2"]
+                    "names": ["task1", "task2"],
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "List.append" },
+                      "target": {
+                        "kind": "Name",
+                        "name": "List.append",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
                       "args": [
                         {
                           "kind": "Call",
-                          "target": { "kind": "Name", "name": "List.append" },
+                          "target": {
+                            "kind": "Name",
+                            "name": "List.append",
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
                           "args": [
                             {
                               "kind": "Call",
-                              "target": { "kind": "Name", "name": "List.empty" },
-                              "args": []
+                              "target": {
+                                "kind": "Name",
+                                "name": "List.empty",
+                                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                              },
+                              "args": [],
+                              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                             },
-                            { "kind": "Name", "name": "task1" }
-                          ]
+                            {
+                              "kind": "Name",
+                              "name": "task1",
+                              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                            }
+                          ],
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                         },
-                        { "kind": "Name", "name": "task2" }
-                      ]
-                    }
+                        {
+                          "kind": "Name",
+                          "name": "task2",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -1223,39 +2146,69 @@ public class ExecutionTestSuite {
   public void testWaitInNestedScope() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.wait.scope",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Start",
                     "name": "task",
-                    "expr": { "kind": "Int", "value": 99 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 99,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Scope",
                     "statements": [
                       {
                         "kind": "Wait",
-                        "names": ["task"]
+                        "names": ["task"],
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                       },
                       {
                         "kind": "Return",
-                        "expr": { "kind": "Name", "name": "task" }
+                        "expr": {
+                          "kind": "Name",
+                          "name": "task",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                       }
-                    ]
+                    ],
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -1268,43 +2221,72 @@ public class ExecutionTestSuite {
 
   // ==================== Effect Violations ====================
 
+  /**
+   * v2 IR 不表达 async（ADR 0055 #5：async 不授权任何效应，lowering 不写入 effects），
+   * Start 所需的 Truffle 内部 async 权限由 Loader 在模块含异步语句时授予入口：没有声明任何效应也能执行。
+   */
   @Test
-  public void testEffectViolation_Async() throws Exception {
+  public void testStartNeedsNoDeclaredAsyncEffect() throws Exception {
     String json = """
         {
-          "name": "test.effect.async.violation",
+          "kind": "Module",
+          "schemaVersion": 2,
+          "name": "test.effect.async.granted",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Start",
                     "name": "task1",
-                    "expr": { "kind": "Int", "value": 42 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 42,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Int", "value": 0 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 0,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
     try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
       Source source = Source.newBuilder("aster", json, "test.json").build();
-      Exception exception = assertThrows(Exception.class, () -> context.eval(source));
-      assertTrue(exception.getMessage().contains("Async effect") ||
-                 exception.getMessage().contains("start requires Async effect"),
-                 "Should throw exception for missing Async effect");
+      assertEquals(0, context.eval(source).asInt());
     }
   }
 
@@ -1312,42 +2294,77 @@ public class ExecutionTestSuite {
   public void testEffectViolation_IO() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.effect.io.violation",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
-                    "kind": "Expr",
+                    "kind": "Let",
+                    "name": "printed",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "print" },
-                      "args": [{ "kind": "String", "value": "Hello" }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "IO.print",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "String",
+                          "value": "Hello",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": { "kind": "Int", "value": 0 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 0,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
     try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
       Source source = Source.newBuilder("aster", json, "test.json").build();
       Exception exception = assertThrows(Exception.class, () -> context.eval(source));
-      assertTrue(exception.getMessage().contains("IO") ||
-                 exception.getMessage().contains("effect"),
-                 "Should throw exception for missing IO effect");
+      assertTrue(exception.getMessage().contains("effect not permitted"),
+                 "Should throw exception for missing io effect: " + exception.getMessage());
     }
   }
 
@@ -1357,33 +2374,62 @@ public class ExecutionTestSuite {
   public void testAsyncLiterals() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.async.literals",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
                   {
                     "kind": "Start",
                     "name": "task",
-                    "expr": { "kind": "Int", "value": 99 }
+                    "expr": {
+                      "kind": "Int",
+                      "value": 99,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Await",
-                      "expr": { "kind": "Name", "name": "task" }
-                    }
+                      "expr": {
+                        "kind": "Name",
+                        "name": "task",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -1398,14 +2444,29 @@ public class ExecutionTestSuite {
   public void testResultInAsync() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.result.in.async",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -1414,29 +2475,56 @@ public class ExecutionTestSuite {
                     "name": "task",
                     "expr": {
                       "kind": "Ok",
-                      "expr": { "kind": "Int", "value": 99 }
-                    }
+                      "expr": {
+                        "kind": "Int",
+                        "value": 99,
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Let",
                     "name": "result",
                     "expr": {
                       "kind": "Await",
-                      "expr": { "kind": "Name", "name": "task" }
-                    }
+                      "expr": {
+                        "kind": "Name",
+                        "name": "task",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Result.unwrap" },
-                      "args": [{ "kind": "Name", "name": "result" }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "Result.unwrap",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "result",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -1451,14 +2539,29 @@ public class ExecutionTestSuite {
   public void testOptionInAsync() throws Exception {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.option.in.async",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": { "kind": "TypeName", "name": "Int" },
-              "effects": ["Async"],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
                 "statements": [
@@ -1467,29 +2570,56 @@ public class ExecutionTestSuite {
                     "name": "task",
                     "expr": {
                       "kind": "Some",
-                      "expr": { "kind": "Int", "value": 77 }
-                    }
+                      "expr": {
+                        "kind": "Int",
+                        "value": 77,
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Let",
                     "name": "option",
                     "expr": {
                       "kind": "Await",
-                      "expr": { "kind": "Name", "name": "task" }
-                    }
+                      "expr": {
+                        "kind": "Name",
+                        "name": "task",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
                     "expr": {
                       "kind": "Call",
-                      "target": { "kind": "Name", "name": "Option.unwrap" },
-                      "args": [{ "kind": "Name", "name": "option" }]
-                    }
+                      "target": {
+                        "kind": "Name",
+                        "name": "Option.unwrap",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "option",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 

@@ -7,7 +7,14 @@ import aster.truffle.runtime.Builtins;
 import aster.truffle.runtime.FrameSlotBuilder;
 import aster.truffle.runtime.LexicalSlots;
 import aster.truffle.runtime.PiiSupport;
-import com.fasterxml.jackson.databind.*;
+import aster.core.ir.CoreIrJson;
+import aster.core.ir.CoreIrProblem;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.oracle.truffle.api.nodes.Node;
 import java.io.*;
 import java.util.List;
@@ -18,7 +25,19 @@ public final class Loader {
     public Program(Node root, Env env, List<CoreModel.Param> params, String entry, java.util.List<String> effects) { this.root = root; this.env = env; this.params = params; this.entry = entry; this.effects = effects; }
   }
 
-  private final ObjectMapper mapper = new ObjectMapper().configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+  /**
+   * 严格 mapper（ADR 0055 §5），配置与 core {@code CoreIrJson} 的读方一致：未知字段、重复键、尾随内容、
+   * 整数位置的浮点数、基本类型位置的 null 一律失败。它既用于把文本解析成树（重复键只能在解析期发现），
+   * 也用于把校验通过的树绑定到 DTO（schema 校验之后的第二道防线）。
+   */
+  private static final ObjectMapper MAPPER = JsonMapper.builder()
+      .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+      .enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+      .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+      .enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY)
+      .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+      .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+      .build();
   private final AsterLanguage language;
 
   public Loader(AsterLanguage language) {
@@ -30,24 +49,49 @@ public final class Loader {
   public Program buildProgram(File f, String funcName) throws IOException { return buildProgram(f, funcName, null); }
 
   public Program buildProgram(File f, String funcName, java.util.List<String> rawArgs) throws IOException {
-    var mod = mapper.readValue(f, CoreModel.Module.class);
-    return buildProgramInternal(mod, funcName, rawArgs);
+    return buildProgram(java.nio.file.Files.readString(f.toPath()), funcName, rawArgs);
   }
 
   public Program buildProgram(String jsonContent, String funcName, java.util.List<String> rawArgs) throws IOException {
-    var mod = mapper.readValue(jsonContent, CoreModel.Module.class);
-    return buildProgramInternal(mod, funcName, rawArgs);
+    return buildProgramInternal(readModule(jsonContent), funcName, rawArgs);
+  }
+
+  /**
+   * 严格读入 Core IR v2，顺序固定（ADR 0055 §5）：解析为树 → core {@link CoreIrJson#validate}
+   * （{@code /schemaVersion} 预检、JSON Schema 校验、不变式）→ 严格绑定到 Truffle DTO。
+   *
+   * @throws IllegalArgumentException JSON 语法错误、版本错误（消息含 {@code unsupported_schema_version}）、
+   *     schema / 不变式问题（消息含 {@code invalid_request} 与问题列表）或绑定失败
+   */
+  public static CoreModel.Module readModule(String jsonContent) {
+    JsonNode tree;
+    try {
+      tree = MAPPER.readTree(jsonContent);
+    } catch (JsonProcessingException e) {
+      throw new IllegalArgumentException(CoreIrJson.INVALID_REQUEST + ": Core IR 不是合法 JSON：" + e.getOriginalMessage(), e);
+    }
+    if (tree == null || tree.isMissingNode()) {
+      throw new IllegalArgumentException(CoreIrJson.INVALID_REQUEST + ": Core IR 为空");
+    }
+    List<CoreIrProblem> problems = CoreIrJson.validate(tree);
+    if (!problems.isEmpty()) {
+      boolean versionError = CoreIrJson.UNSUPPORTED_SCHEMA_VERSION.equals(problems.getFirst().code());
+      String code = versionError ? CoreIrJson.UNSUPPORTED_SCHEMA_VERSION : CoreIrJson.INVALID_REQUEST;
+      throw new IllegalArgumentException(code + ": Core IR 不符合 v2 契约：" + problems);
+    }
+    try {
+      return MAPPER.treeToValue(tree, CoreModel.Module.class);
+    } catch (JsonProcessingException e) {
+      throw new IllegalArgumentException(CoreIrJson.INVALID_REQUEST + ": Core IR 无法严格绑定：" + e.getOriginalMessage(), e);
+    }
   }
 
   private Program buildProgramInternal(CoreModel.Module mod, String funcName, java.util.List<String> rawArgs) throws IOException {
     this.frames.clear();
     // Import 声明在 Core 阶段已展开依赖，这里直接消费合并后的 Module，无需额外处理。
-    if (mod.decls != null) {
-      for (var d : mod.decls) {
-        if (d instanceof CoreModel.Func fn) {
-          ensureWorkflowEffects(fn);
-        }
-      }
+    boolean moduleUsesAsync = false;
+    for (var d : mod.decls) {
+      if (d instanceof CoreModel.Func fn && blockContainsAsync(fn.body)) moduleUsesAsync = true;
     }
     this.dataTypeIndex = new java.util.LinkedHashMap<>();
     if (mod.decls != null) {
@@ -141,7 +185,7 @@ public final class Loader {
         // Get CallTarget
         com.oracle.truffle.api.CallTarget callTarget = rootNode.getCallTarget();
 
-        // 从 Core IR 函数声明中提取 effects（如 ["IO", "Async"]）
+        // 从 Core IR 函数声明中提取 effects（小写的 io / cpu 与效应变量，如 ["io"]）
         java.util.Set<String> requiredEffects = fn.effects != null ? new java.util.HashSet<>(fn.effects) : java.util.Set.of();
 
         // Set LambdaValue with CallTarget and effects into env
@@ -159,7 +203,7 @@ public final class Loader {
       Node target = new NameNodeEnv(env, entry.name);
       root = CallNode.create(target, new java.util.ArrayList<>());
     }
-    return new Program(root, env, entry.params, entry.name, entry.effects);
+    return new Program(root, env, entry.params, entry.name, runtimePermissions(entry, moduleUsesAsync));
   }
 
   private CoreModel.Func selectOverload(java.util.List<CoreModel.Func> funcs, java.util.List<String> rawArgs) {
@@ -192,7 +236,7 @@ public final class Loader {
       return 1;
     }
     if (ty instanceof CoreModel.TypeApp app) {
-      int baseScore = (app.base != null) ? score(t, app.base) : 0;
+      int baseScore = (app.base != null) ? scoreTypeName(t, app.base) : 0;
       if (baseScore > 0) {
         return baseScore;
       }
@@ -212,12 +256,7 @@ public final class Loader {
       }
       return 0;
     }
-    if (ty instanceof CoreModel.TypeName tn) {
-      String n = tn.name;
-      if ("Int".equals(n)) return looksInt(t) ? 3 : 0;
-      if ("Bool".equals(n) || "Boolean".equals(n)) return looksBool(t) ? 3 : 0;
-      return 1; // Text/String or others
-    }
+    if (ty instanceof CoreModel.TypeName tn) return scoreTypeName(t, tn.name);
     if (ty instanceof CoreModel.Option opt || ty instanceof CoreModel.Maybe mb) {
       if ("null".equalsIgnoreCase(t) || "none".equalsIgnoreCase(t)) return 2;
       CoreModel.Type inner = (ty instanceof CoreModel.Option) ? ((CoreModel.Option)ty).type : ((CoreModel.Maybe)ty).type;
@@ -238,6 +277,12 @@ public final class Loader {
       return 0;
     }
     return 0;
+  }
+
+  private static int scoreTypeName(String t, String n) {
+    if ("Int".equals(n)) return looksInt(t) ? 3 : 0;
+    if ("Bool".equals(n) || "Boolean".equals(n)) return looksBool(t) ? 3 : 0;
+    return 1; // Text/String or others
   }
 
   private static boolean looksInt(String s) {
@@ -411,8 +456,9 @@ public final class Loader {
     if (e instanceof CoreModel.StringE s) return LiteralNode.create(s.value);
     if (e instanceof CoreModel.Bool b) return LiteralNode.create(b.value);
     if (e instanceof CoreModel.IntE i) return LiteralNode.create(Integer.valueOf(i.value));
-    if (e instanceof CoreModel.LongE l) return LiteralNode.create(Long.valueOf(l.value));
-    if (e instanceof CoreModel.DoubleE d) return LiteralNode.create(Double.valueOf(d.value));
+    if (e instanceof CoreModel.LongE l) return LiteralNode.create(Long.parseLong(l.value));
+    // Double.value 是规范十进制串（ADR 0055 #18），只在这里转为 double。
+    if (e instanceof CoreModel.DoubleE d) return LiteralNode.create(Double.parseDouble(d.value));
     // Decimal 字面量（ADR 0025）：value 是 canonical 十进制字符串 → guest AsterDecimalValue
     // （包装 BigDecimal）。沙箱下不能用裸 BigDecimal（非 TruffleObject 会在 interop 边界抛
     // ClassCastException）。
@@ -597,7 +643,7 @@ public final class Loader {
         LexicalSlots frame = currentFrame();
         if (frame != null) frame.enter();
         try {
-          patCases.add(new aster.truffle.nodes.MatchNode.CaseNode(buildPatternNode(c.pattern, false), buildCaseBody(c.body)));
+          patCases.add(new aster.truffle.nodes.MatchNode.CaseNode(buildPatternNode(c.pattern), buildCaseBody(c.body)));
         } finally {
           if (frame != null) frame.exit();
         }
@@ -625,32 +671,23 @@ public final class Loader {
   }
 
   /**
-   * 构建模式节点，并在当前层为绑定名分配槽位。顶层名字模式按大小写区分变体与绑定（见 PatNameNode）；
-   * 构造器模式内的名字一律绑定（PatCtorNode 按位置绑定字段值）。
+   * 构建模式节点，并在当前层为绑定名分配槽位。PatName 一律是绑定（{@code _} 为通配，不占槽位）；
+   * 枚举变体（含 0 参变体）由 lowering 显式产出 {@code PatCtor{typeName, args}}，不再按首字母大小写猜测
+   * （ADR 0055 #16：没有大小写的文字，如中文、印地文，猜测必然失效）。
    */
-  private aster.truffle.nodes.MatchNode.PatternNode buildPatternNode(CoreModel.Pattern p, boolean nested) {
+  private aster.truffle.nodes.MatchNode.PatternNode buildPatternNode(CoreModel.Pattern p) {
     if (p instanceof CoreModel.PatNull) return new aster.truffle.nodes.MatchNode.PatNullNode();
     if (p instanceof CoreModel.PatName pn) {
-      boolean binds = nested
-          ? pn.name != null && !pn.name.isEmpty() && !"_".equals(pn.name)
-          : aster.truffle.nodes.MatchNode.PatNameNode.binds(pn.name);
+      boolean binds = !"_".equals(pn.name);
       return new aster.truffle.nodes.MatchNode.PatNameNode(pn.name, binds ? declareLocal(pn.name) : -1);
     }
     if (p instanceof CoreModel.PatInt pi) return new aster.truffle.nodes.MatchNode.PatIntNode(pi.value);
     if (p instanceof CoreModel.PatCtor pc) {
       java.util.List<aster.truffle.nodes.MatchNode.PatternNode> args = new java.util.ArrayList<>();
-      if (pc.args != null) for (var a : pc.args) args.add(buildPatternNode(a, true));
-      int[] bindSlots = null;
-      if (pc.names != null) {
-        bindSlots = new int[pc.names.size()];
-        for (int i = 0; i < bindSlots.length; i++) {
-          String bn = pc.names.get(i);
-          bindSlots[i] = (bn == null || bn.isEmpty() || "_".equals(bn)) ? -1 : declareLocal(bn);
-        }
-      }
-      return new aster.truffle.nodes.MatchNode.PatCtorNode(pc.typeName, pc.names, bindSlots, args);
+      for (var a : pc.args) args.add(buildPatternNode(a));
+      return new aster.truffle.nodes.MatchNode.PatCtorNode(pc.typeName, args);
     }
-    return new aster.truffle.nodes.MatchNode.PatNameNode("_");
+    throw new IllegalArgumentException("未知的模式节点: " + p);
   }
 
   /** 在当前层声明局部名并返回槽位；不在 frame 内（无槽位）时返回 -1，由调用方回退到 Env。 */
@@ -772,46 +809,72 @@ public final class Loader {
     return returnTypeStack.isEmpty() ? null : returnTypeStack.peek();
   }
 
-  private void ensureWorkflowEffects(CoreModel.Func fn) {
-    if (fn == null) return;
-    if (!blockContainsWorkflow(fn.body)) return;
-    if (fn.effects == null) {
-      fn.effects = new java.util.ArrayList<>();
-    } else if (!(fn.effects instanceof java.util.ArrayList)) {
-      fn.effects = new java.util.ArrayList<>(fn.effects);
-    }
-    if (!fn.effects.contains("Async")) {
-      fn.effects.add("Async");
-    }
+  /**
+   * 入口函数的运行时 effect 权限：IR 声明的 effects（小写的 io / cpu 与效应变量，ADR 0055 #5），
+   * 模块中出现 Start 或 workflow 时再加上 Truffle 内部的 {@link AsterContext#ASYNC_EFFECT}。
+   *
+   * <p>效应变量（如 {@code E}）在运行时边界没有实例化来源，按原名放进权限集，因而不授权任何具体效应：
+   * 入口需要 io / cpu 时必须在 effects 中具体声明。这是 fail-closed 的取舍，不按类型检查推断出的最宽效应放宽。
+   *
+   * <p>v2 IR 不表达 async：它不授权任何效应（schema {@code BuiltinEffect} 只有 io / cpu），lowering 不写入。
+   * 异步语句的权限因此由 Loader 按模块内容授予；按模块而非按函数扫描，是因为权限只在入口设置一次，
+   * 由入口调用的辅助函数里的 Start 同样需要它。
+   */
+  private static java.util.List<String> runtimePermissions(CoreModel.Func entry, boolean moduleUsesAsync) {
+    java.util.List<String> permissions = new java.util.ArrayList<>(entry.effects);
+    if (moduleUsesAsync && !permissions.contains(AsterContext.ASYNC_EFFECT)) permissions.add(AsterContext.ASYNC_EFFECT);
+    return permissions;
   }
 
-  private boolean blockContainsWorkflow(CoreModel.Block block) {
-    if (block == null || block.statements == null) return false;
-    for (var stmt : block.statements) {
-      if (stmtContainsWorkflow(stmt)) {
-        return true;
-      }
+  /**
+   * 是否含 Start / workflow。语句与表达式都要下探：Lambda 体同样是可执行代码，
+   * 写在 Let / Return / 调用实参里的 Lambda 内的 Start 也需要 async 权限。
+   */
+  private static boolean blockContainsAsync(CoreModel.Block block) {
+    return block != null && anyAsync(block.statements, Loader::stmtContainsAsync);
+  }
+
+  private static <T> boolean anyAsync(java.util.List<T> items, java.util.function.Predicate<T> test) {
+    if (items == null) return false;
+    for (T item : items) {
+      if (test.test(item)) return true;
     }
     return false;
   }
 
-  private boolean stmtContainsWorkflow(CoreModel.Stmt stmt) {
-    if (stmt == null) return false;
-    if (stmt instanceof CoreModel.Workflow) return true;
-    if (stmt instanceof CoreModel.Block block) return blockContainsWorkflow(block);
-    if (stmt instanceof CoreModel.If iff) {
-      if (blockContainsWorkflow(iff.thenBlock) || blockContainsWorkflow(iff.elseBlock)) return true;
-    } else if (stmt instanceof CoreModel.Scope sc && sc.statements != null) {
-      for (var nested : sc.statements) {
-        if (stmtContainsWorkflow(nested)) return true;
-      }
-    } else if (stmt instanceof CoreModel.Match mm && mm.cases != null) {
-      for (var c : mm.cases) {
-        if (stmtContainsWorkflow(c.body)) return true;
-      }
-    }
-    return false;
+  private static boolean stmtContainsAsync(CoreModel.Stmt stmt) {
+    return switch (stmt) {
+      case null -> false;
+      case CoreModel.Workflow w -> true;
+      case CoreModel.Start st -> true;
+      case CoreModel.Block block -> blockContainsAsync(block);
+      case CoreModel.Scope sc -> anyAsync(sc.statements, Loader::stmtContainsAsync);
+      case CoreModel.If iff -> exprContainsAsync(iff.cond) || blockContainsAsync(iff.thenBlock) || blockContainsAsync(iff.elseBlock);
+      case CoreModel.Match mm -> exprContainsAsync(mm.expr) || anyAsync(mm.cases, c -> stmtContainsAsync(c.body));
+      case CoreModel.Let let -> exprContainsAsync(let.expr);
+      case CoreModel.Set set -> exprContainsAsync(set.expr);
+      case CoreModel.Return ret -> exprContainsAsync(ret.expr);
+      case CoreModel.Wait wt -> false;
+    };
   }
+
+  private static boolean exprContainsAsync(CoreModel.Expr expr) {
+    return switch (expr) {
+      case null -> false;
+      case CoreModel.Lambda lam -> blockContainsAsync(lam.body);
+      case CoreModel.Call call -> exprContainsAsync(call.target) || anyAsync(call.args, Loader::exprContainsAsync);
+      case CoreModel.IfE ife -> exprContainsAsync(ife.cond) || exprContainsAsync(ife.thenE) || exprContainsAsync(ife.elseE);
+      case CoreModel.Ok ok -> exprContainsAsync(ok.expr);
+      case CoreModel.Err err -> exprContainsAsync(err.expr);
+      case CoreModel.Some some -> exprContainsAsync(some.expr);
+      case CoreModel.AwaitE aw -> exprContainsAsync(aw.expr);
+      case CoreModel.Construct cons -> anyAsync(cons.fields, f -> exprContainsAsync(f.expr));
+      case CoreModel.ListE list -> anyAsync(list.elements, Loader::exprContainsAsync);
+      default -> false;
+    };
+  }
+
+
 
   private static CoreModel.Type[] extractParamTypes(java.util.List<CoreModel.Param> params) {
     if (params == null || params.isEmpty()) {

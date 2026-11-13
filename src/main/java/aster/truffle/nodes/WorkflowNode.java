@@ -94,8 +94,8 @@ public final class WorkflowNode extends Node {
     Profiler.inc("workflow");
 
     AsterContext context = AsterLanguage.getContext();
-    if (!context.isEffectAllowed("Async")) {
-      throw new RuntimeException("workflow requires Async effect");
+    if (!context.isEffectAllowed(AsterContext.ASYNC_EFFECT)) {
+      throw new RuntimeException("workflow requires async effect");
     }
     // ★步骤级 trace（M2.1b）：workflow 任务体在 executor worker 线程跑决策节点（非 eval 线程，
     // 收不进 collector），且 await/wait 的 inline 调度让 trace 形状随调度路径漂移。故整条 trace

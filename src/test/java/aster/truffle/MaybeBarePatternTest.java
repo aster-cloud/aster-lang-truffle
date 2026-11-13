@@ -18,49 +18,50 @@ import org.junit.jupiter.api.Test;
  */
 class MaybeBarePatternTest {
 
-  private static final String INT = "{ \"kind\": \"TypeName\", \"name\": \"Int\" }";
-  private static final String MAYBE_INT = "{ \"kind\": \"Maybe\", \"type\": " + INT + " }";
+  private static final String INT = IrV2.typeName("Int");
+  private static final String MAYBE_INT = "{ \"kind\": \"Maybe\", \"type\": " + INT + ", \"origin\": " + IrV2.ORIGIN + " }";
 
   private static String module(String paramType, String... stmts) {
-    return """
-        { "kind": "Module", "name": "m", "decls": [
-          { "kind": "Func", "name": "entry",
-            "params": [ { "name": "x", "type": %s } ],
-            "ret": %s, "effects": [],
-            "body": { "kind": "Block", "statements": [%s] } } ] }
-        """.formatted(paramType, INT, String.join(",", stmts));
+    return IrV2.module("m",
+        IrV2.func("entry", java.util.List.of(IrV2.param("x", paramType)), INT, java.util.List.of(), IrV2.block(stmts)));
   }
 
   private static String name(String n) {
-    return "{ \"kind\": \"Name\", \"name\": \"" + n + "\" }";
+    return IrV2.name(n);
   }
 
   private static String num(int v) {
-    return "{ \"kind\": \"Int\", \"value\": " + v + " }";
+    return IrV2.intLit(v);
   }
 
   private static String ret(String expr) {
-    return "{ \"kind\": \"Return\", \"expr\": " + expr + " }";
+    return IrV2.ret(expr);
   }
 
   private static String let(String n, String expr) {
-    return "{ \"kind\": \"Let\", \"name\": \"" + n + "\", \"expr\": " + expr + " }";
+    return IrV2.let(n, expr);
   }
 
+  /** {@code When None}：v2 中关键字构造器是 0 参 PatCtor（ADR 0055 #16）。 */
   private static String whenNone(String body) {
-    return "{ \"kind\": \"Case\", \"pattern\": { \"kind\": \"PatName\", \"name\": \"None\" }, \"body\": " + body + " }";
+    return IrV2.caseOf(IrV2.patCtor("None"), body);
   }
 
   private static String whenSome(String bind, String body) {
-    return "{ \"kind\": \"Case\", \"pattern\": { \"kind\": \"PatCtor\", \"typeName\": \"Some\", \"names\": [\"" + bind + "\"] }, \"body\": " + body + " }";
+    return IrV2.caseOf(IrV2.patCtor("Some", IrV2.patName(bind)), body);
   }
 
   private static String whenName(String bind, String body) {
-    return "{ \"kind\": \"Case\", \"pattern\": { \"kind\": \"PatName\", \"name\": \"" + bind + "\" }, \"body\": " + body + " }";
+    return IrV2.caseOf(IrV2.patName(bind), body);
   }
 
   private static String match(String subject, String... cases) {
-    return "{ \"kind\": \"Match\", \"expr\": " + name(subject) + ", \"cases\": [" + String.join(",", cases) + "] }";
+    return IrV2.match(name(subject), cases);
+  }
+
+  /** 单子表达式节点（Some / Ok / Err）。 */
+  private static String wrap(String kind, String expr) {
+    return "{ \"kind\": \"" + kind + "\", \"expr\": " + expr + ", \"origin\": " + IrV2.ORIGIN + " }";
   }
 
   private static int runInt(String json, Object arg) throws IOException {
@@ -91,11 +92,11 @@ class MaybeBarePatternTest {
   @Test
   void taggedSomeAndNoneStillMatch() throws IOException {
     String some = module(INT,
-        let("y", "{ \"kind\": \"Some\", \"expr\": " + name("x") + " }"),
+        let("y", wrap("Some", name("x"))),
         match("y", whenNone(ret(num(0))), whenSome("v", ret(name("v")))));
     assertEquals(5, runInt(some, 5));
     String none = module(INT,
-        let("y", "{ \"kind\": \"None\" }"),
+        let("y", "{ \"kind\": \"None\", \"origin\": " + IrV2.ORIGIN + " }"),
         match("y", whenSome("v", ret(name("v"))), whenNone(ret(num(0)))));
     assertEquals(0, runInt(none, 5));
   }
@@ -103,7 +104,7 @@ class MaybeBarePatternTest {
   @Test
   void okValueDoesNotMatchSome() throws IOException {
     String json = module(INT,
-        let("y", "{ \"kind\": \"Ok\", \"expr\": " + name("x") + " }"),
+        let("y", wrap("Ok", name("x"))),
         match("y", whenSome("v", ret(num(1))), whenName("other", ret(num(2)))));
     assertEquals(2, runInt(json, 5));
   }

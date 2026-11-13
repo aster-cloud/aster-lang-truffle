@@ -17,61 +17,56 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class CaseScopeShadowingTest {
 
-    private static final String INT = "{ \"kind\": \"TypeName\", \"name\": \"Int\" }";
+    private static final String INT = IrV2.typeName("Int");
 
     /** 入口 {@code entry(n: Int): Int}，函数体为给定语句。 */
     private static String module(String... stmts) {
-        return """
-            { "kind": "Module", "name": "m", "decls": [
-              { "kind": "Func", "name": "entry",
-                "params": [ { "name": "n", "type": %s } ],
-                "ret": %s, "effects": [],
-                "body": { "kind": "Block", "statements": [%s] } } ] }
-            """.formatted(INT, INT, String.join(",", stmts));
+        return IrV2.module("m",
+            IrV2.func("entry", java.util.List.of(IrV2.param("n", INT)), INT, java.util.List.of(), IrV2.block(stmts)));
     }
 
     private static String num(int v) {
-        return "{ \"kind\": \"Int\", \"value\": " + v + " }";
+        return IrV2.intLit(v);
     }
 
     private static String name(String n) {
-        return "{ \"kind\": \"Name\", \"name\": \"" + n + "\" }";
+        return IrV2.name(n);
     }
 
     private static String plus(String a, String b) {
-        return "{ \"kind\": \"Call\", \"target\": " + name("+") + ", \"args\": [" + a + "," + b + "] }";
+        return IrV2.call(name("+"), a, b);
     }
 
     private static String let(String n, String expr) {
-        return "{ \"kind\": \"Let\", \"name\": \"" + n + "\", \"expr\": " + expr + " }";
+        return IrV2.let(n, expr);
     }
 
     private static String set(String n, String expr) {
-        return "{ \"kind\": \"Set\", \"name\": \"" + n + "\", \"expr\": " + expr + " }";
+        return IrV2.set(n, expr);
     }
 
     private static String ret(String expr) {
-        return "{ \"kind\": \"Return\", \"expr\": " + expr + " }";
+        return IrV2.ret(expr);
     }
 
     private static String block(String... stmts) {
-        return "{ \"kind\": \"Block\", \"statements\": [" + String.join(",", stmts) + "] }";
+        return IrV2.block(stmts);
     }
 
     private static String scope(String... stmts) {
-        return "{ \"kind\": \"Scope\", \"statements\": [" + String.join(",", stmts) + "] }";
+        return IrV2.scope(stmts);
     }
 
     private static String whenInt(int v, String body) {
-        return "{ \"kind\": \"Case\", \"pattern\": { \"kind\": \"PatInt\", \"value\": " + v + " }, \"body\": " + body + " }";
+        return IrV2.caseOf(IrV2.patInt(v), body);
     }
 
     private static String whenName(String bind, String body) {
-        return "{ \"kind\": \"Case\", \"pattern\": { \"kind\": \"PatName\", \"name\": \"" + bind + "\" }, \"body\": " + body + " }";
+        return IrV2.caseOf(IrV2.patName(bind), body);
     }
 
     private static String match(String subject, String... cases) {
-        return "{ \"kind\": \"Match\", \"expr\": " + name(subject) + ", \"cases\": [" + String.join(",", cases) + "] }";
+        return IrV2.match(name(subject), cases);
     }
 
     private static int run(String json, int arg) throws IOException {
@@ -199,7 +194,8 @@ class CaseScopeShadowingTest {
     void scopeLetInsideCaseShadowsTheFunctionLocal() throws IOException {
         String json = module(
             let("x", num(1)),
-            match("n", whenInt(0, scope(let("x", num(9)), set("x", num(10))))),
+            // v2 的 CaseBody 只有 Return / Block（ADR 0055），Scope 放进分支块内
+            match("n", whenInt(0, block(scope(let("x", num(9)), set("x", num(10)))))),
             ret(name("x")));
         assertEquals(1, run(json, 0));
     }
@@ -207,24 +203,13 @@ class CaseScopeShadowingTest {
     @Test
     void recursiveCallsKeepTheirOwnShadowingBindings() throws IOException {
         // entry(n) = n == 0 ? 0 : (case 内 Let n 遮蔽形参后递归) —— 每次调用的块内绑定互不干扰
-        String json = """
-            { "kind": "Module", "name": "m", "decls": [
-              { "kind": "Func", "name": "entry",
-                "params": [ { "name": "n", "type": %s } ],
-                "ret": %s, "effects": [],
-                "body": { "kind": "Block", "statements": [
-                  %s,
-                  %s,
-                  %s ] } } ] }
-            """.formatted(INT, INT,
+        String json = module(
             let("acc", name("n")),
             match("n",
                 whenInt(0, ret(num(0))),
                 whenName("k", block(
                     let("acc", num(100)),
-                    set("acc", plus(name("acc"), "{ \"kind\": \"Call\", \"target\": " + name("entry")
-                        + ", \"args\": [" + "{ \"kind\": \"Call\", \"target\": " + name("-") + ", \"args\": ["
-                        + name("k") + "," + num(1) + "] }" + "] }"))))),
+                    set("acc", plus(name("acc"), IrV2.call(name("entry"), IrV2.call(name("-"), name("k"), num(1)))))))),
             ret(name("acc")));
         assertEquals(3, run(json, 3));
     }

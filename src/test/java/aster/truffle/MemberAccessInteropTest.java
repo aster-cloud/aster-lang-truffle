@@ -33,23 +33,60 @@ class MemberAccessInteropTest {
     /** Program: {@code func get(obj) { return obj.value }} (Name "obj.value" -> member access). */
     private static final String MEMBER_ACCESS_PROGRAM = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.member.access",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "get",
-              "params": [{ "name": "obj", "type": { "kind": "TypeName", "name": "Any" } }],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "typeParams": [],
+              "params": [
+                {
+                  "name": "obj",
+                  "type": {
+                    "kind": "TypeName",
+                    "name": "Any",
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  },
+                  "annotations": [],
+                  "constraints": [],
+                  "typeInferred": false
+                }
+              ],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
-                "statements": [{
-                  "kind": "Return",
-                  "expr": { "kind": "Name", "name": "obj.value" }
-                }]
-              }
+                "statements": [
+                  {
+                    "kind": "Return",
+                    "expr": {
+                      "kind": "Name",
+                      "name": "obj.value",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -147,30 +184,76 @@ class MemberAccessInteropTest {
     /** {@code func calc(amount) { return amount + amount }}——参数直接参与算术，走 builtin 类型检查。 */
     private static final String ARITHMETIC_PROGRAM = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.scalar.arith",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "calc",
-              "params": [{ "name": "amount", "type": { "kind": "TypeName", "name": "Int" } }],
-              "ret": { "kind": "TypeName", "name": "Int" },
+              "typeParams": [],
+              "params": [
+                {
+                  "name": "amount",
+                  "type": {
+                    "kind": "TypeName",
+                    "name": "Int",
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  },
+                  "annotations": [],
+                  "constraints": [],
+                  "typeInferred": false
+                }
+              ],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
               "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
                 "kind": "Block",
-                "statements": [{
-                  "kind": "Return",
-                  "expr": {
-                    "kind": "Call",
-                    "target": { "kind": "Name", "name": "+" },
-                    "args": [
-                      { "kind": "Name", "name": "amount" },
-                      { "kind": "Name", "name": "amount" }
-                    ]
+                "statements": [
+                  {
+                    "kind": "Return",
+                    "expr": {
+                      "kind": "Call",
+                      "target": {
+                        "kind": "Name",
+                        "name": "+",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "amount",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Name",
+                          "name": "amount",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                }]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 

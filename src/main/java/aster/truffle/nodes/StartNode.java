@@ -33,8 +33,8 @@ public final class StartNode extends Node {
 
     // Effect 校验：start 需要 Async effect
     AsterContext context = AsterLanguage.getContext();
-    if (!context.isEffectAllowed("Async")) {
-      throw new RuntimeException("start requires Async effect");
+    if (!context.isEffectAllowed(AsterContext.ASYNC_EFFECT)) {
+      throw new RuntimeException("start requires async effect");
     }
 
     // ★步骤级 trace（M2.1b）：start 的任务体在 worker 线程跑（Runnable 提交 registry），收不进

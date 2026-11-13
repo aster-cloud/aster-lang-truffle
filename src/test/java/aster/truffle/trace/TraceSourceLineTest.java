@@ -1,5 +1,7 @@
 package aster.truffle.trace;
 
+import aster.truffle.IrV2;
+
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -122,35 +124,23 @@ class TraceSourceLineTest {
    * 不是「lowering 算得对不对」（后者由 core 侧测试负责）。
    */
   private static String twoIfsProgram() {
-    return "{\"name\":\"test.trace.lines\",\"decls\":[{"
-        + "\"kind\":\"Func\",\"name\":\"main\",\"params\":[],\"body\":{\"statements\":["
-        + ifStmt(false, 7)
-        + "," + ifStmt(true, 11)
-        + ",{\"kind\":\"Return\",\"expr\":{\"kind\":\"Int\",\"value\":1},"
-        + origin(12) + "}"
-        + "]}}]}";
+    return IrV2.module("test.trace.lines", main(
+        ifStmt(false, 7),
+        ifStmt(true, 11),
+        IrV2.at(IrV2.ret(IrV2.intLit(1)), 12)));
   }
 
   /** 一个把 If/Return 包在 Scope 里的程序——走 Loader 的 buildScope 分支。 */
   private static String scopeProgram() {
-    return "{\"name\":\"test.trace.scope\",\"decls\":[{"
-        + "\"kind\":\"Func\",\"name\":\"main\",\"params\":[],\"body\":{\"statements\":["
-        + "{\"kind\":\"Scope\",\"statements\":["
-        + ifStmt(true, 31)
-        + ",{\"kind\":\"Return\",\"expr\":{\"kind\":\"Int\",\"value\":1},"
-        + origin(32) + "}"
-        + "]}"
-        + "]}}]}";
+    return IrV2.module("test.trace.scope", main(
+        IrV2.scope(ifStmt(true, 31), IrV2.at(IrV2.ret(IrV2.intLit(1)), 32))));
+  }
+
+  private static String main(String... stmts) {
+    return IrV2.func("main", List.of(), IrV2.typeName("Int"), List.of(), IrV2.block(stmts));
   }
 
   private static String ifStmt(boolean cond, int line) {
-    return "{\"kind\":\"If\",\"cond\":{\"kind\":\"Bool\",\"value\":" + cond + "},"
-        + "\"thenBlock\":{\"statements\":[]},\"elseBlock\":null," + origin(line) + "}";
-  }
-
-  private static String origin(int line) {
-    return "\"origin\":{\"file\":null,"
-        + "\"start\":{\"line\":" + line + ",\"col\":3},"
-        + "\"end\":{\"line\":" + line + ",\"col\":30}}";
+    return IrV2.at(IrV2.ifStmt(IrV2.bool(cond), IrV2.block(), null), line);
   }
 }

@@ -22,10 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 多个未命名 step 的 workflow 必须照常执行（issue #128）。
  *
- * <p>step 名在 Core IR 里并非必填（Loader 对 null step / 缺 name 都会产出 null）。
- * 原实现以 name 为键登记 taskId，判重跳过 null 但 put 不跳：第二个未命名 step 静默覆盖
- * 第一个，随后按名反查两次拿到同一 taskId、对它注册两次，报出的却是 registry 的
- * "Task already exists"。修复后按 step 下标登记，null name 不再是特殊情况。
+ * <p>原实现以 name 为键登记 taskId：第二个未命名 step 静默覆盖第一个，随后按名反查两次拿到同一 taskId、
+ * 对它注册两次，报出的却是 registry 的 "Task already exists"。修复后按 step 下标登记。
+ * Core IR v2 中 {@code Step.name} 必填（ADR 0055 #19），未命名 step 已无法表达；夹具改为各自具名，
+ * 用例继续守护「每个 step 各执行一次、不残留任务、依赖按下标生效」这些按下标登记带来的性质。
  *
  * <p>走真实产品路径（polyglot Context → Loader → WorkflowNode → AsyncTaskRegistry），
  * 并用 host builtin 记录每个 step 实际执行时传入的标记，证明两个 step 各自执行、
@@ -107,10 +107,8 @@ class WorkflowUnnamedStepsTest {
       captured[0] = AsterLanguage.getContext().getAsyncRegistry().getTaskCount();
       return captured[0];
     }));
-    String probe = "{\"name\":\"probe\",\"decls\":[{\"kind\":\"Func\",\"name\":\"run\",\"params\":[],"
-        + "\"ret\":{\"kind\":\"TypeName\",\"name\":\"Int\"},\"effects\":[],\"body\":{\"kind\":\"Block\","
-        + "\"statements\":[{\"kind\":\"Return\",\"expr\":{\"kind\":\"Call\",\"target\":{\"kind\":\"Name\","
-        + "\"name\":\"__probeTaskCount\"},\"args\":[]}}]}}]}";
+    String probe = IrV2.module("probe", IrV2.func("run", List.of(), IrV2.typeName("Int"), List.of(),
+        IrV2.block(IrV2.ret(IrV2.call(IrV2.name("__probeTaskCount"))))));
 
     try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
       for (int i = 0; i < 3; i++) {

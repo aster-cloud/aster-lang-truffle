@@ -10,13 +10,77 @@ import static org.junit.jupiter.api.Assertions.*;
 class ListLiteralProbeTest {
   @Test void listLiteralLengthIsThree() throws Exception {
     String json = """
-    {"name":"probe","decls":[
-      {"kind":"Func","name":"main","params":[],"ret":{"kind":"TypeName","name":"Int"},"effects":[],
-       "body":{"kind":"Block","statements":[
-         {"kind":"Return","expr":
-           {"kind":"Call","target":{"kind":"Name","name":"List.length"},"args":[
-             {"kind":"ListLit","elements":[
-               {"kind":"Int","value":10},{"kind":"Int","value":20},{"kind":"Int","value":30}]}]}}]}}]}
+    {
+      "kind": "Module",
+      "schemaVersion": 2,
+      "name": "probe",
+      "profile": null,
+      "decls": [
+        {
+          "kind": "Func",
+          "name": "main",
+          "typeParams": [],
+          "params": [],
+          "ret": {
+            "kind": "TypeName",
+            "name": "Int",
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+          },
+          "retTypeInferred": false,
+          "annotations": [],
+          "retAnnotations": [],
+          "effects": [],
+          "effectParams": [],
+          "effectCaps": [],
+          "effectCapsExplicit": false,
+          "inputRefs": null,
+          "body": {
+            "kind": "Block",
+            "statements": [
+              {
+                "kind": "Return",
+                "expr": {
+                  "kind": "Call",
+                  "target": {
+                    "kind": "Name",
+                    "name": "List.length",
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  },
+                  "args": [
+                    {
+                      "kind": "ListLit",
+                      "elements": [
+                        {
+                          "kind": "Int",
+                          "value": 10,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 20,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 30,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    }
+                  ],
+                  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                },
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              }
+            ],
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+          },
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+        }
+      ],
+      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+    }
     """;
     try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
       Value result = context.eval(Source.newBuilder("aster", json, "probe.json").build());
@@ -26,14 +90,82 @@ class ListLiteralProbeTest {
 
   @Test void listLiteralGetIndex() throws Exception {
     String json = """
-    {"name":"probe2","decls":[
-      {"kind":"Func","name":"main","params":[],"ret":{"kind":"TypeName","name":"Int"},"effects":[],
-       "body":{"kind":"Block","statements":[
-         {"kind":"Return","expr":
-           {"kind":"Call","target":{"kind":"Name","name":"List.get"},"args":[
-             {"kind":"ListLit","elements":[
-               {"kind":"Int","value":5},{"kind":"Int","value":15},{"kind":"Int","value":25}]},
-             {"kind":"Int","value":1}]}}]}}]}
+    {
+      "kind": "Module",
+      "schemaVersion": 2,
+      "name": "probe2",
+      "profile": null,
+      "decls": [
+        {
+          "kind": "Func",
+          "name": "main",
+          "typeParams": [],
+          "params": [],
+          "ret": {
+            "kind": "TypeName",
+            "name": "Int",
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+          },
+          "retTypeInferred": false,
+          "annotations": [],
+          "retAnnotations": [],
+          "effects": [],
+          "effectParams": [],
+          "effectCaps": [],
+          "effectCapsExplicit": false,
+          "inputRefs": null,
+          "body": {
+            "kind": "Block",
+            "statements": [
+              {
+                "kind": "Return",
+                "expr": {
+                  "kind": "Call",
+                  "target": {
+                    "kind": "Name",
+                    "name": "List.get",
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  },
+                  "args": [
+                    {
+                      "kind": "ListLit",
+                      "elements": [
+                        {
+                          "kind": "Int",
+                          "value": 5,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 15,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        },
+                        {
+                          "kind": "Int",
+                          "value": 25,
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    {
+                      "kind": "Int",
+                      "value": 1,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    }
+                  ],
+                  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                },
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              }
+            ],
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+          },
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+        }
+      ],
+      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+    }
     """;
     try (Context context = Context.newBuilder("aster").allowAllAccess(true).build()) {
       Value result = context.eval(Source.newBuilder("aster", json, "probe2.json").build());

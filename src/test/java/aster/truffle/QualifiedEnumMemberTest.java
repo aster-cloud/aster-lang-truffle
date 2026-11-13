@@ -1,5 +1,9 @@
 package aster.truffle;
 
+import static aster.truffle.IrV2.*;
+
+import java.util.List;
+
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
@@ -19,23 +23,25 @@ class QualifiedEnumMemberTest {
 
     /** 模块：枚举 Level{High, Low}、Priority{High}（共享变体名）、结构 Box{High}；入口为首个 Func。 */
     private static String module(String entryBody, String entryParams) {
-        return """
-            {
-              "kind": "Module", "name": "m",
-              "decls": [
-                { "kind": "Func", "name": "entry", "params": %s,
-                  "ret": { "kind": "TypeName", "name": "Any" }, "effects": [],
-                  "body": { "kind": "Block", "statements": %s } },
-                { "kind": "Enum", "name": "Level", "variants": ["High", "Low"] },
-                { "kind": "Enum", "name": "Priority", "variants": ["High"] },
-                { "kind": "Data", "name": "Box", "fields": [ { "name": "High", "type": { "kind": "TypeName", "name": "Int" } } ] }
-              ]
-            }
-            """.formatted(entryParams, entryBody);
+        String block = "{ \"kind\": \"Block\", \"statements\": " + entryBody + ", \"origin\": " + ORIGIN + " }";
+        String params = entryParams.equals("[]") ? "" : entryParams.substring(1, entryParams.length() - 1);
+        return IrV2.module("m",
+            IrV2.func("entry", params.isEmpty() ? List.of() : List.of(params), typeName("Any"), List.of(), block),
+            enumDecl("Level", "High", "Low"),
+            enumDecl("Priority", "High"),
+            data("Box", field("High", typeName("Int"))));
+    }
+
+    private static String stmts(String... stmts) {
+        return "[" + String.join(",", stmts) + "]";
+    }
+
+    private static String box(int high) {
+        return construct("Box", fieldInit("High", intLit(high)));
     }
 
     private static String returnName(String name) {
-        return "[ { \"kind\": \"Return\", \"expr\": { \"kind\": \"Name\", \"name\": \"" + name + "\" } } ]";
+        return stmts(ret(name(name)));
     }
 
     private static Value run(Context ctx, String json, Object... args) throws IOException {
@@ -67,11 +73,7 @@ class QualifiedEnumMemberTest {
 
     @Test
     void qualifiedMemberComparesEqualToBareMember() throws IOException {
-        String body = """
-            [ { "kind": "Return", "expr": { "kind": "Call",
-                "target": { "kind": "Name", "name": "==" },
-                "args": [ { "kind": "Name", "name": "Level.Low" }, { "kind": "Name", "name": "Low" } ] } } ]
-            """;
+        String body = stmts(ret(call(name("=="), name("Level.Low"), name("Low"))));
         try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
             assertEquals(true, run(ctx, module(body, "[]")).asBoolean());
         }
@@ -79,11 +81,7 @@ class QualifiedEnumMemberTest {
 
     @Test
     void localNamedLikeEnumKeepsFieldAccess() throws IOException {
-        String body = """
-            [ { "kind": "Let", "name": "Level", "expr": { "kind": "Construct", "typeName": "Box",
-                  "fields": [ { "name": "High", "expr": { "kind": "Int", "value": 7 } } ] } },
-              { "kind": "Return", "expr": { "kind": "Name", "name": "Level.High" } } ]
-            """;
+        String body = stmts(let("Level", box(7)), ret(name("Level.High")));
         try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
             assertEquals(7, run(ctx, module(body, "[]")).asInt());
         }
@@ -91,12 +89,9 @@ class QualifiedEnumMemberTest {
 
     @Test
     void parameterNamedLikeEnumKeepsFieldAccess() throws IOException {
-        String params = "[ { \"name\": \"Level\", \"type\": { \"kind\": \"TypeName\", \"name\": \"Box\" } } ]";
+        String params = "[" + param("Level", typeName("Box")) + "]";
         try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
-            Value box = run(ctx, module("""
-                [ { "kind": "Return", "expr": { "kind": "Construct", "typeName": "Box",
-                    "fields": [ { "name": "High", "expr": { "kind": "Int", "value": 9 } } ] } } ]
-                """, "[]"));
+            Value box = run(ctx, module(stmts(ret(box(9))), "[]"));
             assertEquals(9, run(ctx, module(returnName("Level.High"), params), box).asInt());
         }
     }
@@ -127,11 +122,7 @@ class QualifiedEnumMemberTest {
     @Test
     void localNamedLikeEnumWithUnknownFieldFails() throws IOException {
         // 局部 Level 是 Box（只有 High 字段）：Level.Nope 走字段访问并失败，不回落到枚举
-        String body = """
-            [ { "kind": "Let", "name": "Level", "expr": { "kind": "Construct", "typeName": "Box",
-                  "fields": [ { "name": "High", "expr": { "kind": "Int", "value": 7 } } ] } },
-              { "kind": "Return", "expr": { "kind": "Name", "name": "Level.Nope" } } ]
-            """;
+        String body = stmts(let("Level", box(7)), ret(name("Level.Nope")));
         try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
             assertThrows(PolyglotException.class, () -> run(ctx, module(body, "[]")));
         }

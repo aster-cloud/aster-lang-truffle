@@ -9,7 +9,6 @@ import aster.core.ast.Stmt;
 import aster.core.ast.Type;
 import aster.core.resolve.NameResolution;
 import aster.core.resolve.ResolutionContext;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
@@ -27,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Match 的 case 体为多语句块时，Core IR 以 {@code kind:"Block"} 表示（core 与 ts 的 lowering 一致）。
  * core 一侧：Java 文法的 {@code When pat,} 后不接换行缩进块（既有限制），故用 AST 直接构造 Block 后走真实的
  * NameResolution + CoreLowering；ts 一侧：{@code src/test/resources/ts-ir/*.json} 由 aster-lang-ts 1.1.0 的
- * canonicalize → lex → parse → lowerModule 对同构 CNL 源码生成：
+ * canonicalize → lex → parse → lowerModule 对同构 CNL 源码生成，再按 v2 schema 补齐字段（ADR 0055）：
  * block-case.json 源码为 {@code Match x: When 1, <缩进块 Let y be 10. Return y.> When n, Return n.}；
  * block-case-nested.json 在块内再嵌一层 {@code Match y}。
  */
@@ -43,7 +42,6 @@ class BlockCaseBodyTest {
     }
 
     private static final Span SPAN = new Span(new Span.Position(1, 1), new Span.Position(1, 2));
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static Type.TypeName intType() {
         return new Type.TypeName("Int", List.of(), SPAN);
@@ -78,7 +76,7 @@ class BlockCaseBodyTest {
     private static String lowerWithCore(Decl.Func fn) throws Exception {
         aster.core.ast.Module ast = new aster.core.ast.Module("test.blockcase", null, List.of(fn), SPAN);
         var core = NameResolution.resolveAndLowerChecked(ast, new ResolutionContext(null, null)).core();
-        return MAPPER.writeValueAsString(core);
+        return aster.core.ir.CoreIrJson.serialize(core);
     }
 
     private static String resource(String name) throws Exception {
@@ -135,56 +133,52 @@ class BlockCaseBodyTest {
         }
     }
 
-    /** ts lower_to_core 产出形态：case.body = Block{statements}，带 origin。 */
-    private static String tsShapedModule(String caseStatements) {
-        return """
-            { "kind": "Module", "name": "m", "decls": [
-              { "kind": "Func", "name": "entry",
-                "params": [ { "name": "x", "type": { "kind": "TypeName", "name": "Int" } } ],
-                "ret": { "kind": "TypeName", "name": "Int" }, "effects": [],
-                "body": { "kind": "Block", "statements": [
-                  { "kind": "Match", "expr": { "kind": "Name", "name": "x" }, "cases": [
-                    { "kind": "Case", "pattern": { "kind": "PatInt", "value": 1 },
-                      "body": { "kind": "Block", "statements": %s } },
-                    { "kind": "Case", "pattern": { "kind": "PatName", "name": "n" },
-                      "body": { "kind": "Return", "expr": { "kind": "Name", "name": "n" } } }
-                  ] } ] } } ] }
-            """.formatted(caseStatements);
+    /** ts lower_to_core 产出形态：case.body = Block{statements}；{@code caseBody} 为第一个分支的分支体。 */
+    private static String moduleWithCaseBody(String caseBody) {
+        String intType = IrV2.typeName("Int");
+        return IrV2.module("m", IrV2.func("entry", List.of(IrV2.param("x", intType)), intType, List.of(),
+            IrV2.block(IrV2.match(IrV2.name("x"),
+                IrV2.caseOf(IrV2.patInt(1), caseBody),
+                IrV2.caseOf(IrV2.patName("n"), IrV2.ret(IrV2.name("n")))))));
     }
 
     @Test
     void emptyBlockCaseBodyFallsThroughWithoutError() throws Exception {
         try (Context ctx = newContext()) {
-            assertTrue(run(ctx, tsShapedModule("[]"), 1).isNull(), "空块不返回值");
-            assertEquals(3, run(ctx, tsShapedModule("[]"), 3).asInt());
+            assertTrue(run(ctx, moduleWithCaseBody(IrV2.block()), 1).isNull(), "空块不返回值");
+            assertEquals(3, run(ctx, moduleWithCaseBody(IrV2.block()), 3).asInt());
         }
     }
 
     @Test
     void blockCaseBodyWithLetSetAndReturn() throws Exception {
-        String stmts = """
-            [ { "kind": "Let", "name": "a", "expr": { "kind": "Int", "value": 1 } },
-              { "kind": "Set", "name": "a", "expr": { "kind": "Int", "value": 8 } },
-              { "kind": "Return", "expr": { "kind": "Name", "name": "a" } } ]
-            """;
+        String body = IrV2.block(IrV2.let("a", IrV2.intLit(1)), IrV2.set("a", IrV2.intLit(8)), IrV2.ret(IrV2.name("a")));
         try (Context ctx = newContext()) {
-            assertEquals(8, run(ctx, tsShapedModule(stmts), 1).asInt());
+            assertEquals(8, run(ctx, moduleWithCaseBody(body), 1).asInt());
         }
     }
 
     @Test
-    void scopeCaseBodyStillWorks() throws Exception {
-        String json = tsShapedModule("[]").replace("\"kind\": \"Block\", \"statements\": []",
-            "\"kind\": \"Scope\", \"statements\": [ { \"kind\": \"Return\", \"expr\": { \"kind\": \"Int\", \"value\": 4 } } ]");
+    void scopeInsideBlockCaseBodyStillWorks() throws Exception {
+        String body = IrV2.block(IrV2.scope(IrV2.ret(IrV2.intLit(4))));
         try (Context ctx = newContext()) {
-            assertEquals(4, run(ctx, json, 1).asInt());
+            assertEquals(4, run(ctx, moduleWithCaseBody(body), 1).asInt());
+        }
+    }
+
+    @Test
+    void scopeAsCaseBodyIsRejected() {
+        // v2 schema 的 CaseBody 只有 Return 与 Block（ADR 0055）
+        String json = moduleWithCaseBody(IrV2.scope(IrV2.ret(IrV2.intLit(4))));
+        try (Context ctx = newContext()) {
+            PolyglotException e = assertThrows(PolyglotException.class, () -> run(ctx, json, 1));
+            assertTrue(e.getMessage().contains("invalid_request"), e.getMessage());
         }
     }
 
     @Test
     void unknownCaseBodyKindIsStillRejected() {
-        String json = tsShapedModule("[]").replace("\"body\": { \"kind\": \"Block\", \"statements\": [] }",
-            "\"body\": { \"kind\": \"Nope\" }");
+        String json = moduleWithCaseBody("{ \"kind\": \"Nope\" }");
         try (Context ctx = newContext()) {
             assertThrows(PolyglotException.class, () -> run(ctx, json, 1));
         }

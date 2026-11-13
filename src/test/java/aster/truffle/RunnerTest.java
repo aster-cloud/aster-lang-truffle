@@ -26,9 +26,13 @@ class RunnerTest {
 
   /** 与 simple_hello_core.json 同形，仅替换返回表达式与声明的返回类型。 */
   private String program(String retType, String returnExpr) {
-    return "{\"name\":\"runner.probe\",\"decls\":[{\"kind\":\"Func\",\"name\":\"main\",\"params\":[],"
-        + "\"ret\":{\"kind\":\"TypeName\",\"name\":\"" + retType + "\"},\"effects\":[],"
-        + "\"body\":{\"kind\":\"Block\",\"statements\":[{\"kind\":\"Return\",\"expr\":" + returnExpr + "}]}}]}";
+    return IrV2.module("runner.probe", IrV2.func("main", java.util.List.of(), IrV2.typeName(retType), java.util.List.of(),
+        IrV2.block(IrV2.ret(returnExpr))));
+  }
+
+  /** Long / Double 字面量在 v2 中以字符串承载（ADR 0055 #18）。 */
+  private static String literal(String kind, String value) {
+    return "{\"kind\":\"" + kind + "\",\"value\":" + IrV2.q(value) + ",\"origin\":" + IrV2.ORIGIN + "}";
   }
 
   private String runAndCaptureStdout(String fileName, String json) throws Exception {
@@ -50,7 +54,7 @@ class RunnerTest {
   void printsLongBeyondIntRange() throws Exception {
     // 修复前：ClassCastException: Cannot convert '9999999999' ... using Value.asInt()
     String out = assertDoesNotThrow(() ->
-        runAndCaptureStdout("longlit.json", program("Long", "{\"kind\":\"Long\",\"value\":9999999999}")));
+        runAndCaptureStdout("longlit.json", program("Long", literal("Long", "9999999999"))));
     assertEquals("9999999999", out);
   }
 
@@ -58,21 +62,21 @@ class RunnerTest {
   void printsDouble() throws Exception {
     // 修复前：ClassCastException: Cannot convert '3.75' ... using Value.asInt()
     String out = assertDoesNotThrow(() ->
-        runAndCaptureStdout("dbl.json", program("Double", "{\"kind\":\"Double\",\"value\":3.75}")));
+        runAndCaptureStdout("dbl.json", program("Double", literal("Double", "3.75"))));
     assertEquals("3.75", out);
   }
 
   @Test
   void stillPrintsIntAsInt() throws Exception {
     // 反向护栏：能无损转 int 的值仍走 asInt，输出形态不变
-    String out = runAndCaptureStdout("int.json", program("Int", "{\"kind\":\"Int\",\"value\":42}"));
+    String out = runAndCaptureStdout("int.json", program("Int", IrV2.intLit(42)));
     assertEquals("42", out);
   }
 
   @Test
   void printsLongThatFitsInIntWithoutDecimal() throws Exception {
     // Long 字面量落在 int 范围内时按 fitsInInt 走 asInt，不得输出成浮点形态
-    String out = runAndCaptureStdout("smalllong.json", program("Long", "{\"kind\":\"Long\",\"value\":7}"));
+    String out = runAndCaptureStdout("smalllong.json", program("Long", literal("Long", "7")));
     assertEquals("7", out);
   }
 }

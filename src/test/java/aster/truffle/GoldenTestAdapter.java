@@ -1,7 +1,6 @@
 package aster.truffle;
 
 import aster.truffle.core.CoreModel;
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
@@ -11,7 +10,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,13 +24,17 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Golden Test Adapter - 运行 Core IR golden tests 验证 Truffle 后端
+ * Golden Test Adapter - 用 golden 语料验证 Truffle 后端能执行 Core IR v2
  *
  * 测试策略：
- * 1. 发现所有 test/e2e/golden/core/expected_*_core.json 文件
- * 2. 通过 Polyglot API 加载到 Truffle
- * 3. 尝试执行主函数
+ * 1. 发现 aster-lang-test 语料 {@code corpus/tier3-fixtures/golden-core/*.aster}
+ * 2. 经生产路径 {@link CnlCompiler}（Java lowering → {@code CoreIrJson.serialize}）编译为规范 v2 IR
+ * 3. 通过 Polyglot API 加载到 Truffle（Loader 严格读入）并执行入口函数
  * 4. 验证执行不抛异常（功能性测试，非结果验证）
+ *
+ * <p>此前读的是 aster-lang-ts 的 {@code test/e2e/golden/core/expected_*_core.json}。那些是 ts golden
+ * 比较用的基线，去掉了 origin 等字段，不是合法的 v2 IR，而 Loader 现在只接受通过 schema 的 v2
+ * （ADR 0055 §5），故改为从语料源码编译。
  *
  * 分类统计：
  * - ✅ Pass: 成功执行
@@ -41,40 +43,30 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class GoldenTestAdapter {
 
-  /**
-   * golden 语料目录（相对 aster-lang-ts 仓根）。
-   *
-   * <p>此前写死为 {@code "../test/e2e/golden/core"}，而 Gradle 的工作目录是
-   * {@code aster-lang-truffle/}，于是解析成 {@code <workspace>/test/e2e/golden/core}
-   * ——一个不存在的路径。真实语料在 {@code aster-lang-ts/test/e2e/golden/core}。
-   * 结果是 {@code goldenCoreTests()} 打一行 WARNING 后返回空流，**68 个用例
-   * 从未执行过**，而 JUnit 把「零个动态测试」记为通过。Truffle CI 跑
-   * {@code ./gradlew build}（含 test），所以这条 gate 长期是绿的假象。
-   */
-  private static final String GOLDEN_SUBPATH = "test/e2e/golden/core";
+  /** golden 语料目录（相对 aster-lang-test 仓根）。 */
+  private static final String GOLDEN_SUBPATH = "corpus/tier3-fixtures/golden-core";
 
   /**
-   * 定位 aster-lang-ts 仓根。与 aster-lang-core 的 CrossCompilerCoreIRTest 同范式：
-   * 系统属性 → 环境变量 → 兄弟目录回退。不再硬编码任何绝对/相对路径。
+   * 定位 aster-lang-test 仓根：系统属性 → 环境变量 → 兄弟目录回退。
    */
-  private static Path resolveTsRoot() {
-    String sysProp = System.getProperty("aster.ts.root");
+  private static Path resolveCorpusRoot() {
+    String sysProp = System.getProperty("aster.test.root");
     if (sysProp != null && !sysProp.isBlank()) {
       return Paths.get(sysProp);
     }
-    String envVar = System.getenv("ASTER_TS_ROOT");
+    String envVar = System.getenv("ASTER_TEST_ROOT");
     if (envVar != null && !envVar.isBlank()) {
       return Paths.get(envVar);
     }
     // 必须兼容两种布局，否则会在其中一种下误判「语料缺失」：
-    //   本地开发   —— 两仓并列       → ../aster-lang-ts
-    //   CI build   —— truffle 在 workspace 根，兄弟仓是子目录 → ./aster-lang-ts
+    //   本地开发   —— 两仓并列       → ../aster-lang-test
+    //   CI build   —— truffle 在 workspace 根，兄弟仓是子目录 → ./aster-lang-test
     Path cwd = Paths.get(System.getProperty("user.dir"));
     List<Path> candidates = new ArrayList<>();
-    candidates.add(cwd.resolve("aster-lang-ts"));
+    candidates.add(cwd.resolve("aster-lang-test"));
     Path parent = cwd.getParent();
     if (parent != null) {
-      candidates.add(parent.resolve("aster-lang-ts"));
+      candidates.add(parent.resolve("aster-lang-test"));
     }
     for (Path c : candidates) {
       if (Files.isDirectory(c.resolve(GOLDEN_SUBPATH))) {
@@ -84,8 +76,7 @@ public class GoldenTestAdapter {
     return candidates.get(0);
   }
 
-  private static final ObjectMapper MAPPER = new ObjectMapper()
-    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private static final Map<String, CategoryStats> CATEGORY_STATS = new ConcurrentHashMap<>();
 
@@ -103,21 +94,19 @@ public class GoldenTestAdapter {
   /**
    * 已知未实现能力——**逐条枚举**的基线，不是通配跳过。
    *
-   * <p>路径修复（见 {@link #GOLDEN_SUBPATH}）让这 68 个用例首次真正执行，暴露出 17 条
-   * 失败。它们不是本次改动引入的回归，而是**一直存在、被空流掩盖**的引擎缺口。
+   * <p>路径修复让 golden 用例首次真正执行，暴露出一批失败。它们不是当时改动引入的回归，
+   * 而是**一直存在、被空流掩盖**的引擎缺口。改为编译 aster-lang-test 语料后（共 27 个源），
+   * 不在语料中的旧条目已删除。
    * 每条都需要独立的实现决策（interop 解包语义、Result 构造子、错误路径契约），
    * 不适合在「修复 gate」这次改动里顺手糊掉。
    *
-   * <p>把它们列在这里的用意：让其余 <b>51 个用例立刻成为真 gate</b>（此前是 0 个），
-   * 同时把缺口显式化、可清点、可逐条消除。★列表只应缩短，不应增长——
+   * <p>把它们列在这里的用意：让其余用例立刻成为真 gate，同时把缺口显式化、可清点、可逐条消除。★列表只应缩短，不应增长——
    * 新增条目意味着有人在拿它掩盖新回归，评审时应当质疑。
    *
    * <p>分组（详见各仓 issue）：
    * <ul>
    *   <li>interop 未解包：Map/List 操作拿到 HostObject 而非 guest 值</li>
-   *   <li>Result 构造子 Ok/Err 未注册为 call target</li>
    *   <li>String 成员访问（.verify/.get）在 Truffle 侧缺失</li>
-   *   <li>IO effect 授权：golden 场景未授予 IO 权限</li>
    *   <li>错误路径缺失：期望抛错却成功</li>
    * </ul>
    */
@@ -125,55 +114,46 @@ public class GoldenTestAdapter {
     // interop 未解包（Map.get/List 操作返回 HostObject）
     "boundary_map_type",
     "generic_list_of_results",
-    "generic_list_result",
-    "list_ops",
-    "map_ops",
-    "stdlib_collections",
-    // Result 构造子未注册：Unknown call target: Ok/Err
-    "boundary_result_both",
-    "boundary_result_err_null",
-    "boundary_result_ok_err",
     // String 成员访问未支持（.verify / .get）
     "login",
-    "fetch_dashboard",
     "inventory_workflow",
     "payment_workflow",
     "workflow-diamond",
     "workflow-linear",
-    // IO effect 未授权
-    "stdlib_io",
     // 错误路径缺失：期望抛异常但执行成功
     "bad_type_mismatch_add_text",
+    // 改为编译语料源码后新纳入的用例：入参没有类型标注（推断为 Text），默认参数生成器只能给空串，
+    // 规则体随即对它做成员访问而失败——这是本适配器构造入参的限制，不是引擎缺口
+    "type_inference_cnl",
   };
+
 
   @TestFactory
   Stream<DynamicTest> goldenCoreTests() throws IOException {
     List<DynamicTest> tests = new ArrayList<>();
 
-    Path goldenPath = resolveTsRoot().resolve(GOLDEN_SUBPATH);
+    Path goldenPath = resolveCorpusRoot().resolve(GOLDEN_SUBPATH);
     if (!Files.exists(goldenPath)) {
       // ★不能返回空流：JUnit 把「零个动态测试」记为通过，语料找不到会伪装成全绿。
-      // 本地无 aster-lang-ts 兄弟仓时，用 -Daster.ts.root=... 指定。
+      // 本地无 aster-lang-test 兄弟仓时，用 -Daster.test.root=... 指定。
       throw new IllegalStateException(
         "Golden 语料目录不存在: " + goldenPath.toAbsolutePath()
-          + "；请置于 aster-lang-ts 兄弟目录，或用 -Daster.ts.root=/path/to/aster-lang-ts 指定。"
-          + "（此前此处返回空流，导致 68 个用例静默不执行且报告通过）");
+          + "；请置于 aster-lang-test 兄弟目录，或用 -Daster.test.root=/path/to/aster-lang-test 指定。");
     }
 
-    // 发现所有 expected_*_core.json 文件
-    try (Stream<Path> paths = Files.walk(goldenPath)) {
+    // 发现所有 .aster 源；语料去重后缀（如 login__golden-core.aster）不进用例名
+    try (Stream<Path> paths = Files.list(goldenPath)) {
       paths
         .filter(Files::isRegularFile)
-        .filter(p -> p.getFileName().toString().startsWith("expected_"))
-        .filter(p -> p.getFileName().toString().endsWith("_core.json"))
+        .filter(p -> p.getFileName().toString().endsWith(".aster"))
         .sorted()
-        .forEach(jsonPath -> {
-          String testName = jsonPath.getFileName().toString()
-            .replace("expected_", "")
-            .replace("_core.json", "");
+        .forEach(sourcePath -> {
+          String testName = sourcePath.getFileName().toString()
+            .replace(".aster", "")
+            .replaceAll("__[^_]+-[^_]+$", "");
 
           tests.add(DynamicTest.dynamicTest(testName, () -> {
-            runGoldenTest(jsonPath.toFile(), testName);
+            runGoldenTest(sourcePath, testName);
           }));
         });
     }
@@ -181,13 +161,21 @@ public class GoldenTestAdapter {
     // 目录存在但没扫到用例，同样是「零测试伪装成通过」——一并挡住。
     if (tests.isEmpty()) {
       throw new IllegalStateException(
-        "Golden 语料目录存在但未发现任何 expected_*_core.json: " + goldenPath.toAbsolutePath());
+        "Golden 语料目录存在但未发现任何 .aster: " + goldenPath.toAbsolutePath());
     }
 
     return tests.stream();
   }
 
-  private void runGoldenTest(File jsonFile, String testName) throws IOException {
+  /** 读语料旁的 meta.json 取词法表 id（缺省按源码自动检测）。 */
+  private static String lexiconOf(Path sourcePath) throws IOException {
+    Path meta = sourcePath.resolveSibling(sourcePath.getFileName().toString().replace(".aster", ".meta.json"));
+    if (!Files.exists(meta)) return null;
+    String lexicon = MAPPER.readTree(meta.toFile()).path("lexicon").asText("");
+    return lexicon.isEmpty() ? null : lexicon;
+  }
+
+  private void runGoldenTest(Path sourcePath, String testName) throws Exception {
     // 检查是否是已知限制
     for (String pattern : KNOWN_LIMITATIONS) {
       if (testName.contains(pattern)) {
@@ -204,8 +192,8 @@ public class GoldenTestAdapter {
         .option("engine.WarnInterpreterOnly", "false")  // 禁用 JIT 警告
         .build()) {
 
-      // 读取 Core IR JSON
-      String json = Files.readString(jsonFile.toPath());
+      // 经生产编译路径得到规范 v2 Core IR JSON
+      String json = CnlCompiler.compile(Files.readString(sourcePath), lexiconOf(sourcePath));
 
       // 检查入口函数并生成默认参数
       EntryFunctionInfo entryInfo = getEntryFunctionInfo(json);
@@ -303,7 +291,7 @@ public class GoldenTestAdapter {
    */
   private EntryFunctionInfo getEntryFunctionInfo(String json) {
     try {
-      CoreModel.Module module = MAPPER.readValue(json, CoreModel.Module.class);
+      CoreModel.Module module = Loader.readModule(json);
       if (module == null || module.decls == null) {
         return null;
       }
@@ -328,7 +316,7 @@ public class GoldenTestAdapter {
       java.util.List<CoreModel.Param> params = (chosen.params != null) ? chosen.params : java.util.List.of();
       return new EntryFunctionInfo(chosen.name, params);
 
-    } catch (IOException e) {
+    } catch (IllegalArgumentException e) {
       System.err.println("⚠️ 无法解析 JSON 以获取入口函数信息: " + e.getMessage());
       return null;
     }
@@ -384,7 +372,10 @@ public class GoldenTestAdapter {
       return null;
     }
     if (type instanceof CoreModel.TypeApp app) {
-      return app.base != null ? generateDefaultValue(app.base) : null;
+      // base 是类型名（v2）：按同名 TypeName 生成默认值
+      CoreModel.TypeName base = new CoreModel.TypeName();
+      base.name = app.base;
+      return generateDefaultValue(base);
     }
     if (type instanceof CoreModel.FuncType) {
       return null;

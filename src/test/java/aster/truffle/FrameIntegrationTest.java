@@ -51,28 +51,58 @@ public class FrameIntegrationTest {
   public void testLetNodeEnvStorage() {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.let",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": null,
+              "ret": {
+                "kind": "TypeName",
+                "name": "Unknown",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": true,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
+                "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 42}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 42,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": {"kind": "Name", "name": "x"}
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -92,33 +122,68 @@ public class FrameIntegrationTest {
   public void testSetNodeEnvUpdate() {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.set",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": null,
+              "ret": {
+                "kind": "TypeName",
+                "name": "Unknown",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": true,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
+                "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 10}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Set",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 100}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 100,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": {"kind": "Name", "name": "x"}
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -138,33 +203,68 @@ public class FrameIntegrationTest {
   public void testLetSetCombination() {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.let_set",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": null,
+              "ret": {
+                "kind": "TypeName",
+                "name": "Unknown",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": true,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
+                "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 41}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 41,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Set",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 42}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 42,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": {"kind": "Name", "name": "x"}
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -189,38 +289,78 @@ public class FrameIntegrationTest {
   public void testMultipleVariables() {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.multiple_vars",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": null,
+              "ret": {
+                "kind": "TypeName",
+                "name": "Unknown",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": true,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
+                "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 10}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Let",
                     "name": "y",
-                    "expr": {"kind": "Int", "value": 20}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 20,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Let",
                     "name": "z",
-                    "expr": {"kind": "Int", "value": 30}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 30,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": {"kind": "Name", "name": "z"}
+                    "expr": {
+                      "kind": "Name",
+                      "name": "z",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -244,42 +384,84 @@ public class FrameIntegrationTest {
   public void testVariableInIfBranch() {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.if_branch",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": null,
+              "ret": {
+                "kind": "TypeName",
+                "name": "Unknown",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": true,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
+                "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 5}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 5,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "If",
-                    "cond": {"kind": "Bool", "value": true},
+                    "cond": {
+                      "kind": "Bool",
+                      "value": true,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
                     "thenBlock": {
+                      "kind": "Block",
                       "statements": [
                         {
                           "kind": "Set",
                           "name": "x",
-                          "expr": {"kind": "Int", "value": 15}
+                          "expr": {
+                            "kind": "Int",
+                            "value": 15,
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                         }
-                      ]
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                     },
-                    "elseBlock": null
+                    "elseBlock": null,
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": {"kind": "Name", "name": "x"}
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -303,43 +485,88 @@ public class FrameIntegrationTest {
   public void testVariableSequentialAccess() {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.sequential",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": null,
+              "ret": {
+                "kind": "TypeName",
+                "name": "Unknown",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": true,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
+                "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 1}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 1,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Let",
                     "name": "y",
-                    "expr": {"kind": "Int", "value": 2}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 2,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Set",
                     "name": "x",
-                    "expr": {"kind": "Int", "value": 10}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Set",
                     "name": "y",
-                    "expr": {"kind": "Int", "value": 20}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 20,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": {"kind": "Name", "name": "y"}
+                    "expr": {
+                      "kind": "Name",
+                      "name": "y",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 
@@ -370,57 +597,114 @@ public class FrameIntegrationTest {
   public void testFrameEnvCompatibility() {
     String json = """
         {
+          "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.frame_env",
+          "profile": null,
           "decls": [
             {
               "kind": "Func",
               "name": "main",
+              "typeParams": [],
               "params": [],
-              "ret": null,
+              "ret": {
+                "kind": "TypeName",
+                "name": "Unknown",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": true,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
               "body": {
+                "kind": "Block",
                 "statements": [
                   {
                     "kind": "Let",
                     "name": "a",
-                    "expr": {"kind": "Int", "value": 10}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 10,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Let",
                     "name": "b",
-                    "expr": {"kind": "Int", "value": 20}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 20,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "If",
-                    "cond": {"kind": "Bool", "value": true},
+                    "cond": {
+                      "kind": "Bool",
+                      "value": true,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
                     "thenBlock": {
+                      "kind": "Block",
                       "statements": [
                         {
                           "kind": "Let",
                           "name": "c",
-                          "expr": {"kind": "Int", "value": 30}
+                          "expr": {
+                            "kind": "Int",
+                            "value": 30,
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                         },
                         {
                           "kind": "Set",
                           "name": "a",
-                          "expr": {"kind": "Int", "value": 100}
+                          "expr": {
+                            "kind": "Int",
+                            "value": 100,
+                            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                          },
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                         }
-                      ]
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                     },
-                    "elseBlock": null
+                    "elseBlock": null,
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Set",
                     "name": "b",
-                    "expr": {"kind": "Int", "value": 200}
+                    "expr": {
+                      "kind": "Int",
+                      "value": 200,
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   },
                   {
                     "kind": "Return",
-                    "expr": {"kind": "Name", "name": "a"}
+                    "expr": {
+                      "kind": "Name",
+                      "name": "a",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
                   }
-                ]
-              }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          ]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 

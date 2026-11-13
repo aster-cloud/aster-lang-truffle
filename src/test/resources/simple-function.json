@@ -1,15 +1,27 @@
 {
+  "kind": "Module",
+  "schemaVersion": 2,
   "name": "test.simple.function",
+  "profile": null,
   "decls": [
     {
       "kind": "Func",
       "name": "helper",
+      "typeParams": [],
       "params": [],
       "ret": {
         "kind": "TypeName",
-        "name": "Int"
+        "name": "Int",
+        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
       },
+      "retTypeInferred": false,
+      "annotations": [],
+      "retAnnotations": [],
       "effects": [],
+      "effectParams": [],
+      "effectCaps": [],
+      "effectCapsExplicit": false,
+      "inputRefs": null,
       "body": {
         "kind": "Block",
         "statements": [
@@ -17,21 +29,34 @@
             "kind": "Return",
             "expr": {
               "kind": "Int",
-              "value": 100
-            }
+              "value": 100,
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+            },
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
           }
-        ]
-      }
+        ],
+        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+      },
+      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
     },
     {
       "kind": "Func",
       "name": "main",
+      "typeParams": [],
       "params": [],
       "ret": {
         "kind": "TypeName",
-        "name": "Int"
+        "name": "Int",
+        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
       },
+      "retTypeInferred": false,
+      "annotations": [],
+      "retAnnotations": [],
       "effects": [],
+      "effectParams": [],
+      "effectCaps": [],
+      "effectCapsExplicit": false,
+      "inputRefs": null,
       "body": {
         "kind": "Block",
         "statements": [
@@ -41,13 +66,19 @@
               "kind": "Call",
               "target": {
                 "kind": "Name",
-                "name": "helper"
+                "name": "helper",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
               },
-              "args": []
-            }
+              "args": [],
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+            },
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
           }
-        ]
-      }
+        ],
+        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+      },
+      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
     }
-  ]
+  ],
+  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
 }

@@ -15,32 +15,29 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ScopeShadowingTest {
 
-    private static final String INT = "{ \"kind\": \"TypeName\", \"name\": \"Int\" }";
+    private static final String INT = IrV2.typeName("Int");
 
+    /** {@code body} 是语句数组的 JSON（如 {@code "[...]"}）。 */
     private static String module(String body) {
-        return """
-            { "kind": "Module", "name": "m", "decls": [
-              { "kind": "Func", "name": "entry",
-                "params": [ { "name": "x", "type": %s } ],
-                "ret": %s, "effects": [],
-                "body": { "kind": "Block", "statements": %s } } ] }
-            """.formatted(INT, INT, body);
+        String block = "{ \"kind\": \"Block\", \"statements\": " + body + ", \"origin\": " + IrV2.ORIGIN + " }";
+        return IrV2.module("m",
+            IrV2.func("entry", java.util.List.of(IrV2.param("x", INT)), INT, java.util.List.of(), block));
     }
 
     private static String let(String name, int v) {
-        return "{ \"kind\": \"Let\", \"name\": \"" + name + "\", \"expr\": { \"kind\": \"Int\", \"value\": " + v + " } }";
+        return IrV2.let(name, IrV2.intLit(v));
     }
 
     private static String set(String name, int v) {
-        return "{ \"kind\": \"Set\", \"name\": \"" + name + "\", \"expr\": { \"kind\": \"Int\", \"value\": " + v + " } }";
+        return IrV2.set(name, IrV2.intLit(v));
     }
 
     private static String ret(String name) {
-        return "{ \"kind\": \"Return\", \"expr\": { \"kind\": \"Name\", \"name\": \"" + name + "\" } }";
+        return IrV2.ret(IrV2.name(name));
     }
 
     private static String scope(String... stmts) {
-        return "{ \"kind\": \"Scope\", \"statements\": [" + String.join(",", stmts) + "] }";
+        return IrV2.scope(stmts);
     }
 
     private static Value run(String json, Object arg) throws IOException {

@@ -22,7 +22,7 @@ public final class LambdaValue implements TruffleObject {
   private final List<String> captureNames;
   private final Object[] capturedValues;
   private final CallTarget callTarget;
-  private final java.util.Set<String> requiredEffects;  // Effect 元数据（如 ["IO", "Async"]）
+  private final java.util.Set<String> requiredEffects;  // Effect 元数据（如 ["io"]）
 
   /**
    * 创建 LambdaValue (使用 CallTarget + 闭包捕获 + effects)
@@ -31,7 +31,7 @@ public final class LambdaValue implements TruffleObject {
    * @param captureNames 闭包变量名列表
    * @param capturedValues 闭包变量值数组
    * @param callTarget Lambda 的 CallTarget
-   * @param requiredEffects 函数所需 effects（如 ["IO", "Async"]）
+   * @param requiredEffects 函数所需 effects（如 ["io"]）
    */
   public LambdaValue(List<String> params, List<String> captureNames, Object[] capturedValues, CallTarget callTarget, java.util.Set<String> requiredEffects) {
     this.params = params == null ? List.of() : params;

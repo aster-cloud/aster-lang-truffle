@@ -47,69 +47,19 @@ public class AsterLanguageTest {
     }
 
     /**
-     * 辅助方法：创建简单的 Core JSON 程序
+     * 辅助方法：创建简单的 Core IR v2 程序（main 返回整数字面量）
      */
     private String createSimpleProgram(String literalValue) {
-        // 根据 CoreModel 期望的结构输出基础模块
-        return "{" +
-                "\"name\":\"test.simple.literal\"," +
-                "\"decls\":[{" +
-                "\"kind\":\"Func\"," +
-                "\"name\":\"main\"," +
-                "\"params\":[]," +
-                "\"ret\":{\"kind\":\"TypeName\",\"name\":\"Int\"}," +
-                "\"effects\":[]," +
-                "\"body\":{" +
-                "\"kind\":\"Block\"," +
-                "\"statements\":[{" +
-                "\"kind\":\"Return\"," +
-                "\"expr\":{\"kind\":\"Int\",\"value\":" + literalValue + "}" +
-                "}]" +
-                "}" +
-                "}]" +
-                "}";
+        return IrV2.module("test.simple.literal", IrV2.func("main", java.util.List.of(), IrV2.typeName("Int"),
+            java.util.List.of(), IrV2.block(IrV2.ret(IrV2.intLit(Integer.parseInt(literalValue))))));
     }
 
+    /** helper 返回字面量，main 调用 helper。 */
     private String createFunctionProgram() {
-        // 构造一个包含辅助函数并在 main 中调用的 Core JSON
-        return "{" +
-                "\"name\":\"test.simple.function\"," +
-                "\"decls\":[" +
-                // helper 函数直接返回字面量
-                "{" +
-                "\"kind\":\"Func\"," +
-                "\"name\":\"helper\"," +
-                "\"params\":[]," +
-                "\"ret\":{\"kind\":\"TypeName\",\"name\":\"Int\"}," +
-                "\"effects\":[]," +
-                "\"body\":{" +
-                "\"kind\":\"Block\"," +
-                "\"statements\":[{" +
-                "\"kind\":\"Return\"," +
-                "\"expr\":{\"kind\":\"Int\",\"value\":100}" +
-                "}]" +
-                "}" +
-                "}," +
-                // main 调用 helper
-                "{" +
-                "\"kind\":\"Func\"," +
-                "\"name\":\"main\"," +
-                "\"params\":[]," +
-                "\"ret\":{\"kind\":\"TypeName\",\"name\":\"Int\"}," +
-                "\"effects\":[]," +
-                "\"body\":{" +
-                "\"kind\":\"Block\"," +
-                "\"statements\":[{" +
-                "\"kind\":\"Return\"," +
-                "\"expr\":{" +
-                "\"kind\":\"Call\"," +
-                "\"target\":{\"kind\":\"Name\",\"name\":\"helper\"}," +
-                "\"args\":[]" +
-                "}" +
-                "}]" +
-                "}" +
-                "}" +
-                "]" +
-                "}";
+        return IrV2.module("test.simple.function",
+            IrV2.func("helper", java.util.List.of(), IrV2.typeName("Int"), java.util.List.of(),
+                IrV2.block(IrV2.ret(IrV2.intLit(100)))),
+            IrV2.func("main", java.util.List.of(), IrV2.typeName("Int"), java.util.List.of(),
+                IrV2.block(IrV2.ret(IrV2.call(IrV2.name("helper"))))));
     }
 }
