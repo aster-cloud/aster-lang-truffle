@@ -14,7 +14,6 @@ import java.util.Set;
  * Phase 1 实现：
  * - 将子表达式包装为 Runnable 并注册到 AsyncTaskRegistry
  * - 返回 task_id 字符串
- * - 校验 Async effect 权限
  * - 使用 MaterializedFrame 捕获当前 Frame 上下文
  */
 public final class StartNode extends Node {
@@ -31,11 +30,9 @@ public final class StartNode extends Node {
   public Object execute(VirtualFrame frame) {
     Profiler.inc("start");
 
-    // Effect 校验：start 需要 Async effect
+    // start 是并发构造，不是效应授权（ADR 0055 #5：async 不授权任何效应），不做 effect 校验；
+    // 任务体内的 IO 等仍由各 builtin 按继承来的权限校验
     AsterContext context = AsterLanguage.getContext();
-    if (!context.isEffectAllowed("Async")) {
-      throw new RuntimeException("start requires Async effect");
-    }
 
     // ★步骤级 trace（M2.1b）：start 的任务体在 worker 线程跑（Runnable 提交 registry），收不进
     // eval 线程 collector → 整条 trace 标 NON_REPLAYABLE（同 workflow，Codex 复审 P0）。关时 PE 折叠。

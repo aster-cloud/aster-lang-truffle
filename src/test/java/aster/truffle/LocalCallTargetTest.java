@@ -17,31 +17,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class LocalCallTargetTest {
 
-    private static final String INT = "{ \"kind\": \"TypeName\", \"name\": \"Int\" }";
-    private static final String BOOL = "{ \"kind\": \"TypeName\", \"name\": \"Bool\" }";
+    private static final String INT = IrV2.typeName("Int");
+    private static final String BOOL = IrV2.typeName("Bool");
 
     private static String name(String n) {
-        return "{ \"kind\": \"Name\", \"name\": \"" + n + "\" }";
+        return IrV2.name(n);
     }
 
     private static String num(int v) {
-        return "{ \"kind\": \"Int\", \"value\": " + v + " }";
+        return IrV2.intLit(v);
     }
 
     private static String call(String target, String... args) {
-        return "{ \"kind\": \"Call\", \"target\": " + name(target) + ", \"args\": [" + String.join(",", args) + "] }";
+        return IrV2.call(name(target), args);
     }
 
     private static String ret(String expr) {
-        return "{ \"kind\": \"Return\", \"expr\": " + expr + " }";
+        return IrV2.ret(expr);
     }
 
     private static String let(String n, String expr) {
-        return "{ \"kind\": \"Let\", \"name\": \"" + n + "\", \"expr\": " + expr + " }";
+        return IrV2.let(n, expr);
     }
 
     private static String param(String n, String type) {
-        return "{ \"name\": \"" + n + "\", \"type\": " + type + " }";
+        return IrV2.param(n, type);
     }
 
     private static String lambda(String[] params, String body) {
@@ -51,16 +51,17 @@ class LocalCallTargetTest {
             ps.append(param(p, INT));
         }
         return "{ \"kind\": \"Lambda\", \"params\": [" + ps + "], \"ret\": " + INT
-            + ", \"captures\": [], \"body\": { \"kind\": \"Block\", \"statements\": [" + ret(body) + "] } }";
+            + ", \"body\": " + IrV2.block(ret(body)) + ", \"captures\": [], \"origin\": " + IrV2.ORIGIN + " }";
     }
 
+    /** {@code params} 为逗号拼接的 {@link #param} 列表（可为空串）。 */
     private static String func(String fname, String params, String ret, String... stmts) {
-        return "{ \"kind\": \"Func\", \"name\": \"" + fname + "\", \"params\": [" + params + "], \"ret\": " + ret
-            + ", \"effects\": [], \"body\": { \"kind\": \"Block\", \"statements\": [" + String.join(",", stmts) + "] } }";
+        java.util.List<String> ps = params.isEmpty() ? java.util.List.of() : java.util.List.of(params);
+        return IrV2.func(fname, ps, ret, java.util.List.of(), IrV2.block(stmts));
     }
 
     private static String module(String... funcs) {
-        return "{ \"kind\": \"Module\", \"name\": \"m\", \"decls\": [" + String.join(",", funcs) + "] }";
+        return IrV2.module("m", funcs);
     }
 
     private static Value run(String json, String entry) throws IOException {
@@ -74,7 +75,8 @@ class LocalCallTargetTest {
     @Test
     void functionTypedParameterNamedLikeABuiltinIsCalled() throws IOException {
         // check(gt) 中 gt 是函数类型形参：gt(1, 2) 调用传入的 plus2，得 3；此前分派 builtin gt 得 false
-        String fnType = "{ \"kind\": \"FuncType\", \"params\": [" + INT + "," + INT + "], \"ret\": " + INT + " }";
+        String fnType = "{ \"kind\": \"FuncType\", \"params\": [" + INT + "," + INT + "], \"ret\": " + INT
+            + ", \"origin\": " + IrV2.ORIGIN + " }";
         String json = module(
             func("plus2", param("a", INT) + "," + param("b", INT), INT, ret(call("+", name("a"), name("b")))),
             func("check", param("gt", fnType), INT, ret(call("gt", num(1), num(2)))),
@@ -109,12 +111,12 @@ class LocalCallTargetTest {
     @Test
     void closureNamedOrIsCalledInsteadOfTheShortCircuit() throws IOException {
         // or(…) 原先走短路节点；局部 or 是函数值时调用它
-        String body = "{ \"kind\": \"Bool\", \"value\": false }";
         String orLambda = "{ \"kind\": \"Lambda\", \"params\": [" + param("p", BOOL) + "," + param("q", BOOL)
-            + "], \"ret\": " + BOOL + ", \"captures\": [], \"body\": { \"kind\": \"Block\", \"statements\": [" + ret(body) + "] } }";
+            + "], \"ret\": " + BOOL + ", \"body\": " + IrV2.block(ret(IrV2.bool(false)))
+            + ", \"captures\": [], \"origin\": " + IrV2.ORIGIN + " }";
         String json = module(func("main", "", BOOL,
             let("or", orLambda),
-            ret(call("or", "{ \"kind\": \"Bool\", \"value\": true }", "{ \"kind\": \"Bool\", \"value\": true }"))));
+            ret(call("or", IrV2.bool(true), IrV2.bool(true)))));
         assertEquals(false, run(json, "main").asBoolean());
     }
 

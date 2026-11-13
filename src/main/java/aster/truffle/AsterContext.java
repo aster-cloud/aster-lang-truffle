@@ -15,6 +15,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * 负责封装 Truffle 环境、内建函数注册表与配置快照，提供线程安全的访问接口。
  */
 public final class AsterContext {
+  /**
+   * IO 效应的权限名。与 Core IR v2 一致一律小写（ADR 0055 #5：IR 中的具体效应名只有 {@code io} / {@code cpu}），
+   * 比较按原样进行，不做大小写折叠。
+   */
+  public static final String IO_EFFECT = "io";
+  /** CPU 效应的权限名（小写，同 {@link #IO_EFFECT}）。 */
+  public static final String CPU_EFFECT = "cpu";
+
   private final TruffleLanguage.Env env;
   private final AtomicReference<Builtins> builtinsRef = new AtomicReference<>();
   /**
@@ -68,7 +76,7 @@ public final class AsterContext {
    * 设置当前允许的 effect 列表。
    * 用于在函数调用前限制可执行的副作用操作。
    *
-   * @param effects 允许的 effect 名称集合（如 "IO", "Async", "CPU"）
+   * @param effects 允许的 effect 名称集合（如 {@link #IO_EFFECT}、{@link #CPU_EFFECT}）
    */
   public void setAllowedEffects(Set<String> effects) {
     // 仅设当前线程的视图（thread-local）——不影响其它并发任务线程。
@@ -78,7 +86,7 @@ public final class AsterContext {
   /**
    * 检查指定 effect 是否在当前允许列表中。
    *
-   * @param effect effect 名称（如 "IO", "Async", "CPU"）
+   * @param effect effect 名称（如 {@link #IO_EFFECT}、{@link #CPU_EFFECT}）
    * @return true 如果允许，false 否则
    */
   public boolean isEffectAllowed(String effect) {

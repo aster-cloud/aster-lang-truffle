@@ -30,27 +30,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class MissingMemberExceptionTest {
 
-    private static final String ANY = "{ \"kind\": \"TypeName\", \"name\": \"Any\" }";
+    private static final String ANY = IrV2.typeName("Any");
 
     private static String module(String decls) {
-        return "{ \"kind\": \"Module\", \"name\": \"m\", \"decls\": [" + decls + "] }";
+        return IrV2.module("m", decls);
     }
 
+    /** {@code body} 是语句数组的 JSON（如 {@code "[...]"}）。 */
     private static String func(String body) {
-        return """
-            { "kind": "Func", "name": "entry",
-              "params": [ { "name": "obj", "type": %s } ],
-              "ret": %s, "effects": [],
-              "body": { "kind": "Block", "statements": %s } }
-            """.formatted(ANY, ANY, body);
+        String block = "{ \"kind\": \"Block\", \"statements\": " + body + ", \"origin\": " + IrV2.ORIGIN + " }";
+        return IrV2.func("entry", List.of(IrV2.param("obj", ANY)), ANY, List.of(), block);
     }
 
     private static String ret(String name) {
-        return "{ \"kind\": \"Return\", \"expr\": { \"kind\": \"Name\", \"name\": \"" + name + "\" } }";
+        return IrV2.ret(IrV2.name(name));
     }
 
     private static String let(String name, String expr) {
-        return "{ \"kind\": \"Let\", \"name\": \"" + name + "\", \"expr\": " + expr + " }";
+        return IrV2.let(name, expr);
     }
 
     private static AsterMapValue map(Object... kv) {
@@ -96,7 +93,7 @@ class MissingMemberExceptionTest {
     void internalNoneMissingKeyIsNotTheInput() throws IOException {
         try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
             AsterMapValue input = map("value", 1);
-            String body = "[" + let("n", "{ \"kind\": \"None\" }") + "," + ret("n.value") + "]";
+            String body = "[" + let("n", "{ \"kind\": \"None\", \"origin\": " + IrV2.ORIGIN + " }") + "," + ret("n.value") + "]";
             PolyglotException ex = fail(ctx, module(func(body)), input);
 
             Value guest = missingMember(ex, "value");
@@ -112,10 +109,7 @@ class MissingMemberExceptionTest {
             AsterMapValue first = map("other", 1);
             AsterMapValue second = map("other", 1);
             AsterListValue input = new AsterListValue(List.of(first, second));
-            String get = """
-                { "kind": "Call", "target": { "kind": "Name", "name": "List.get" },
-                  "args": [ { "kind": "Name", "name": "obj" }, { "kind": "Int", "value": 1 } ] }
-                """;
+            String get = IrV2.call(IrV2.name("List.get"), IrV2.name("obj"), IrV2.intLit(1));
             String body = "[" + let("item", get) + "," + ret("item.value") + "]";
             PolyglotException ex = fail(ctx, module(func(body)), input);
 
@@ -129,14 +123,8 @@ class MissingMemberExceptionTest {
     @DisplayName("结构体缺字段：带声明类型名，文案不变")
     void dataValueMissingFieldCarriesDeclaredType() throws IOException {
         try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
-            String data = """
-                { "kind": "Data", "name": "P",
-                  "fields": [ { "name": "a", "type": { "kind": "TypeName", "name": "Int" } } ] }
-                """;
-            String cons = """
-                { "kind": "Construct", "typeName": "P",
-                  "fields": [ { "name": "a", "expr": { "kind": "Int", "value": 1 } } ] }
-                """;
+            String data = IrV2.data("P", IrV2.field("a", IrV2.typeName("Int")));
+            String cons = IrV2.construct("P", IrV2.fieldInit("a", IrV2.intLit(1)));
             String body = "[" + let("p", cons) + "," + ret("p.b") + "]";
             PolyglotException ex = fail(ctx, module(data + "," + func(body)), map());
 
@@ -165,7 +153,7 @@ class MissingMemberExceptionTest {
     @DisplayName("对 null 读成员：base 为 null，文案不变")
     void nullBaseIsStructured() throws IOException {
         try (Context ctx = Context.newBuilder("aster").allowAllAccess(true).build()) {
-            String body = "[" + let("n", "{ \"kind\": \"Null\" }") + "," + ret("n.value") + "]";
+            String body = "[" + let("n", IrV2.nullLit()) + "," + ret("n.value") + "]";
             PolyglotException ex = fail(ctx, module(func(body)), map());
 
             assertEquals("无法访问 null 对象的成员：value", ex.getMessage());

@@ -1168,35 +1168,35 @@ public final class Builtins {
     // 直接抛 UnsupportedOperationException。授权后，由于 Truffle backend 不实现
     // 真实 IO，再抛 UnsupportedOperationException（effect 校验先于其执行）。
     register("IO.print", new BuiltinDef(args -> {
-      requireEffect("IO.print", "IO");
+      requireEffect("IO.print", aster.truffle.AsterContext.IO_EFFECT);
       checkArity("IO.print", args, 1);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.print"));
-    }, Set.of("IO")));
+    }, Set.of(aster.truffle.AsterContext.IO_EFFECT)));
 
     register("IO.readLine", new BuiltinDef(args -> {
-      requireEffect("IO.readLine", "IO");
+      requireEffect("IO.readLine", aster.truffle.AsterContext.IO_EFFECT);
       checkArity("IO.readLine", args, 0);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.readLine"));
-    }, Set.of("IO")));
+    }, Set.of(aster.truffle.AsterContext.IO_EFFECT)));
 
     register("IO.readFile", new BuiltinDef(args -> {
-      requireEffect("IO.readFile", "IO");
+      requireEffect("IO.readFile", aster.truffle.AsterContext.IO_EFFECT);
       checkArity("IO.readFile", args, 1);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.readFile"));
-    }, Set.of("IO")));
+    }, Set.of(aster.truffle.AsterContext.IO_EFFECT)));
 
     register("IO.writeFile", new BuiltinDef(args -> {
-      requireEffect("IO.writeFile", "IO");
+      requireEffect("IO.writeFile", aster.truffle.AsterContext.IO_EFFECT);
       checkArity("IO.writeFile", args, 2);
       throw new UnsupportedOperationException(ioNotSupportedMessage("IO.writeFile"));
-    }, Set.of("IO")));
+    }, Set.of(aster.truffle.AsterContext.IO_EFFECT)));
 
-    // === Async Operations (需要 Async effect) ===
+    // === Async Operations（并发构造，不需要 effect 授权，ADR 0055 #5） ===
     register("await", new BuiltinDef(args -> {
       checkArity("await", args, 1);
       // 当前简化实现：直接返回值（与AwaitNode语义一致）
       return args[0];
-    }, Set.of("Async")));
+    }, Set.of()));
   }
 
   /**

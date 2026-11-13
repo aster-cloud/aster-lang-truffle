@@ -39,9 +39,7 @@ public final class PiiSupport {
       return containsPii(map.key, visited) || containsPii(map.val, visited);
     }
     if (type instanceof CoreModel.TypeApp app) {
-      if (containsPii(app.base, visited)) {
-        return true;
-      }
+      // base 是类型名字符串（v2），本身不可能是 PiiType，只需检查类型实参
       if (app.args != null) {
         for (CoreModel.Type arg : app.args) {
           if (containsPii(arg, visited)) {
@@ -58,7 +56,7 @@ public final class PiiSupport {
           }
         }
       }
-      return containsPii(func.returnType, visited);
+      return containsPii(func.ret, visited);
     }
     return false;
   }

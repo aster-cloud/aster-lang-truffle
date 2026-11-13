@@ -3,6 +3,7 @@ package aster.truffle;
 import aster.core.ast.Module;
 import aster.core.canonicalizer.Canonicalizer;
 import aster.core.identifier.VocabularyScopes;
+import aster.core.ir.CoreIrJson;
 import aster.core.ir.CoreModel;
 import aster.core.lexicon.Lexicon;
 import aster.core.lexicon.LexiconRegistry;
@@ -13,15 +14,12 @@ import aster.core.resolve.NameResolution;
 import aster.core.resolve.NameResolutionException;
 import aster.core.resolve.ResolutionContext;
 import aster.core.typecheck.model.Diagnostic;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -49,9 +47,6 @@ import java.util.logging.Logger;
 public final class CnlCompiler {
 
     private static final Logger LOGGER = Logger.getLogger(CnlCompiler.class.getName());
-
-    private static final ObjectMapper MAPPER = new ObjectMapper()
-            .enable(SerializationFeature.INDENT_OUTPUT);
 
     private CnlCompiler() {
         // 工具类，禁止实例化
@@ -95,8 +90,9 @@ public final class CnlCompiler {
             throws CompilationException {
         CoreModel.Module core = compileToCore(source, lexicon, vocabulary);
         try {
-            return MAPPER.writeValueAsString(core);
-        } catch (IOException e) {
+            // 规范序列化出口（ADR 0055 §5）：Core IR v2 的 CanonicalJson 字节，Loader 严格读入
+            return CoreIrJson.serialize(core);
+        } catch (RuntimeException e) {
             throw new CompilationException("JSON 序列化失败: " + e.getMessage(), e);
         }
     }

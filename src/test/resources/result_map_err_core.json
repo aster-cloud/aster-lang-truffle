@@ -1,69 +1,156 @@
 {
+  "kind": "Module",
+  "schemaVersion": 2,
   "name": "bench.result_map_err",
-  "decls": [{
-    "kind": "Func",
-    "name": "main",
-    "params": [],
-    "ret": {"kind": "TypeName", "name": "Int"},
-    "effects": [],
-    "body": {
-      "kind": "Block",
-      "statements": [
-        {
-          "kind": "Let",
-          "name": "errLen",
-          "expr": {
-            "kind": "Lambda",
-            "params": [{"name": "msg", "type": {"kind": "TypeName", "name": "Text"}}],
-            "ret": {"kind": "TypeName", "name": "Int"},
-            "captures": [],
-            "body": {
-              "kind": "Block",
-              "statements": [{
-                "kind": "Return",
-                "expr": {
-                  "kind": "Call",
-                  "target": {"kind": "Name", "name": "Text.length"},
-                  "args": [{"kind": "Name", "name": "msg"}]
+  "profile": null,
+  "decls": [
+    {
+      "kind": "Func",
+      "name": "main",
+      "typeParams": [],
+      "params": [],
+      "ret": {
+        "kind": "TypeName",
+        "name": "Int",
+        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+      },
+      "retTypeInferred": false,
+      "annotations": [],
+      "retAnnotations": [],
+      "effects": [],
+      "effectParams": [],
+      "effectCaps": [],
+      "effectCapsExplicit": false,
+      "inputRefs": null,
+      "body": {
+        "kind": "Block",
+        "statements": [
+          {
+            "kind": "Let",
+            "name": "errLen",
+            "expr": {
+              "kind": "Lambda",
+              "params": [
+                {
+                  "name": "msg",
+                  "type": {
+                    "kind": "TypeName",
+                    "name": "Text",
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  },
+                  "annotations": [],
+                  "constraints": [],
+                  "typeInferred": false
                 }
-              }]
-            }
+              ],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "body": {
+                "kind": "Block",
+                "statements": [
+                  {
+                    "kind": "Return",
+                    "expr": {
+                      "kind": "Call",
+                      "target": {
+                        "kind": "Name",
+                        "name": "Text.length",
+                        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                      },
+                      "args": [
+                        {
+                          "kind": "Name",
+                          "name": "msg",
+                          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                        }
+                      ],
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "captures": [],
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+            },
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+          },
+          {
+            "kind": "Let",
+            "name": "errInput",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "aster.runtime.StdResult.errText",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "args": [
+                {
+                  "kind": "String",
+                  "value": "oops",
+                  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                }
+              ],
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+            },
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+          },
+          {
+            "kind": "Let",
+            "name": "mappedErr",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Result.mapErr",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "errInput",
+                  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                },
+                {
+                  "kind": "Name",
+                  "name": "errLen",
+                  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                }
+              ],
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+            },
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+          },
+          {
+            "kind": "Return",
+            "expr": {
+              "kind": "Call",
+              "target": {
+                "kind": "Name",
+                "name": "Result.unwrapErr",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "args": [
+                {
+                  "kind": "Name",
+                  "name": "mappedErr",
+                  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                }
+              ],
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+            },
+            "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
           }
-        },
-        {
-          "kind": "Let",
-          "name": "errInput",
-          "expr": {
-            "kind": "Call",
-            "target": {"kind": "Name", "name": "aster.runtime.StdResult.errText"},
-            "args": [
-              {"kind": "String", "value": "oops"}
-            ]
-          }
-        },
-        {
-          "kind": "Let",
-          "name": "mappedErr",
-          "expr": {
-            "kind": "Call",
-            "target": {"kind": "Name", "name": "Result.mapErr"},
-            "args": [
-              {"kind": "Name", "name": "errInput"},
-              {"kind": "Name", "name": "errLen"}
-            ]
-          }
-        },
-        {
-          "kind": "Return",
-          "expr": {
-            "kind": "Call",
-            "target": {"kind": "Name", "name": "Result.unwrapErr"},
-            "args": [
-              {"kind": "Name", "name": "mappedErr"}
-            ]
-          }
-        }
-      ]
+        ],
+        "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+      },
+      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
     }
-  }]
+  ],
+  "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
 }

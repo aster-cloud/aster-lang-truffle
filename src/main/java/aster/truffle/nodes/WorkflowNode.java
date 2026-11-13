@@ -93,10 +93,8 @@ public final class WorkflowNode extends Node {
   public Object execute(VirtualFrame frame) {
     Profiler.inc("workflow");
 
+    // workflow 是并发构造，不是效应授权（ADR 0055 #5），不做 effect 校验；step 体内的 IO 仍按继承的权限校验
     AsterContext context = AsterLanguage.getContext();
-    if (!context.isEffectAllowed("Async")) {
-      throw new RuntimeException("workflow requires Async effect");
-    }
     // ★步骤级 trace（M2.1b）：workflow 任务体在 executor worker 线程跑决策节点（非 eval 线程，
     // 收不进 collector），且 await/wait 的 inline 调度让 trace 形状随调度路径漂移。故整条 trace
     // 标 NON_REPLAYABLE——绝不产不稳定/部分 traceHash（Codex 复审 P0）。全局关时 PE 折叠 no-op。

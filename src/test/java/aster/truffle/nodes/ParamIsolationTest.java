@@ -35,18 +35,59 @@ class ParamIsolationTest {
     private static final String ECHO_PROGRAM = """
         {
           "kind": "Module",
+          "schemaVersion": 2,
           "name": "test.param.isolation",
-          "decls": [{
-            "kind": "Func",
-            "name": "echo",
-            "params": [{ "name": "x", "type": { "kind": "TypeName", "name": "Int" } }],
-            "ret": { "kind": "TypeName", "name": "Int" },
-            "effects": [],
-            "body": {
-              "kind": "Block",
-              "statements": [{ "kind": "Return", "expr": { "kind": "Name", "name": "x" } }]
+          "profile": null,
+          "decls": [
+            {
+              "kind": "Func",
+              "name": "echo",
+              "typeParams": [],
+              "params": [
+                {
+                  "name": "x",
+                  "type": {
+                    "kind": "TypeName",
+                    "name": "Int",
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  },
+                  "annotations": [],
+                  "constraints": [],
+                  "typeInferred": false
+                }
+              ],
+              "ret": {
+                "kind": "TypeName",
+                "name": "Int",
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "retTypeInferred": false,
+              "annotations": [],
+              "retAnnotations": [],
+              "effects": [],
+              "effectParams": [],
+              "effectCaps": [],
+              "effectCapsExplicit": false,
+              "inputRefs": null,
+              "body": {
+                "kind": "Block",
+                "statements": [
+                  {
+                    "kind": "Return",
+                    "expr": {
+                      "kind": "Name",
+                      "name": "x",
+                      "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                    },
+                    "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+                  }
+                ],
+                "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
+              },
+              "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
             }
-          }]
+          ],
+          "origin": {"file": null, "start": {"line": 1, "col": 1}, "end": {"line": 1, "col": 1}, "written": null, "role": null}
         }
         """;
 

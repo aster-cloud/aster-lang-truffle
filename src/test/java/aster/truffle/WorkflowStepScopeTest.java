@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class WorkflowStepScopeTest {
 
-  private static final String INT = "{\"kind\":\"TypeName\",\"name\":\"Int\"}";
+  private static final String INT = IrV2.typeName("Int");
   private final ConcurrentLinkedQueue<Object> recorded = new ConcurrentLinkedQueue<>();
 
   @BeforeEach
@@ -48,45 +48,47 @@ class WorkflowStepScopeTest {
   }
 
   private static String num(int v) {
-    return "{\"kind\":\"Int\",\"value\":" + v + "}";
+    return IrV2.intLit(v);
   }
 
   private static String name(String n) {
-    return "{\"kind\":\"Name\",\"name\":\"" + n + "\"}";
+    return IrV2.name(n);
   }
 
   private static String call(String target, String... args) {
-    return "{\"kind\":\"Call\",\"target\":" + name(target) + ",\"args\":[" + String.join(",", args) + "]}";
+    return IrV2.call(name(target), args);
   }
 
   private static String let(String n, String expr) {
-    return "{\"kind\":\"Let\",\"name\":\"" + n + "\",\"expr\":" + expr + "}";
+    return IrV2.let(n, expr);
   }
 
   private static String set(String n, String expr) {
-    return "{\"kind\":\"Set\",\"name\":\"" + n + "\",\"expr\":" + expr + "}";
+    return IrV2.set(n, expr);
   }
 
   private static String ret(String expr) {
-    return "{\"kind\":\"Return\",\"expr\":" + expr + "}";
+    return IrV2.ret(expr);
   }
 
   private static String block(String... stmts) {
-    return "{\"kind\":\"Block\",\"statements\":[" + String.join(",", stmts) + "]}";
+    return IrV2.block(stmts);
   }
 
+  /** {@code deps} 为逗号拼接的 JSON 字符串列表内容（如 {@code "\"a\""}，可为空串）。 */
   private static String step(String stepName, String deps, String body, String compensate) {
-    return "{\"name\":\"" + stepName + "\",\"dependencies\":[" + deps + "],\"body\":" + body
-        + (compensate == null ? "" : ",\"compensate\":" + compensate) + "}";
+    return "{\"kind\":\"step\",\"name\":" + IrV2.q(stepName) + ",\"body\":" + body + ",\"compensate\":"
+        + (compensate == null ? "null" : compensate) + ",\"dependencies\":[" + deps + "],\"effectCaps\":[],\"origin\":"
+        + IrV2.ORIGIN + "}";
   }
 
   private static String program(String... stmts) {
-    return "{\"name\":\"wf.scope\",\"decls\":[{\"kind\":\"Func\",\"name\":\"run\",\"params\":[],\"ret\":" + INT
-        + ",\"effects\":[\"io\",\"Async\"],\"body\":" + block(stmts) + "}]}";
+    return IrV2.module("wf.scope", IrV2.func("run", List.of(), INT, List.of("io"), block(stmts)));
   }
 
   private static String workflow(String... steps) {
-    return "{\"kind\":\"workflow\",\"steps\":[" + String.join(",", steps) + "]}";
+    return "{\"kind\":\"workflow\",\"steps\":[" + String.join(",", steps)
+        + "],\"effectCaps\":[],\"retry\":null,\"timeout\":null,\"origin\":" + IrV2.ORIGIN + "}";
   }
 
   private static Value run(String json) throws Exception {

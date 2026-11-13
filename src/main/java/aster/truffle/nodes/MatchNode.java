@@ -128,17 +128,17 @@ public abstract class MatchNode extends AsterExpressionNode {
   }
 
   // ctor match: match Data 值或旧 Map，按字段顺序依次绑定
+  /**
+   * 构造器 / 枚举变体模式（ADR 0055 #15、#16）。0 参枚举变体是 {@code args} 为空的 PatCtor：
+   * 按变体名匹配枚举值、枚举的字符串表示，以及带 {@code value} 的映射表示，不绑定任何名字。
+   * 有参构造器按位置把字段值交给 {@code args} 中的子模式。
+   */
   public static final class PatCtorNode extends PatternNode {
     private final String typeName;
-    private final java.util.List<String> bindNames;
-    /** 与 bindNames 一一对应的绑定槽位，-1 表示写 Env。 */
-    private final int[] bindSlots;
     private final java.util.List<PatternNode> args;
-    public PatCtorNode(String typeName, java.util.List<String> bindNames) { this(typeName, bindNames, null, java.util.List.of()); }
-    public PatCtorNode(String typeName, java.util.List<String> bindNames, int[] bindSlots, java.util.List<PatternNode> args) {
+    public PatCtorNode(String typeName) { this(typeName, java.util.List.of()); }
+    public PatCtorNode(String typeName, java.util.List<PatternNode> args) {
       this.typeName = typeName;
-      this.bindNames = bindNames;
-      this.bindSlots = bindSlots;
       this.args = (args == null ? java.util.List.of() : args);
     }
     @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) {
@@ -147,7 +147,7 @@ public abstract class MatchNode extends AsterExpressionNode {
       if ("Some".equals(typeName) && isBareOptionalPayload(s)) {
         return matchOrderedFields(1, idx -> s, frame, env);
       }
-      if ("None".equals(typeName) && args.isEmpty() && (bindNames == null || bindNames.isEmpty()) && isGuestNull(s)) {
+      if ("None".equals(typeName) && args.isEmpty() && isGuestNull(s)) {
         return true;
       }
       if (s instanceof AsterDataValue dataValue) {
@@ -164,7 +164,11 @@ public abstract class MatchNode extends AsterExpressionNode {
       if (!(s instanceof java.util.Map)) return false;
       var m = (java.util.Map<String,Object>) s;
       Object t = m.get("__type");
-      if (!(t instanceof String) || !typeName.equals(t)) return false;
+      if (!(t instanceof String)) {
+        // 枚举变体的映射表示 {value: "Red"}：只有 0 参变体模式能匹配
+        return args.isEmpty() && typeName.equals(m.get("value"));
+      }
+      if (!typeName.equals(t)) return false;
       java.util.ArrayList<Object> values = new java.util.ArrayList<>();
       for (var e : m.entrySet()) {
         if ("__type".equals(e.getKey())) continue;
@@ -173,83 +177,42 @@ public abstract class MatchNode extends AsterExpressionNode {
       return matchOrderedFields(values.size(), values::get, frame, env);
     }
 
+    /**
+     * 按位置匹配字段值：子模式多于字段时多出的子模式不参与，字段多于子模式时多出的字段忽略。
+     * 子模式为绑定名时直接绑定字段值（字段值可以为 null），{@code _} 不绑定。
+     */
     private boolean matchOrderedFields(int fieldCount, java.util.function.IntFunction<Object> valueProvider, VirtualFrame frame, Env env) {
-      int idx = 0;
-      for (int i = 0; i < fieldCount; i++) {
+      int n = Math.min(fieldCount, args.size());
+      for (int i = 0; i < n; i++) {
         Object value = valueProvider.apply(i);
-        if (idx < args.size()) {
-          PatternNode pn = args.get(idx);
-          if (pn instanceof PatNameNode patName) {
-            bind(frame, env, patName.slot, patName.name, value);
-          } else if (!pn.matchesAndBind(value, frame, env)) {
-            return false;
-          }
-        } else if (idx < (bindNames == null ? 0 : bindNames.size())) {
-          String bn = bindNames.get(idx);
-          bind(frame, env, bindSlots == null ? -1 : bindSlots[idx], bn, value);
+        PatternNode pn = args.get(i);
+        if (pn instanceof PatNameNode patName) {
+          if (!"_".equals(patName.name)) bind(frame, env, patName.slot, patName.name, value);
+        } else if (!pn.matchesAndBind(value, frame, env)) {
+          return false;
         }
-        idx++;
       }
       return true;
     }
   }
 
-  // Name pattern, two meanings distinguished by case (mirrors the TS interpreter):
-  //   - ASCII-capitalized name (enum variant / type, e.g. NotFound) → match by name
-  //     equality; does NOT bind. Without this, a lowercase catch-all arm could
-  //     never be reached when the scrutinee is an enum-as-string, and a
-  //     Capitalized arm would not exclude other variants.
-  //   - any other name (x / value / 其他 / Ärger) → catch-all binding: matches any
-  //     non-null value and binds it. (A `When null` arm is a separate PatNull.)
+  /**
+   * 名字模式：只用于绑定（ADR 0055 #16）。匹配任意非 null 值并绑定；枚举变体由 lowering 产出
+   * {@link PatCtorNode}，这里不再按首字母大小写猜测变体。宿主注入的 interop-null 不匹配，
+   * 它属于 {@code When null} 分支（PatNull），与 Java null 一致。
+   */
   public static final class PatNameNode extends PatternNode {
     private final String name;
-    /** 绑定槽位，-1 表示写 Env；变体名（大写开头）不绑定。 */
+    /** 绑定槽位，-1 表示写 Env。 */
     private final int slot;
     public PatNameNode(String name) { this(name, -1); }
     public PatNameNode(String name, int slot) { this.name = name; this.slot = slot; }
-    /** 名字按绑定语义处理（非变体、非 {@code _}）时才需要槽位。 */
-    public static boolean binds(String name) {
-      return name != null && !name.isEmpty() && !"_".equals(name) && !isVariantName(name);
-    }
-    /**
-     * 只看首字母是否为 ASCII 大写（ADR 0051 裁决 R55），与 TS 解释器 {@code /^[A-Z]/}、R2 判定、parity 归一化一致。
-     * 非 ASCII 大写开头（{@code Ärger}）与无大小写文字的枚举成员由 R2 产出无参数 PatCtor，PatName 一律是绑定。
-     */
-    static boolean isVariantName(String name) {
-      return name != null && !name.isEmpty() && name.charAt(0) >= 'A' && name.charAt(0) <= 'Z';
-    }
-    private boolean isVariant() {
-      return isVariantName(name);
-    }
-    @Override @SuppressWarnings("unchecked") public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) {
+    @Override public boolean matchesAndBind(Object s, VirtualFrame frame, Env env) {
       if (AsterConfig.DEBUG) {
         System.err.println("DEBUG: PatNameNode name=" + name + " scrutinee=" + s + " type=" + (s == null ? "null" : s.getClass().getName()));
       }
-      if (isVariant()) {
-        // `When None` 也匹配可空值的裸 null（aster-lang-ts#277，见 PatCtorNode）
-        if ("None".equals(name) && isGuestNull(s)) return true;
-        if (s == null) return false;
-        if (s instanceof String) return name.equals(s);
-        if (s instanceof AsterEnumValue enumValue) {
-          return name.equals(enumValue.getVariantName()) || name.equals(enumValue.getEnumName());
-        }
-        if (s instanceof AsterDataValue dataValue) {
-          return name.equals(dataValue.getTypeName());
-        }
-        if (s instanceof java.util.Map) {
-          var m = (java.util.Map<String,Object>) s;
-          Object v = m.get("value");
-          if (v instanceof String && name.equals(v)) return true; // enum variant value
-          Object t = m.get("__type");
-          return t instanceof String && name.equals(t); // constructor type fallback
-        }
-        return false;
-      }
-      // lowercase: catch-all binding over any non-null value. interop-null (a
-      // host-injected null) must NOT match here — it belongs to the `When null`
-      // arm, same as a Java null.
       if (isGuestNull(s)) return false;
-      bind(frame, env, slot, name, s);
+      if (!"_".equals(name)) bind(frame, env, slot, name, s);
       return true;
     }
   }

@@ -205,7 +205,8 @@ class CoreIrEvalCli {
             }
         }
 
-        String coreJson = MAPPER.writeValueAsString(coreModule);
+        // 规范序列化出口（ADR 0055 §5），与生产路径 CnlCompiler 相同
+        String coreJson = aster.core.ir.CoreIrJson.serialize(coreModule);
 
         // Restricted polyglot context — Codex review R-Phase-C-C1. Even
         // though this CLI runs in CI under read-only repo permissions,
