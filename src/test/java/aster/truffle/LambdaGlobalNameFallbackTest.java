@@ -107,4 +107,14 @@ class LambdaGlobalNameFallbackTest {
                 IrV2.ret(IrV2.call(IrV2.name("add"), IrV2.name("x"), IrV2.name("offset"))))),
             IrV2.ret(IrV2.call(IrV2.name("f"), IrV2.intLit(5))))));
     }
+
+    @Test
+    void enumMemberInsideLambdaIsNotCapturedAndStillResolves() throws IOException {
+        // 枚举成员不是外层局部，不进 captures；lambda 体内的 Hoch 按枚举成员求值  → 1
+        assertEquals(1, run(IrV2.enumDecl("Stufe", "Hoch", "Niedrig"), func("main", List.of(),
+            IrV2.let("f", lambda(List.of("x"), List.of(), IrV2.ret(IrV2.name("Hoch")))),
+            IrV2.match(IrV2.call(IrV2.name("f"), IrV2.intLit(0)),
+                IrV2.caseOf(IrV2.patCtor("Hoch"), IrV2.ret(IrV2.intLit(1))),
+                IrV2.caseOf(IrV2.patName("other"), IrV2.ret(IrV2.intLit(2)))))));
+    }
 }
