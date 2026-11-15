@@ -274,6 +274,38 @@ class HostCallEffectPermissionTest {
     }
 
     @Test
+    void forcedCloseCancelsWorkerEnteredInContext() throws Exception {
+        // aster-api 看门狗以 ctx.close(true) 中断超时执行。step 在 worker 线程上进入 context 后，
+        // 强制关闭必须能取消 worker 上的 guest 代码并按时返回，而不是挂起或留下失控线程。
+        // spin(n) = spin(n-1) + spin(n-1)：无循环语法下的指数递归，n=60 实际不会自行结束。
+        String spin = func("spin", List.of(param("n", INT)), INT, List.of(),
+            block(ifStmt(call(name("=="), name("n"), intLit(0)), block(ret(intLit(0))), block()),
+                ret(call(name("+"),
+                    call(name("spin"), call(name("-"), name("n"), intLit(1))),
+                    call(name("spin"), call(name("-"), name("n"), intLit(1)))))));
+        String json = module("m", spin, func("main", List.of(param("x", INT)), INT, List.of("io"),
+            block(workflow(block(ret(call(name("spin"), intLit(60))))), ret(name("x")))));
+        Context ctx = Context.newBuilder("aster").allowAllAccess(true).build();
+        Value entry = ctx.eval(source(json));
+        java.util.concurrent.ScheduledExecutorService closer =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+        try {
+            java.util.concurrent.ScheduledFuture<?> closing = closer.schedule(() -> ctx.close(true), 300,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+            long started = System.nanoTime();
+            // 调用线程在 executeUntilComplete 中被中断（取消 / 中断异常，具体形态非本用例关注点）
+            assertThrows(PolyglotException.class, () -> entry.execute(1));
+            // close(true) 要等所有已进入 context 的线程（含 worker）被取消并离开才返回：
+            // 按时返回即说明 worker 上的 guest 代码被取消，没有挂起关闭
+            closing.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+            assertTrue(elapsedMs < 10_000, "强制关闭后应及时返回，实际 " + elapsedMs + "ms");
+        } finally {
+            closer.shutdownNow();
+        }
+    }
+
+    @Test
     void workflowInParamEntryFollowsHostCallDeclaration() throws Exception {
         // #174 × #175：有参入口经宿主调用，step 在 worker 线程上沿用入口声明
         String declared = module("m", func("main", List.of(param("x", INT)), INT, List.of("io"),
