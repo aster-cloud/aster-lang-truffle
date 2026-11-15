@@ -103,7 +103,7 @@ public abstract class AwaitNode extends AsterExpressionNode {
       // 任务失败 - 抛出异常
       if (status == TaskStatus.FAILED) {
         Throwable exception = state.getException();
-        throw new RuntimeException("Async task failed: " + taskId, exception);
+        throw new RuntimeException(WaitNode.asyncFailureMessage(taskId, exception), exception);
       }
 
       // 任务被取消 - 终态（#43 HIGH）

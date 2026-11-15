@@ -129,6 +129,16 @@ public final class AllocationBudget {
     return outermost;
   }
 
+  /**
+   * 当前线程是否正处在某个 guest 根帧之内（深度 &gt; 0）。
+   *
+   * <p>供宿主调用边界区分「宿主发起的最外层调用」与「guest 执行中经宿主回调再入」：
+   * 后者不得用被调函数自身的声明放宽调用方已有的 effect 权限（见 {@code LambdaValue#execute}）。
+   */
+  public static boolean isInsideGuestFrame() {
+    return DEPTH.get()[0] > 0;
+  }
+
   /** 退出 guest 根帧；最外层退出时清理 ThreadLocal，避免池线程长期持有。 */
   public static void exitFrame(boolean outermost) {
     int[] d = DEPTH.get();

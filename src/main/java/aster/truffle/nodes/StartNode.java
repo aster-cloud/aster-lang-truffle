@@ -51,27 +51,33 @@ public final class StartNode extends Node {
     // 包装任务：将子表达式包装为 Runnable
     Runnable task = () -> {
       try {
-        // 保存当前 effect 权限
-        Set<String> previousEffects = context.getAllowedEffects();
-        // ★同 WorkflowNode：任务体在 worker 线程上跑 Exec.exec，不经过任何根节点，
-        // 不接线则分配预算在异步路径上完全失效；不配对则额度在该 worker 上只增不清。
-        final boolean outermostFrame = aster.truffle.runtime.AllocationBudget.enterFrame();
-        try {
-          // 恢复捕获的 effect 权限，使任务体能够执行需要特定 effect 的操作
-          context.setAllowedEffects(capturedEffects);
-          // 在 materializedFrame 上下文中执行子表达式并捕获结果
-          Object result = Exec.exec(expr, materializedFrame);
-          // 存储任务结果
-          AsyncTaskRegistry registryInTask = context.getAsyncRegistry();
-          registryInTask.setResult(taskId, result);
-        } finally {
-          // 恢复之前的 effect 权限
-          context.setAllowedEffects(previousEffects);
-          aster.truffle.runtime.AllocationBudget.exitFrame(outermostFrame);
-        }
+        // 任务体可能在 executor worker 线程上跑：先进入 context，否则 guest 代码在其上
+        // 拿不到 AsterLanguage.getContext()，效应校验恒拒（#175）。进入本身不授予任何效应。
+        context.callEntered(() -> {
+          // 保存当前 effect 权限
+          Set<String> previousEffects = context.getAllowedEffects();
+          // ★同 WorkflowNode：任务体在 worker 线程上跑 Exec.exec，不经过任何根节点，
+          // 不接线则分配预算在异步路径上完全失效；不配对则额度在该 worker 上只增不清。
+          final boolean outermostFrame = aster.truffle.runtime.AllocationBudget.enterFrame();
+          try {
+            // 恢复捕获的 effect 权限，使任务体能够执行需要特定 effect 的操作
+            context.setAllowedEffects(capturedEffects);
+            // 在 materializedFrame 上下文中执行子表达式并捕获结果
+            Object result = Exec.exec(expr, materializedFrame);
+            // 存储任务结果
+            AsyncTaskRegistry registryInTask = context.getAsyncRegistry();
+            registryInTask.setResult(taskId, result);
+            return null;
+          } finally {
+            // 恢复之前的 effect 权限
+            context.setAllowedEffects(previousEffects);
+            aster.truffle.runtime.AllocationBudget.exitFrame(outermostFrame);
+          }
+        });
       } catch (Throwable t) {
         // 异常会被 AsyncTaskRegistry.executeNext() 捕获并存储在 TaskState
-        throw new RuntimeException("Async task failed", t);
+        // 消息带根因：该异常可能被同 context 的 workflow 调度器原样抛给宿主（任务被其 executor 拉起时）
+        throw new RuntimeException(WaitNode.asyncFailureMessage(taskId, t), t);
       }
     };
 

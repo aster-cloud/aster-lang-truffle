@@ -106,6 +106,21 @@ public final class WaitNode extends Node {
    * （#43 HIGH：CANCELLED 既非 COMPLETED 也非 FAILED，若不在此处终止会永久忙等）。
    * 全部 COMPLETED 才返回；否则 {@code executeNext()} 推进调度后继续轮询。
    */
+  /**
+   * 失败任务的错误消息：带上根因消息。
+   *
+   * <p>宿主只拿得到 PolyglotException 的消息，看不到 Java cause 链；不带根因时，任务体内
+   * 「effect not permitted」与「IO 不受支持」等完全不同的失败对宿主是同一句 "Async task failed"。
+   */
+  static String asyncFailureMessage(String taskId, Throwable exception) {
+    Throwable root = exception;
+    while (root != null && root.getCause() != null && root.getCause() != root) {
+      root = root.getCause();
+    }
+    String detail = root == null ? null : root.getMessage();
+    return "Async task failed: " + taskId + (detail == null ? "" : " (" + detail + ")");
+  }
+
   /** 轮询让步时长：与 AwaitNode 同源（AwaitNode.POLL_PARK_MILLIS）。 */
   static void pollUntilAllTerminal(AsyncTaskRegistry registry, String[] taskIds) {
     while (true) {
@@ -124,7 +139,7 @@ public final class WaitNode extends Node {
         // 任务失败 - 抛出异常
         if (status == TaskStatus.FAILED) {
           Throwable exception = state.getException();
-          throw new RuntimeException("Async task failed: " + taskId, exception);
+          throw new RuntimeException(asyncFailureMessage(taskId, exception), exception);
         }
 
         // 任务被取消 - 终态（#43 HIGH）

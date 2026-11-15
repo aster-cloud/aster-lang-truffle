@@ -75,10 +75,9 @@ public final class AsterLanguage extends TruffleLanguage<AsterContext> {
    * double-checked + {@code getLock()}——那处此前是无锁 check-then-insert，
    * 两个 step 并发调 {@code List.map} 会双双 {@code insert()} 改写同一个 {@code @Child}。
    *
-   * <p>范围声明：本方法只声明策略、消除「未定义行为」这一层。issue 正文提到的
-   * 「worker 线程未经 polyglot API enter context」本身（{@code TruffleContext.enter()}）
-   * 未在此处理——实测当前 {@code AsterLanguage.getContext()} 在 worker 线程上可正常返回，
-   * 且四个并发 Context 各自跑 workflow 均成功，未复现该失败。
+   * <p>范围声明：本方法只声明策略、消除「未定义行为」这一层。worker 线程本身并未进入 context，
+   * {@code AsterLanguage.getContext()} 在其上返回 null（#175）；任务体执行前由
+   * {@link AsterContext#callEntered} 进入 context（{@code TruffleContext.enter()}）。
    */
   @Override
   protected boolean isThreadAccessAllowed(Thread thread, boolean singleThreaded) {
