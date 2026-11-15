@@ -159,7 +159,10 @@ public final class WorkflowNode extends Node {
       Set<String> capturedEffects = effectSnapshots[i];
       final int stepIndex = i;
 
-      Callable<Object> callable = () -> {
+      // step 体在 executor worker 线程上执行：先进入 context（#175），否则 guest 代码在 worker 上
+      // 拿不到 AsterLanguage.getContext()，入口声明了 io 的 step 内 IO 也被拒。进入不授予任何效应，
+      // 权限仍只来自上面在调用线程捕获的快照。
+      Callable<Object> callable = () -> context.callEntered(() -> {
         Set<String> previousEffects = context.getAllowedEffects();
         // ★step 体在 executor worker 线程上执行，**既不经过 AsterRootNode 也不经过
         // LambdaRootNode** → 不接线的话分配预算在整条 workflow 路径上等于没上线
@@ -187,7 +190,7 @@ public final class WorkflowNode extends Node {
           context.setAllowedEffects(previousEffects);
           aster.truffle.runtime.AllocationBudget.exitFrame(outermostFrame);
         }
-      };
+      });
 
       Set<String> depIds = resolveDependencyIds(i, nameToId);
       // 使用显式 workflowId 注册，避免并发 workflow 时全局字段被覆盖

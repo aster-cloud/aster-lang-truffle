@@ -3,9 +3,12 @@ package aster.truffle;
 import aster.truffle.runtime.AsterConfig;
 import aster.truffle.runtime.AsyncTaskRegistry;
 import aster.truffle.runtime.Builtins;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.TruffleContext;
 import com.oracle.truffle.api.TruffleLanguage;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -112,6 +115,29 @@ public final class AsterContext {
    */
   public void clearAllowedEffects() {
     effectPermissions.remove();
+  }
+
+  /**
+   * 在当前线程进入本 context 后执行 {@code action}，结束后离开（#175）。
+   *
+   * <p>workflow step 与 {@code Start} 的任务体在 {@code AsyncTaskRegistry} 的 executor 线程上执行 guest
+   * 节点。这些线程不是宿主线程，也从未进入过 polyglot context，于是 {@link AsterLanguage#getContext()}
+   * 在其上返回 null——{@code Builtins.requireEffect} 拿不到权限视图，入口声明了 {@code io} 的 step 内 IO
+   * 也被拒。进入 context 只是让 guest 代码能看到本 context，<b>不授予任何效应</b>：权限仍由调用方在
+   * 父线程捕获、再设到 worker 线程（{@link #setAllowedEffects}）。
+   *
+   * <p>可重入：{@code executeNext()} 可能 inline 在已进入 context 的调用线程上执行任务，
+   * {@code enter} 嵌套计数，{@code leave} 恢复进入前的状态。
+   */
+  @TruffleBoundary
+  public <T> T callEntered(Callable<T> action) throws Exception {
+    TruffleContext truffleContext = env.getContext();
+    Object previous = truffleContext.enter(null);
+    try {
+      return action.call();
+    } finally {
+      truffleContext.leave(null, previous);
+    }
   }
 
   /**
