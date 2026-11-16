@@ -126,7 +126,8 @@ class SandboxedExecutorTest {
                 assertEquals(Outcome.TIMEOUT, ((Outcome.Failed) f.get()).code());
             }
             long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-            assertTrue(elapsedMs < 3_000, "四个并发超时应约 1 s 内全部返回，实际 " + elapsedMs + "ms");
+            // 串行关闭会让第 k 个在约 k s 后才返回；并发关闭全部在约 1 s 返回
+            assertTrue(elapsedMs < 1_800, "四个并发超时应约 1 s 内全部返回，实际 " + elapsedMs + "ms");
         } finally {
             pool.shutdownNow();
         }
@@ -142,22 +143,28 @@ class SandboxedExecutorTest {
                 Return 1.
               Return spin(n minus 1) plus spin(n minus 1).
             """);
-        java.util.concurrent.atomic.AtomicReference<Outcome> result = new java.util.concurrent.atomic.AtomicReference<>();
-        Thread caller = new Thread(() -> result.set(executor.execute(core, "spin", new Object[]{60}, Duration.ofSeconds(60))));
-        caller.start();
-        Thread.sleep(300);
-        caller.interrupt();
-        caller.join(5_000);
-        assertFalse(caller.isAlive(), "中断后调用线程应返回");
-        assertEquals(Outcome.EVAL_ERROR, ((Outcome.Failed) result.get()).code());
-        // 被取消的求值不再占用执行器：随后的正常求值照常完成
-        Outcome ok = executor.execute(ir("""
-            Module demo.
+        // 0 ms：中断多半先于 Context 发布；300 ms：求值进行中
+        for (long delayMs : new long[]{0, 300}) {
+            java.util.concurrent.atomic.AtomicReference<Outcome> result = new java.util.concurrent.atomic.AtomicReference<>();
+            Thread caller = new Thread(() -> result.set(executor.execute(core, "spin", new Object[]{60}, Duration.ofSeconds(60))));
+            caller.start();
+            Thread.sleep(delayMs);
+            caller.interrupt();
+            caller.join(5_000);
+            assertFalse(caller.isAlive(), "中断后调用线程应返回");
+            assertEquals(Outcome.EVAL_ERROR, ((Outcome.Failed) result.get()).code());
+            // 被取消的求值线程不再运行（否则会一直跑到 60 s 超时）
+            long deadline = System.nanoTime() + 5_000_000_000L;
+            while (evalThreadsAlive() > 0 && System.nanoTime() < deadline) {
+                Thread.sleep(20);
+            }
+            assertEquals(0, evalThreadsAlive(), "delay=" + delayMs + "ms：求值线程仍在运行");
+        }
+    }
 
-            Rule ident given x as Int, produce Int:
-              Return x.
-            """), "ident", new Object[]{1}, Duration.ofSeconds(5));
-        assertEquals(1, ((Outcome.Ok) ok).hostValue());
+    private static long evalThreadsAlive() {
+        return Thread.getAllStackTraces().keySet().stream()
+            .filter(t -> t.isAlive() && t.getName().equals("aster-sandbox-eval")).count();
     }
 
     @Test

@@ -105,7 +105,8 @@ public final class SandboxedExecutor implements AutoCloseable {
         }
 
         AtomicReference<Context> running = new AtomicReference<>();
-        FutureTask<Outcome> task = new FutureTask<>(() -> evaluate(ir, guestArgs, timeout, running));
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        FutureTask<Outcome> task = new FutureTask<>(() -> evaluate(ir, guestArgs, timeout, running, cancelled));
         // stackSize 0 = JVM 缺省线程栈
         Thread worker = new Thread(null, task, "aster-sandbox-eval", 0);
         worker.setDaemon(true);
@@ -113,7 +114,9 @@ public final class SandboxedExecutor implements AutoCloseable {
         try {
             return task.get();
         } catch (InterruptedException e) {
-            // 调用线程被中断：取消仍在进行的求值，不留下继续运行的 guest 代码
+            // 调用线程被中断：取消仍在进行的求值，不留下继续运行的 guest 代码。先置位再读 Context：
+            // 求值线程发布 Context 后会复查该标志，两种先后顺序下都有一方负责关闭
+            cancelled.set(true);
             Context ctx = running.get();
             if (ctx != null) {
                 closer.execute(() -> closeQuietly(ctx));
@@ -129,9 +132,14 @@ public final class SandboxedExecutor implements AutoCloseable {
         }
     }
 
-    private Outcome evaluate(String ir, Object[] guestArgs, Duration timeout, AtomicReference<Context> running) {
+    private Outcome evaluate(String ir, Object[] guestArgs, Duration timeout, AtomicReference<Context> running,
+                             AtomicBoolean cancelled) {
         Context ctx = policy.apply(Context.newBuilder("aster").engine(engine)).build();
         running.set(ctx);
+        if (cancelled.get()) {
+            closeQuietly(ctx);
+            return new Outcome.Failed(Outcome.EVAL_ERROR, "求值被中断");
+        }
         AtomicBoolean fired = new AtomicBoolean(false);
         ScheduledFuture<?> guard = watchdog.schedule(() -> {
             fired.set(true);
