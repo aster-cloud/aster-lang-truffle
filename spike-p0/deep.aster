@@ -1,0 +1,6 @@
+Module spike.deep.
+
+Rule deep given n, produce:
+  If n at most 0
+    Return 0.
+  Return 1 plus deep(n minus 1).
