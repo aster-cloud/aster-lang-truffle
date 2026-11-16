@@ -99,7 +99,8 @@ jobs:
     permissions:
       # ADR 0053 修订 A2：main CI 门禁读本仓的 CI run 与 job。
       actions: read
-      contents: read
+      # ADR 0059 P1 T9：上传 aster-cli fat jar 为 Release 资产
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v6
@@ -209,3 +210,22 @@ jobs:
         run: ./gradlew publish
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # JVM aster CLI fat jar 作为 Release 资产（ADR 0059 P1 T9）：jar + .sha256；上传后下载回读比对 sha256。
+      # 测试已在 main CI 上对本 commit 通过（含 18 MiB 门与 java -jar 冒烟），这里只构建、核对体积并上传。
+      - name: Build aster-cli jar
+        run: ./gradlew :cli:checkCliJarSize
+      - name: Upload aster-cli jar to the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          JAR="cli/build/libs/aster-cli-${VERSION}.jar"
+          test -f "$JAR" && test -f "$JAR.sha256"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "$TAG" --notes "aster-lang-truffle $TAG"
+          gh release upload "$TAG" "$JAR" "$JAR.sha256" --clobber
+          mkdir -p /tmp/aster-cli-check && cd /tmp/aster-cli-check
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "aster-cli-${VERSION}.jar*" --clobber
+          sha256sum -c "aster-cli-${VERSION}.jar.sha256"
+          cmp "aster-cli-${VERSION}.jar.sha256" "$GITHUB_WORKSPACE/$JAR.sha256"
