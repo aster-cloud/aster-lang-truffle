@@ -106,6 +106,61 @@ class SandboxedExecutorTest {
     }
 
     @Test
+    void concurrentTimeoutsDoNotDelayEachOther() throws Exception {
+        String core = ir("""
+            Module demo.
+
+            Rule spin given n, produce:
+              If n less than 2
+                Return 1.
+              Return spin(n minus 1) plus spin(n minus 1).
+            """);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+        try {
+            long start = System.nanoTime();
+            List<java.util.concurrent.Future<Outcome>> futures = new ArrayList<>();
+            for (int k = 0; k < 4; k++) {
+                futures.add(pool.submit(() -> executor.execute(core, "spin", new Object[]{60}, Duration.ofSeconds(1))));
+            }
+            for (var f : futures) {
+                assertEquals(Outcome.TIMEOUT, ((Outcome.Failed) f.get()).code());
+            }
+            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+            assertTrue(elapsedMs < 3_000, "四个并发超时应约 1 s 内全部返回，实际 " + elapsedMs + "ms");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void interruptedCallerCancelsEvaluation() throws Exception {
+        String core = ir("""
+            Module demo.
+
+            Rule spin given n, produce:
+              If n less than 2
+                Return 1.
+              Return spin(n minus 1) plus spin(n minus 1).
+            """);
+        java.util.concurrent.atomic.AtomicReference<Outcome> result = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread caller = new Thread(() -> result.set(executor.execute(core, "spin", new Object[]{60}, Duration.ofSeconds(60))));
+        caller.start();
+        Thread.sleep(300);
+        caller.interrupt();
+        caller.join(5_000);
+        assertFalse(caller.isAlive(), "中断后调用线程应返回");
+        assertEquals(Outcome.EVAL_ERROR, ((Outcome.Failed) result.get()).code());
+        // 被取消的求值不再占用执行器：随后的正常求值照常完成
+        Outcome ok = executor.execute(ir("""
+            Module demo.
+
+            Rule ident given x as Int, produce Int:
+              Return x.
+            """), "ident", new Object[]{1}, Duration.ofSeconds(5));
+        assertEquals(1, ((Outcome.Ok) ok).hostValue());
+    }
+
+    @Test
     void statementLimitIsReportedAsTimeout() throws Exception {
         // 计算量预算（语句上限）与墙钟超时同归 TIMEOUT，避免快机器上与 Node CLI 分叉
         SandboxPolicy tiny = new SandboxPolicy(true, false, false, false, false, false, false, 1L);

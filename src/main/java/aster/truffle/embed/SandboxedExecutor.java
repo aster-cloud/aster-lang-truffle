@@ -10,12 +10,14 @@ import org.graalvm.polyglot.Value;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 按生产沙箱单次求值 Core IR 的执行器（ADR 0059 P1 T7），供 JVM {@code aster} CLI 使用。
@@ -49,6 +51,8 @@ public final class SandboxedExecutor implements AutoCloseable {
     private final SandboxPolicy policy;
     private final Engine engine;
     private final ScheduledExecutorService watchdog;
+    /** 执行取消动作：{@code close(true)} 会等待求值线程退出，不能占住唯一的调度线程（同 aster-api {@code ExecutionWatchdog}）。 */
+    private final ExecutorService closer;
 
     /** 使用 {@link SandboxPolicy#PRODUCTION}。 */
     public SandboxedExecutor() {
@@ -62,6 +66,11 @@ public final class SandboxedExecutor implements AutoCloseable {
             .build();
         this.watchdog = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "aster-sandbox-watchdog");
+            t.setDaemon(true);
+            return t;
+        });
+        this.closer = Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r, "aster-sandbox-close");
             t.setDaemon(true);
             return t;
         });
@@ -95,7 +104,8 @@ public final class SandboxedExecutor implements AutoCloseable {
             return new Outcome.Failed(Outcome.EVAL_ERROR, e.getMessage());
         }
 
-        FutureTask<Outcome> task = new FutureTask<>(() -> evaluate(ir, guestArgs, timeout));
+        AtomicReference<Context> running = new AtomicReference<>();
+        FutureTask<Outcome> task = new FutureTask<>(() -> evaluate(ir, guestArgs, timeout, running));
         // stackSize 0 = JVM 缺省线程栈
         Thread worker = new Thread(null, task, "aster-sandbox-eval", 0);
         worker.setDaemon(true);
@@ -103,6 +113,11 @@ public final class SandboxedExecutor implements AutoCloseable {
         try {
             return task.get();
         } catch (InterruptedException e) {
+            // 调用线程被中断：取消仍在进行的求值，不留下继续运行的 guest 代码
+            Context ctx = running.get();
+            if (ctx != null) {
+                closer.execute(() -> closeQuietly(ctx));
+            }
             Thread.currentThread().interrupt();
             return new Outcome.Failed(Outcome.EVAL_ERROR, "求值被中断");
         } catch (ExecutionException e) {
@@ -114,12 +129,13 @@ public final class SandboxedExecutor implements AutoCloseable {
         }
     }
 
-    private Outcome evaluate(String ir, Object[] guestArgs, Duration timeout) {
+    private Outcome evaluate(String ir, Object[] guestArgs, Duration timeout, AtomicReference<Context> running) {
         Context ctx = policy.apply(Context.newBuilder("aster").engine(engine)).build();
+        running.set(ctx);
         AtomicBoolean fired = new AtomicBoolean(false);
         ScheduledFuture<?> guard = watchdog.schedule(() -> {
             fired.set(true);
-            ctx.close(true);
+            closer.execute(() -> closeQuietly(ctx));
         }, timeout.toNanos(), TimeUnit.NANOSECONDS);
         try {
             Value evalResult = ctx.eval(Source.create("aster", ir));
@@ -137,11 +153,15 @@ public final class SandboxedExecutor implements AutoCloseable {
                 : new Outcome.Failed(Outcome.EVAL_ERROR, String.valueOf(e));
         } finally {
             guard.cancel(false);
-            try {
-                ctx.close(true);
-            } catch (RuntimeException ignored) {
-                // 已被看门狗关闭
-            }
+            closeQuietly(ctx);
+        }
+    }
+
+    private static void closeQuietly(Context ctx) {
+        try {
+            ctx.close(true);
+        } catch (RuntimeException ignored) {
+            // 已关闭或正在被另一线程关闭
         }
     }
 
@@ -173,6 +193,7 @@ public final class SandboxedExecutor implements AutoCloseable {
     @Override
     public void close() {
         watchdog.shutdownNow();
+        closer.shutdown();
         engine.close(true);
     }
 }
