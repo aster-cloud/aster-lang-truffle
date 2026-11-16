@@ -351,8 +351,16 @@ public final class AsterCli {
             Path src = cwd.resolve(a.source);
             String coreJson;
             PackagePipeline p = new PackagePipeline();
+            boolean isPackage = Files.isDirectory(src) || !a.source.endsWith(".aster");
+            // 包的编译输入一律取自 manifest，编译选项无意义；源码不涉及签名，信任锚选项无意义（与 Node CLI 同一裁决）
+            if (isPackage && (a.locale != null || a.aliasSet != null || a.vocabulary != null || a.allowStructural)) {
+                throw new CliException(ErrorCode.USAGE, "编译包时不接受 --locale / --alias-set / --vocabulary / --allow-structural");
+            }
+            if (!isPackage && (a.jwks != null || a.pubkey != null || a.allowUnsigned)) {
+                throw new CliException(ErrorCode.USAGE, "编译 .aster 源码时不接受 --jwks / --pubkey / --allow-unsigned");
+            }
             try {
-                if (Files.isDirectory(src) || !a.source.endsWith(".aster")) {
+                if (isPackage) {
                     p.trusted(src, anchor(a), a.allowUnsigned);
                     coreJson = p.recompile(ErrorCode.COMPILE_ERROR, false);
                 } else {
@@ -363,7 +371,9 @@ public final class AsterCli {
             }
             byte[] bytes = coreJson.getBytes(StandardCharsets.UTF_8);
             if (a.out == null) {
+                // stdout：IR 加一个换行；--out：文件只含 IR 字节，stdout 不输出
                 out.write(bytes, 0, bytes.length);
+                out.print("\n");
                 return 0;
             }
             try {
