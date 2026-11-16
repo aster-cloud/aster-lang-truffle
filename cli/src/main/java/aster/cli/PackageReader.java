@@ -267,32 +267,33 @@ public final class PackageReader {
             String rest = name.substring(slash + 1);
             boolean isDir = rest.isEmpty() || rest.endsWith("/");
             String rel = isDir && !rest.isEmpty() ? rest.substring(0, rest.length() - 1) : rest;
-            if (!rel.isEmpty() && !isPackagePath(rel)) {
+            // 根目录条目只能是 "<root>/"；"<root>//" 之类去掉斜杠后为空的写法不是合法路径
+            if (rest.isEmpty() ? !isDir : rel.isEmpty() || !isPackagePath(rel)) {
                 throw fail("条目路径不合法: " + name);
             }
             if (!seen.add(name)) {
                 throw fail("重复条目 " + name);
             }
-            if (isDir) {
-                if (cd.usize() != 0) {
-                    throw fail("目录条目带数据");
-                }
-            } else {
-                byte[] data = method == 0
-                    ? slice(buf, (int) dataAt, (int) cd.csize())
-                    : inflate(buf, (int) dataAt, (int) cd.csize(), Math.min(cd.usize(), budget), name);
-                if (data.length != cd.usize()) {
-                    throw fail("实际大小与声明不符: " + name);
-                }
-                if (data.length > budget) {
-                    throw fail("累计解压超过 64 MiB");
-                }
-                budget -= data.length;
-                CRC32 crc = new CRC32();
-                crc.update(data);
-                if (crc.getValue() != cd.crc()) {
-                    throw fail("CRC 不符: " + name);
-                }
+            if (isDir && cd.usize() != 0) {
+                throw fail("目录条目带数据");
+            }
+            // 目录条目同样解压并校验大小与 CRC（README「zip 规则」逐条目适用），只是不放进结果
+            byte[] data = method == 0
+                ? slice(buf, (int) dataAt, (int) cd.csize())
+                : inflate(buf, (int) dataAt, (int) cd.csize(), Math.min(cd.usize(), budget), name);
+            if (data.length != cd.usize()) {
+                throw fail("实际大小与声明不符: " + name);
+            }
+            if (data.length > budget) {
+                throw fail("累计解压超过 64 MiB");
+            }
+            budget -= data.length;
+            CRC32 crc = new CRC32();
+            crc.update(data);
+            if (crc.getValue() != cd.crc()) {
+                throw fail("CRC 不符: " + name);
+            }
+            if (!isDir) {
                 entries.put(rel, data);
             }
             at = next;
