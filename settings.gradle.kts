@@ -51,3 +51,10 @@ if (localesDir.isDirectory) {
         }
     }
 }
+
+// ADR 0059 P0 spike：aster-lang-runtime 1.0.49 未在 Central / mavenLocal，以兄弟工作树替换
+includeBuild("../aster-lang-runtime") {
+    dependencySubstitution {
+        substitute(module("cloud.aster-lang:aster-lang-runtime")).using(project(":"))
+    }
+}

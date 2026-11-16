@@ -3,6 +3,8 @@ plugins {
     `java-library`
     `maven-publish`
     id("org.graalvm.buildtools.native") version "0.11.3"
+    // ADR 0059 P0-T0.1 spike：fat jar 实测
+    id("com.gradleup.shadow") version "9.2.2"
 }
 
 group = "cloud.aster-lang"
@@ -65,6 +67,8 @@ dependencies {
 
     // Quarkus 核心（运行时集成；与 aster-api / aster-lang-runtime 对齐）
     implementation("io.quarkus:quarkus-core:$quarkusVersion")
+    // ADR 0059 P0 spike：-PwithPicocli=true 时加入 picocli，估算 CLI jar 增量
+    if (providers.gradleProperty("withPicocli").orNull == "true") implementation("info.picocli:picocli:4.7.7")
 
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
@@ -217,4 +221,18 @@ graalvmNative {
 
 tasks.named("nativeCompile") {
     notCompatibleWithConfigurationCache("GraalVM Native Image build requires exclusive lock")
+}
+
+// ADR 0059 P0-T0.1 spike：-PexcludeQuarkus=true 时从运行时闭包排除 io.quarkus 组
+if (providers.gradleProperty("excludeQuarkus").orNull == "true") {
+    configurations.named("runtimeClasspath") { exclude(group = "io.quarkus") }
+}
+// -PexcludeAntlrTool=true：排除经 core 的 antlr 配置泄漏进运行时的 ANTLR 工具链（antlr4 tool、ST4、antlr3、icu4j）
+if (providers.gradleProperty("excludeAntlrTool").orNull == "true") {
+    configurations.named("runtimeClasspath") { exclude(group = "org.antlr", module = "antlr4"); exclude(group = "com.ibm.icu") }
+}
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    mergeServiceFiles()
+    manifest { attributes["Main-Class"] = providers.gradleProperty("spikeMain").orElse("aster.truffle.Runner").get() }
+    archiveClassifier.set("all" + (if (providers.gradleProperty("excludeQuarkus").orNull == "true") "-noquarkus" else "") + (if (providers.gradleProperty("excludeAntlrTool").orNull == "true") "-noantlrtool" else ""))
 }
