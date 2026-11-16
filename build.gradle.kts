@@ -68,6 +68,7 @@ dependencies {
 
     // 测试依赖
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
+    testImplementation("org.assertj:assertj-core:3.27.3")
     testImplementation(asterLibs.graalvm.truffle.api)
     testRuntimeOnly(asterLibs.graalvm.truffle.runtime)
     testRuntimeOnly(asterLibs.graalvm.truffle.compiler)
