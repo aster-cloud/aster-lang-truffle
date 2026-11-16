@@ -110,7 +110,7 @@ tasks.withType<Test>().configureEach {
     // CoreIrEvalCli (mirrors aster-lang-core's parity.ir.* forwarding
     // for the Phase B fingerprint CLI). Scoped to the exact key names
     // so future tests don't accidentally couple to the parity runner.
-    listOf("parity.eval.input", "parity.eval.output").forEach { key ->
+    listOf("parity.eval.input", "parity.eval.output", "aster.exportBuiltins.update").forEach { key ->
         val v = System.getProperty(key)
         if (v != null) systemProperty(key, v)
     }

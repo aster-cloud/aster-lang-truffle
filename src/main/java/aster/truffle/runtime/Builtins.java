@@ -1439,6 +1439,14 @@ public final class Builtins {
     };
   }
 
+  /**
+   * 当前已注册的全部 builtin 名（含 {@code IO.} 前缀者），按字符串升序（ADR 0059 P1 T10 导出白名单的来源）。
+   * 注册表是全局静态的，测试中可能混入探针；需要「只含静态初始化注册」的结果时在独立类加载器里调用。
+   */
+  public static java.util.SortedSet<String> registeredNames() {
+    return java.util.Collections.unmodifiableSortedSet(new java.util.TreeSet<>(REGISTRY.keySet()));
+  }
+
   /** guard 辅助：name 归一化后是否等于给定 canonical builtin 名。 */
   public static boolean isCanonicalName(String name, String canonical) {
     return canonical.equals(canonicalName(name));
