@@ -67,7 +67,8 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
             "Multi-Release" to "true",
         )
     }
-    // 产物 SHA-256 写到同目录的 .sha256（GNU 格式），Release 资产一并上传
+    // 产物 SHA-256 写到同目录的 .sha256（GNU 格式），Release 资产一并上传；声明为输出，缺失时任务不会被判为 up-to-date
+    outputs.file(destinationDirectory.zip(archiveFileName) { dir, name -> dir.file("$name.sha256") })
     doLast {
         val jar = archiveFile.get().asFile
         val digest = MessageDigest.getInstance("SHA-256").digest(jar.readBytes())
@@ -77,7 +78,7 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
 }
 
 // 体积门：超过 18 MiB 即失败（CI 与本地同一判据）
-val checkCliJarSize by tasks.registering {
+val checkCliJarSize = tasks.register("checkCliJarSize") {
     dependsOn(tasks.named("shadowJar"))
     val jar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar").flatMap { it.archiveFile }
     doLast {
@@ -91,7 +92,7 @@ val checkCliJarSize by tasks.registering {
 }
 
 // 以子进程 java -jar 跑 fat jar 冒烟（ShadowJarSmokeTest）；check 依赖它，./gradlew build 即覆盖
-val shadowJarSmokeTest by tasks.registering(Test::class) {
+val shadowJarSmokeTest = tasks.register<Test>("shadowJarSmokeTest") {
     description = "以 java -jar 运行 aster-cli fat jar 的冒烟测试"
     group = "verification"
     testClassesDirs = sourceSets["test"].output.classesDirs
@@ -111,7 +112,7 @@ val shadowJarSmokeTest by tasks.registering(Test::class) {
 tasks.named("check") { dependsOn(shadowJarSmokeTest) }
 
 // CLI 版本写进资源，运行时由 Version 读取（jar MANIFEST 在 IDE / 测试 classpath 下不可用）
-val generateVersionResource by tasks.registering {
+val generateVersionResource = tasks.register("generateVersionResource") {
     val out = layout.buildDirectory.dir("generated/resources/version")
     val ver = project.version.toString()
     inputs.property("version", ver)
