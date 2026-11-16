@@ -55,10 +55,27 @@ class ExportBuiltinsTest {
         if (Boolean.getBoolean("aster.exportBuiltins.update")) {
             Files.writeString(FILE, want, StandardCharsets.UTF_8);
         }
-        try (InputStream in = ExportBuiltinsTest.class.getResourceAsStream("/aster/truffle/export-builtins.json")) {
-            assertNotNull(in, "缺少 aster/truffle/export-builtins.json");
-            assertEquals(want, new String(in.readAllBytes(), StandardCharsets.UTF_8),
-                "导出白名单与 Builtins 不同步；按类注释重新生成");
+        // 比较源码树中的文件（更新模式刚写入的就是它），再确认打进 jar 的 classpath 副本与之相同
+        assertEquals(want, Files.readString(FILE, StandardCharsets.UTF_8), "导出白名单与 Builtins 不同步；按类注释重新生成");
+        if (!Boolean.getBoolean("aster.exportBuiltins.update")) {
+            try (InputStream in = ExportBuiltinsTest.class.getResourceAsStream("/aster/truffle/export-builtins.json")) {
+                assertNotNull(in, "classpath 上缺少 aster/truffle/export-builtins.json");
+                assertEquals(want, new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+    }
+
+    @Test
+    void everyNameDispatchesToARegisteredBuiltin() throws Exception {
+        // 以错误个数（0 个）的实参调用：必须分派到该 builtin 本身（报参数错误等），而不是「未定义」
+        for (String name : names()) {
+            assertNotNull(Builtins.defOf(name), name + " 未注册");
+            try {
+                Builtins.call(name, new Object[0]);
+            } catch (Throwable e) {
+                String m = String.valueOf(e.getMessage());
+                assertTrue(!m.contains("Undefined function") && !m.contains("Unknown builtin"), name + ": " + m);
+            }
         }
     }
 
@@ -95,6 +112,7 @@ class ExportBuiltinsTest {
     @SuppressWarnings("unchecked")
     private static List<String> names() throws Exception {
         Class<?> fresh = freshBuiltinsClass();
+        assertTrue(fresh != Builtins.class, "未能隔离加载 Builtins");
         SortedSet<String> all = (SortedSet<String>) fresh.getMethod("registeredNames").invoke(null);
         List<String> out = new ArrayList<>();
         for (String n : all) {
@@ -114,7 +132,8 @@ class ExportBuiltinsTest {
         while (cases.find()) {
             Matcher quoted = QUOTED.matcher(cases.group(1));
             while (quoted.find()) {
-                out.put(quoted.group(1), cases.group(2));
+                String previous = out.put(quoted.group(1), cases.group(2));
+                assertEquals(null, previous, "canonicalName 中别名重复：" + quoted.group(1));
             }
         }
         return out;
