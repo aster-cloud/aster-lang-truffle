@@ -103,20 +103,39 @@ Maven Local / 已发布制品解析。
 
 ```bash
 ./gradlew :cli:shadowJar                 # → cli/build/libs/aster-cli-<ver>.jar 与 .sha256（Release 资产同名）
+./gradlew :cli:cliLaunchers              # → cli/build/libs/aster、aster.cmd 与各自 .sha256（Release 资产同名）
 java -jar cli/build/libs/aster-cli-<ver>.jar version
 java -jar aster-cli-<ver>.jar run <包目录或 zip> --input input.json --jwks jwks.json
 ```
 
 需要 Java 25。stdout 恒为一行 JSON 信封（`compile` 输出 IR），诊断只写 stderr。
 
-**JDK 25 的 stderr 警告**：求值时 Truffle 的 `TStringUnsafe` 调用 `sun.misc.Unsafe::objectFieldOffset`，JDK 25（JEP 498）会在 stderr
-打四行 `WARNING:`。它们不影响 stdout 与退出码。jar 的 manifest 无法设置这个选项，需要静默时在命令行加 JDK 的标准选项：
+**JDK 25 的 stderr 警告与启动脚本**：求值时 Truffle 自身（`TStringUnsafe`、`NodeClassImpl`、`InlineSupport`、`FrameWithoutBoxing` 等）调用
+`sun.misc.Unsafe` 的内存访问方法，JDK 24+（JEP 498）在首次调用时向 stderr 打四行 `WARNING:`（JDK 26 仍是同样的警告）。它们不影响 stdout 与退出码。
+截至 GraalVM / Truffle 25.x 的全部发布版都还依赖这些调用（oracle/graal#12782，上游给出的处理就是下面这个选项），jar 的 manifest 又无法设置它，
+所以 GitHub Release 在 jar 旁附带启动脚本 `aster`（POSIX sh）与 `aster.cmd`（Windows），连同各自的 `.sha256`。脚本与 jar 放在同一目录，
+等价于 `java --sun-misc-unsafe-memory-access=allow -jar aster-cli-<ver>.jar "$@"`：其余参数、stdin / stdout / stderr 与退出码原样透传。
 
 ```bash
-java --sun-misc-unsafe-memory-access=allow -jar aster-cli-<ver>.jar …
+sha256sum -c aster-cli-<ver>.jar.sha256 aster.sha256  # macOS 无 sha256sum 时用 shasum -a 256 -c
+chmod +x aster                                        # Release 下载的资产不带可执行位；也可以 sh aster …
+./aster run <包目录或 zip> --input input.json --jwks jwks.json
 ```
 
-根治要等不再使用 `sun.misc.Unsafe` 的 Truffle 版本，见 aster-cloud/aster-lang-truffle#188。
+Windows 下用 `aster.cmd`，校验时把 `Get-FileHash -Algorithm SHA256 aster-cli-<ver>.jar, aster.cmd`（PowerShell）的结果与
+`aster-cli-<ver>.jar.sha256`、`aster.cmd.sha256` 中的十六进制值比对：
+
+```bat
+aster.cmd run <包目录或 zip> --input input.json --jwks jwks.json
+```
+
+- `JAVA_HOME` 已设置时用 `$JAVA_HOME/bin/java`，否则用 `PATH` 上的 `java`；`ASTER_CLI_JAR` 可指向别处的 jar；`aster` 可软链到 `PATH` 上的目录。
+- 直接 `java -jar aster-cli-<ver>.jar …` 仍然可用，只是求值时会出现上述警告；自己写命令行时加 `--sun-misc-unsafe-memory-access=allow` 即可。
+- 也可以用环境变量 `JDK_JAVA_OPTIONS=--sun-misc-unsafe-memory-access=allow`，但 `java` 启动器会在 stderr 打一行
+  `NOTE: Picked up JDK_JAVA_OPTIONS: …`（`JAVA_TOOL_OPTIONS` 同理），且对该 shell 里所有 Java 程序生效。
+
+JEP 498 计划在后续 JDK 中把默认值改为 `deny`、最终移除这些方法；届时需要 Truffle 换掉 `sun.misc.Unsafe`，生态升级 GraalVM 版本
+（`aster-lang-platform` catalog 的 `asterLibs.graalvm.*`）后可删去启动脚本里的这个选项。
 
 ## 项目结构
 

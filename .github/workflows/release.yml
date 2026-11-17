@@ -212,9 +212,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # JVM aster CLI fat jar 作为 Release 资产（ADR 0059 P1 T9）：jar + .sha256；上传后下载回读比对 sha256。
+      # 启动脚本 aster / aster.cmd（#188：在命令行传 --sun-misc-unsafe-memory-access=allow）及其 .sha256 一并上传、回读比对。
       # 测试已在 main CI 上对本 commit 通过（含 18 MiB 门与 java -jar 冒烟），这里只构建、核对体积并上传。
       - name: Build aster-cli jar
-        run: ./gradlew :cli:checkCliJarSize
+        run: ./gradlew :cli:checkCliJarSize :cli:cliLaunchers
       - name: Upload aster-cli jar to the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -222,10 +223,14 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           JAR="cli/build/libs/aster-cli-${VERSION}.jar"
+          LIBS="cli/build/libs"
           test -f "$JAR" && test -f "$JAR.sha256"
+          test -f "$LIBS/aster" && test -f "$LIBS/aster.sha256" && test -f "$LIBS/aster.cmd" && test -f "$LIBS/aster.cmd.sha256"
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "$TAG" --notes "aster-lang-truffle $TAG"
-          gh release upload "$TAG" "$JAR" "$JAR.sha256" --clobber
+          gh release upload "$TAG" "$JAR" "$JAR.sha256" "$LIBS/aster" "$LIBS/aster.sha256" "$LIBS/aster.cmd" "$LIBS/aster.cmd.sha256" --clobber
           mkdir -p /tmp/aster-cli-check && cd /tmp/aster-cli-check
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "aster-cli-${VERSION}.jar*" --clobber
-          sha256sum -c "aster-cli-${VERSION}.jar.sha256"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "aster-cli-${VERSION}.jar*" --pattern "aster" --pattern "aster.*" --clobber
+          sha256sum -c "aster-cli-${VERSION}.jar.sha256" aster.sha256 aster.cmd.sha256
           cmp "aster-cli-${VERSION}.jar.sha256" "$GITHUB_WORKSPACE/$JAR.sha256"
+          cmp aster.sha256 "$GITHUB_WORKSPACE/$LIBS/aster.sha256"
+          cmp aster.cmd.sha256 "$GITHUB_WORKSPACE/$LIBS/aster.cmd.sha256"

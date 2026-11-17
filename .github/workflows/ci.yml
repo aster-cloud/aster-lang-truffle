@@ -114,5 +114,8 @@ jobs:
           if [ "$BYTES" -gt $((18 * 1024 * 1024)) ]; then
             echo "::error::$JAR $BYTES 字节超过 18 MiB（ADR 0059 修订 1 A3）"; exit 1
           fi
-          (cd cli/build/libs && sha256sum -c "aster-cli-${VERSION}.jar.sha256")
+          (cd cli/build/libs && sha256sum -c "aster-cli-${VERSION}.jar.sha256" aster.sha256 aster.cmd.sha256)
           java -jar "$JAR" version
+          # 启动脚本（#188）与 jar 同目录：version 的 stdout 相同，stderr 为空
+          test "$(sh cli/build/libs/aster version 2>/tmp/aster-launcher.err)" = "$(java -jar "$JAR" version)"
+          test ! -s /tmp/aster-launcher.err || { cat /tmp/aster-launcher.err; exit 1; }
