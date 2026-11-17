@@ -27,6 +27,8 @@ import java.util.concurrent.TimeUnit;
 final class HttpsFixtureServer implements AutoCloseable {
 
     private final HttpsServer server;
+    /** 收到的请求数（任何路径都计入），供「拒绝目标时不发请求」的断言使用。 */
+    private final java.util.concurrent.atomic.AtomicInteger hits = new java.util.concurrent.atomic.AtomicInteger();
     private final Path caPem;
 
     HttpsFixtureServer(JsonNode routes, Path workDir) throws Exception {
@@ -51,6 +53,7 @@ final class HttpsFixtureServer implements AutoCloseable {
         server = HttpsServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.setHttpsConfigurator(new HttpsConfigurator(ssl));
         server.createContext("/", ex -> {
+            hits.incrementAndGet();
             // 与参照测试服务同口径：按原始 path + query 匹配路由（重定向 "?q" 落到 "/a/b?q"）
             String raw = ex.getRequestURI().getRawPath()
                 + (ex.getRequestURI().getRawQuery() == null ? "" : "?" + ex.getRequestURI().getRawQuery());
@@ -84,6 +87,10 @@ final class HttpsFixtureServer implements AutoCloseable {
             }
         });
         server.start();
+    }
+
+    int hits() {
+        return hits.get();
     }
 
     int port() {
