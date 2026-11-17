@@ -46,8 +46,16 @@ val generateVersionResource by tasks.registering {
 }
 sourceSets["main"].resources.srcDir(generateVersionResource)
 
+// conformance 夹具（兄弟仓 aster-lang-test）是测试的真实输入：声明为任务输入，夹具变了测试就不会从构建缓存里复用旧结果
+val conformanceDir = listOf(rootDir.resolve("aster-lang-test"), rootDir.resolve("../aster-lang-test"))
+    .map { it.resolve("conformance/package-v1") }
+    .firstOrNull { it.isDirectory }
+
 tasks.test {
     useJUnitPlatform()
+    if (conformanceDir != null) {
+        inputs.dir(conformanceDir).withPropertyName("conformance").withPathSensitivity(PathSensitivity.RELATIVE)
+    }
     // 兄弟仓 aster-lang-test 的两种布局：CI 检出到工作区内（根项目同级），本地为并列目录
     systemProperty("aster.root.dir", rootDir.absolutePath)
     testLogging {
