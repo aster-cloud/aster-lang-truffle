@@ -168,6 +168,45 @@ class SandboxedExecutorTest {
     }
 
     @Test
+    void stalledPreEvaluationIsResourceExhausted() throws Exception {
+        String core = ir("""
+            Module demo.
+
+            Rule ident given x as Int, produce Int:
+              Return x.
+            """);
+        // 注入卡顿：求值前阶段（IR 已加载、执行入口之前）睡 5 s，上限 300 ms
+        try (SandboxedExecutor stalled = new SandboxedExecutor(SandboxPolicy.PRODUCTION, Duration.ofMillis(300), () -> {
+            try {
+                Thread.sleep(5_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        })) {
+            long start = System.nanoTime();
+            Outcome out = stalled.execute(core, "ident", new Object[]{1}, Duration.ofSeconds(60));
+            long ms = (System.nanoTime() - start) / 1_000_000;
+            assertEquals(Outcome.RESOURCE_EXHAUSTED, ((Outcome.Failed) out).code(), out.toString());
+            assertTrue(ms < 3_000, "应在求值前上限附近返回，实际 " + ms + "ms");
+        }
+    }
+
+    @Test
+    void preEvaluationLimitDoesNotCountExecution() throws Exception {
+        // 执行本身不受求值前上限约束：上限 1 ms 时正常求值照样成功（只要求值前阶段在上限内完成——这里放宽到 30 s）
+        String core = ir("""
+            Module demo.
+
+            Rule ident given x as Int, produce Int:
+              Return x.
+            """);
+        try (SandboxedExecutor e = new SandboxedExecutor(SandboxPolicy.PRODUCTION, Duration.ofSeconds(30), () -> { })) {
+            assertEquals(7, ((Outcome.Ok) e.execute(core, "ident", new Object[]{7}, Duration.ofSeconds(5))).hostValue());
+        }
+        assertEquals(Duration.ofSeconds(60), SandboxedExecutor.PRE_EVAL_LIMIT);
+    }
+
+    @Test
     void statementLimitIsReportedAsTimeout() throws Exception {
         // 计算量预算（语句上限）与墙钟超时同归 TIMEOUT，避免快机器上与 Node CLI 分叉
         SandboxPolicy tiny = new SandboxPolicy(true, false, false, false, false, false, false, 1L);

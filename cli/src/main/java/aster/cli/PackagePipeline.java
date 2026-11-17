@@ -91,10 +91,20 @@ final class PackagePipeline {
      * @param compare 是否比对投影哈希（{@code compile} 只取 IR，不比对）
      */
     String recompile(ErrorCode failure, boolean compare) throws CliException {
+        String source;
+        try {
+            // 与源码形态同一规则：严格 UTF-8、去一个 BOM、只含 ASCII 空白即失败
+            source = CompileRequest.decodeSource(files.get("policy/policy.aster"));
+        } catch (StrictJson.StrictJsonException e) {
+            throw new CliException(failure, "policy/policy.aster 不是合法 UTF-8");
+        }
+        if (CompileRequest.isAsciiBlank(source)) {
+            throw new CliException(failure, "policy/policy.aster 为空或只有空白");
+        }
         String coreJson;
         try {
             coreJson = PolicySourceCompiler.compileCanonical(
-                utf8(files.get("policy/policy.aster")),
+                source,
                 (String) Json.at(manifest, "source", "locale"),
                 PolicySourceCompiler.vocabularyScopesOf(utf8(files.get("policy/compile/vocabulary.json"))),
                 PolicySourceCompiler.parseAliasSetJson(utf8(files.get("policy/compile/alias-set.json"))),

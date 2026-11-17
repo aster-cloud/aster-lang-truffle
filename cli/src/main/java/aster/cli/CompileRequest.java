@@ -156,14 +156,18 @@ record CompileRequest(Path target, boolean isPackage, Path out, String locale, O
 
     /** 源码按严格 UTF-8 读入（非法字节序列为 USAGE），去掉一个开头的 BOM。 */
     private static String readSource(Path p) throws CliException {
-        String text;
         try {
-            text = StrictJson.decodeUtf8(Files.readAllBytes(p));
+            return decodeSource(Files.readAllBytes(p));
         } catch (IOException e) {
             throw usage("无法读取 " + p.getFileName());
         } catch (StrictJson.StrictJsonException e) {
             throw usage(p.getFileName() + " 不是合法 UTF-8");
         }
+    }
+
+    /** 源码字节的解码规则（源码形态与包内 {@code policy/policy.aster} 共用）：严格 UTF-8，去掉一个开头的 BOM。 */
+    static String decodeSource(byte[] bytes) throws StrictJson.StrictJsonException {
+        String text = StrictJson.decodeUtf8(bytes);
         return text.startsWith("\uFEFF") ? text.substring(1) : text;
     }
 
@@ -177,7 +181,7 @@ record CompileRequest(Path target, boolean isPackage, Path out, String locale, O
     }
 
     /** 「空白」只指 ASCII 空白（空格、\t、\n、\r），与 Node 侧相同；不用 {@link String#isBlank}（它还认 Unicode 空白）。 */
-    private static boolean isAsciiBlank(String s) {
+    static boolean isAsciiBlank(String s) {
         return s.chars().allMatch(c -> c == ' ' || c == '\t' || c == '\n' || c == '\r');
     }
 
