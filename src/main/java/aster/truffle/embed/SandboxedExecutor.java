@@ -9,6 +9,7 @@ import org.graalvm.polyglot.Value;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *       （CLI 单次执行，不池化），Context 只经 {@link SandboxPolicy#apply} 构建；</li>
  *   <li>入口由 {@link CoreIrEntrySelector#withEntry} 把目标 Func 挪到最前（与平台 {@code PolicyEvaluationService} /
  *       {@code DynamicCnlExecutor} 相同），{@code ctx.eval} 后执行返回的可执行值，结果经 {@link PolyglotValues#toHost}；</li>
- *   <li>看门狗到点 {@code context.close(true)}，被取消即 {@link Outcome#TIMEOUT}。</li>
+ *   <li>看门狗在 IR 加载、入口选定之后、执行入口之前开始计时，到点 {@code context.close(true)}，被取消即 {@link Outcome#TIMEOUT}。</li>
  * </ul>
  *
  * <p>失败归类（README「检查顺序」eval 阶段）：
@@ -48,7 +49,12 @@ public final class SandboxedExecutor implements AutoCloseable {
     /** Truffle 语句上限耗尽时 {@link PolyglotException#getMessage()} 的固定前缀。 */
     static final String STATEMENT_LIMIT_MESSAGE = "Statement count limit";
 
+    /** 求值前阶段（选入口、转换实参、建 Context、加载 IR）的上限；超出为 RESOURCE_EXHAUSTED。 */
+    public static final Duration PRE_EVAL_LIMIT = Duration.ofSeconds(60);
+
     private final SandboxPolicy policy;
+    private final Duration preEvalLimit;
+    private final Runnable beforeExecute;
     private final Engine engine;
     private final ScheduledExecutorService watchdog;
     /** 执行取消动作：{@code close(true)} 会等待求值线程退出，不能占住唯一的调度线程（同 aster-api {@code ExecutionWatchdog}）。 */
@@ -60,7 +66,16 @@ public final class SandboxedExecutor implements AutoCloseable {
     }
 
     public SandboxedExecutor(SandboxPolicy policy) {
+        this(policy, PRE_EVAL_LIMIT, () -> { });
+    }
+
+    /**
+     * 可注入求值前阶段的上限与一个在执行入口前调用的钩子（测试用：在钩子里人为卡住以验证上限）。
+     */
+    SandboxedExecutor(SandboxPolicy policy, Duration preEvalLimit, Runnable beforeExecute) {
         this.policy = Objects.requireNonNull(policy, "policy");
+        this.preEvalLimit = Objects.requireNonNull(preEvalLimit, "preEvalLimit");
+        this.beforeExecute = Objects.requireNonNull(beforeExecute, "beforeExecute");
         this.engine = Engine.newBuilder("aster")
             .option("engine.WarnInterpreterOnly", "false")
             .build();
@@ -79,48 +94,39 @@ public final class SandboxedExecutor implements AutoCloseable {
     /**
      * 求值 {@code coreJson} 的入口 {@code entry}。
      *
+     * <p>两段时限：选入口、转换实参、建 Context、加载 IR 这些求值前阶段受 {@link #PRE_EVAL_LIMIT}（60 s）约束，超出为
+     * {@link Outcome#RESOURCE_EXHAUSTED}（资源类结果，不在逐字节一致的承诺内）；执行入口受 {@code timeout} 约束，超出为
+     * {@link Outcome#TIMEOUT}（README「命令行」计时起点）。
+     *
      * @param coreJson Core IR v2 JSON（调用方已严格读入校验）
      * @param entry    入口函数名
      * @param hostArgs 按 IR 形参顺序排列的宿主实参（Map / List / 标量 / BigDecimal…，经 {@link PolyglotValues#toGuestArgs}）
-     * @param timeout  墙钟上限（> 0）
+     * @param timeout  执行入口的墙钟上限（> 0）
      */
     public Outcome execute(String coreJson, String entry, Object[] hostArgs, Duration timeout) {
         Objects.requireNonNull(timeout, "timeout");
         if (timeout.isNegative() || timeout.isZero()) {
             throw new IllegalArgumentException("timeout 必须为正: " + timeout);
         }
-        String ir;
-        try {
-            ir = CoreIrEntrySelector.withEntry(coreJson, entry);
-        } catch (EntryFunctionException e) {
-            return new Outcome.Failed(Outcome.ENTRY_NOT_FOUND, e.getMessage());
-        } catch (IllegalArgumentException e) {
-            return new Outcome.Failed(Outcome.EVAL_ERROR, e.getMessage());
-        }
-        Object[] guestArgs;
-        try {
-            guestArgs = PolyglotValues.toGuestArgs(hostArgs == null ? new Object[0] : hostArgs);
-        } catch (ValueShapeException e) {
-            return new Outcome.Failed(Outcome.EVAL_ERROR, e.getMessage());
-        }
-
         AtomicReference<Context> running = new AtomicReference<>();
         AtomicBoolean cancelled = new AtomicBoolean(false);
-        FutureTask<Outcome> task = new FutureTask<>(() -> evaluate(ir, guestArgs, timeout, running, cancelled));
+        CountDownLatch executing = new CountDownLatch(1);
+        FutureTask<Outcome> task = new FutureTask<>(
+            () -> evaluate(coreJson, entry, hostArgs, timeout, running, cancelled, executing));
         // stackSize 0 = JVM 缺省线程栈
         Thread worker = new Thread(null, task, "aster-sandbox-eval", 0);
         worker.setDaemon(true);
         worker.start();
         try {
+            if (!executing.await(preEvalLimit.toNanos(), TimeUnit.NANOSECONDS)) {
+                cancel(running, cancelled);
+                return new Outcome.Failed(Outcome.RESOURCE_EXHAUSTED,
+                    "求值前阶段（建 Context、加载 IR、选入口、转换实参）超过 " + preEvalLimit.toSeconds() + " s");
+            }
             return task.get();
         } catch (InterruptedException e) {
-            // 调用线程被中断：取消仍在进行的求值，不留下继续运行的 guest 代码。先置位再读 Context：
-            // 求值线程发布 Context 后会复查该标志，两种先后顺序下都有一方负责关闭
-            cancelled.set(true);
-            Context ctx = running.get();
-            if (ctx != null) {
-                closer.execute(() -> closeQuietly(ctx));
-            }
+            // 调用线程被中断：取消仍在进行的求值，不留下继续运行的 guest 代码
+            cancel(running, cancelled);
             Thread.currentThread().interrupt();
             return new Outcome.Failed(Outcome.EVAL_ERROR, "求值被中断");
         } catch (ExecutionException e) {
@@ -132,8 +138,44 @@ public final class SandboxedExecutor implements AutoCloseable {
         }
     }
 
-    private Outcome evaluate(String ir, Object[] guestArgs, Duration timeout, AtomicReference<Context> running,
-                             AtomicBoolean cancelled) {
+    /** 先置位再读 Context：求值线程发布 Context 后会复查该标志，两种先后顺序下都有一方负责关闭。 */
+    private void cancel(AtomicReference<Context> running, AtomicBoolean cancelled) {
+        cancelled.set(true);
+        Context ctx = running.get();
+        if (ctx != null) {
+            closer.execute(() -> closeQuietly(ctx));
+        }
+    }
+
+    /**
+     * 求值线程：求值前阶段结束（或提前失败）时放开 {@code executing}，之后只受执行超时约束。
+     */
+    private Outcome evaluate(String coreJson, String entry, Object[] hostArgs, Duration timeout,
+                             AtomicReference<Context> running, AtomicBoolean cancelled, CountDownLatch executing) {
+        try {
+            String ir;
+            try {
+                ir = CoreIrEntrySelector.withEntry(coreJson, entry);
+            } catch (EntryFunctionException e) {
+                return new Outcome.Failed(Outcome.ENTRY_NOT_FOUND, e.getMessage());
+            } catch (IllegalArgumentException e) {
+                return new Outcome.Failed(Outcome.EVAL_ERROR, e.getMessage());
+            }
+            Object[] guestArgs;
+            try {
+                guestArgs = PolyglotValues.toGuestArgs(hostArgs == null ? new Object[0] : hostArgs);
+            } catch (ValueShapeException e) {
+                return new Outcome.Failed(Outcome.EVAL_ERROR, e.getMessage());
+            }
+            return evaluateInContext(ir, guestArgs, timeout, running, cancelled, executing);
+        } finally {
+            executing.countDown();
+        }
+    }
+
+    private Outcome evaluateInContext(String ir, Object[] guestArgs, Duration timeout,
+                                      AtomicReference<Context> running, AtomicBoolean cancelled,
+                                      CountDownLatch executing) {
         Context ctx = policy.apply(Context.newBuilder("aster").engine(engine)).build();
         running.set(ctx);
         if (cancelled.get()) {
@@ -141,12 +183,20 @@ public final class SandboxedExecutor implements AutoCloseable {
             return new Outcome.Failed(Outcome.EVAL_ERROR, "求值被中断");
         }
         AtomicBoolean fired = new AtomicBoolean(false);
-        ScheduledFuture<?> guard = watchdog.schedule(() -> {
-            fired.set(true);
-            closer.execute(() -> closeQuietly(ctx));
-        }, timeout.toNanos(), TimeUnit.NANOSECONDS);
+        ScheduledFuture<?> guard = null;
         try {
+            // 计时起点（README「命令行」）：Context 已创建、IR 已加载、入口已选好之后，紧挨着执行入口之前；
+            // Engine / Context 创建与 IR 加载不计入超时（它们受求值前阶段的 60 s 上限约束）
             Value evalResult = ctx.eval(Source.create("aster", ir));
+            beforeExecute.run();
+            if (cancelled.get()) {
+                return new Outcome.Failed(Outcome.RESOURCE_EXHAUSTED, "求值前阶段超时后被取消");
+            }
+            guard = watchdog.schedule(() -> {
+                fired.set(true);
+                closer.execute(() -> closeQuietly(ctx));
+            }, timeout.toNanos(), TimeUnit.NANOSECONDS);
+            executing.countDown();
             return new Outcome.Ok(executeFunction(evalResult, guestArgs));
         } catch (PolyglotException e) {
             return classify(e, fired.get());
@@ -160,7 +210,9 @@ public final class SandboxedExecutor implements AutoCloseable {
                 ? new Outcome.Failed(Outcome.TIMEOUT, "超过 " + timeout.toMillis() + "ms")
                 : new Outcome.Failed(Outcome.EVAL_ERROR, String.valueOf(e));
         } finally {
-            guard.cancel(false);
+            if (guard != null) {
+                guard.cancel(false);
+            }
             closeQuietly(ctx);
         }
     }

@@ -1,5 +1,8 @@
 rootProject.name = "aster-lang-truffle"
 
+// JVM `aster` CLI（ADR 0059 P1 T8）：运行导出的策略包，依赖根项目的 aster.truffle.embed 与 core 的 aster.core.embed
+include("cli")
+
 pluginManagement {
     repositories {
         gradlePluginPortal()
