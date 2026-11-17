@@ -1,0 +1,29 @@
+#!/bin/sh
+# aster 启动脚本（aster-cloud/aster-lang-truffle#188）：与 aster-cli-@CLI_VERSION@.jar 一同作为 GitHub Release 资产发布，放在 jar 同一目录。
+#
+# JDK 24+（JEP 498）在首次调用 sun.misc.Unsafe 内存访问方法时向 stderr 打四行 WARNING；调用方是 Truffle 自身
+# （TStringUnsafe、NodeClassImpl、InlineSupport、FrameWithoutBoxing 等），截至 GraalVM 25.x 的全部发布版都如此。
+# jar 的 manifest 无法设置 --sun-misc-unsafe-memory-access，故由本脚本在命令行上传给 JVM。
+# 除该选项外，参数、stdin / stdout / stderr 与退出码原样透传（exec 替换当前进程）；`java -jar` 直接运行 jar 仍然可用。
+#
+# 环境变量：JAVA_HOME（优先使用 $JAVA_HOME/bin/java，否则用 PATH 上的 java）；ASTER_CLI_JAR（覆盖 jar 路径）。
+
+# 解析符号链接，定位脚本真实所在目录（允许把 aster 软链到 PATH 上的目录）
+self=$0
+while [ -h "$self" ]; do
+  link=$(readlink "$self")
+  case $link in
+    /*) self=$link ;;
+    *) self=$(dirname "$self")/$link ;;
+  esac
+done
+dir=$(CDPATH= cd -- "$(dirname -- "$self")" && pwd -P) || exit 1
+
+jar=${ASTER_CLI_JAR:-"$dir/aster-cli-@CLI_VERSION@.jar"}
+if [ -n "$JAVA_HOME" ]; then
+  java=$JAVA_HOME/bin/java
+else
+  java=java
+fi
+
+exec "$java" --sun-misc-unsafe-memory-access=allow -jar "$jar" "$@"

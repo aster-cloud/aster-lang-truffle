@@ -88,6 +88,39 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
     }
 }
 
+// 启动脚本（aster-cloud/aster-lang-truffle#188）：JDK 24+ 对 Truffle 调用 sun.misc.Unsafe 打 stderr 警告，截至 GraalVM 25.x 无发布版去掉这些调用，
+// jar manifest 又无法设置 --sun-misc-unsafe-memory-access。Release 在 jar 旁附 aster（POSIX sh）与 aster.cmd，由它们在命令行传该选项。
+// 模板里的 @CLI_VERSION@ 换成本版本，使脚本指向同目录的 aster-cli-<ver>.jar；.cmd 统一为 CRLF。各自写 .sha256（GNU 格式），与 jar 一并上传。
+val cliLaunchers = tasks.register("cliLaunchers") {
+    description = "生成 aster / aster.cmd 启动脚本（Release 资产）"
+    group = "distribution"
+    val ver = project.version.toString()
+    val src = layout.projectDirectory.dir("src/launcher")
+    val out = layout.buildDirectory.dir("libs")
+    inputs.property("version", ver)
+    inputs.dir(src).withPathSensitivity(PathSensitivity.RELATIVE)
+    val names = listOf("aster", "aster.cmd")
+    names.forEach { name ->
+        outputs.file(out.map { it.file(name) })
+        outputs.file(out.map { it.file("$name.sha256") })
+    }
+    doLast {
+        names.forEach { name ->
+            val text = src.file(name).asFile.readText().replace("@CLI_VERSION@", ver)
+            val lf = text.replace("\r\n", "\n")
+            val body = if (name.endsWith(".cmd")) lf.replace("\n", "\r\n") else lf
+            val f = out.get().file(name).asFile
+            f.parentFile.mkdirs()
+            f.writeText(body)
+            if (!name.endsWith(".cmd")) {
+                f.setExecutable(true, false)
+            }
+            val hex = MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
+            File(f.path + ".sha256").writeText("$hex  $name\n")
+        }
+    }
+}
+
 // 体积门：超过 18 MiB 即失败（CI 与本地同一判据）
 val checkCliJarSize = tasks.register("checkCliJarSize") {
     dependsOn(tasks.named("shadowJar"))
@@ -102,7 +135,7 @@ val checkCliJarSize = tasks.register("checkCliJarSize") {
     }
 }
 
-// fat jar 一致性门：以子进程 java -jar 跑 conformance 全部用例（ConformanceCasesTest 的 jar 模式）与 ShadowJarSmokeTest；
+// fat jar 一致性门：以子进程 java -jar 跑 conformance 全部用例（ConformanceCasesTest 的 jar 模式）与 ShadowJarSmokeTest（含启动脚本用例）；
 // check 依赖它，./gradlew build 即覆盖。用例彼此独立，按类内并发执行以缩短墙钟。
 val shadowJarSmokeTest = tasks.register<Test>("shadowJarSmokeTest") {
     description = "以 java -jar 运行 aster-cli fat jar：conformance 全部用例与冒烟测试"
@@ -114,15 +147,18 @@ val shadowJarSmokeTest = tasks.register<Test>("shadowJarSmokeTest") {
         includeTestsMatching("aster.cli.ShadowJarSmokeTest")
         includeTestsMatching("aster.cli.ConformanceCasesTest")
     }
-    dependsOn(checkCliJarSize)
+    dependsOn(checkCliJarSize, cliLaunchers)
     val jar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar").flatMap { it.archiveFile }
+    val launcher = layout.buildDirectory.file("libs/aster")
     inputs.file(jar)
+    inputs.file(launcher).withPropertyName("launcher")
     if (conformanceDir != null) {
         inputs.dir(conformanceDir).withPropertyName("conformance").withPathSensitivity(PathSensitivity.RELATIVE)
     }
     // 缺兄弟仓即失败，不静默去掉输入声明（否则又会从构建缓存复用旧结果）
     doFirst { requireConformanceDir() }
     doFirst { systemProperty("aster.cli.jar", jar.get().asFile.absolutePath) }
+    doFirst { systemProperty("aster.cli.launcher", launcher.get().asFile.absolutePath) }
     systemProperty("aster.root.dir", rootDir.absolutePath)
     systemProperty("junit.jupiter.execution.parallel.enabled", "true")
     systemProperty("junit.jupiter.execution.parallel.mode.default", "concurrent")
