@@ -36,7 +36,10 @@ import java.util.concurrent.TimeoutException;
  *       RFC 3986 URI-reference，按 RFC 3986 §5.2 相对当前请求 URI 解析（{@link Rfc3986}，不用 RFC 2396 的 {@code URI.resolve}）；其他 3xx 失败。
  *       手工处理（{@link HttpClient.Redirect#NEVER} + 循环）：{@code NORMAL} 既不能限制次数，也不能拒绝降级到 http；</li>
  *   <li>请求带 {@code Accept-Encoding: identity}，响应的 {@code Content-Encoding} 不是 identity 即失败；</li>
- *   <li>TLS 用运行时缺省信任库（cacerts）；环境变量 {@code ASTER_ANCHOR_CA_FILE}（仅供测试）指向 PEM 时<b>追加</b>信任其中的证书；</li>
+ *   <li>TLS 用缺省 TrustManager（{@code TrustManagerFactory} 以 null keystore 初始化：{@code cacerts}，或 {@code javax.net.ssl.trustStore}
+ *       指定的信任库）；环境变量 {@code ASTER_ANCHOR_CA_FILE}（仅供测试）指向 PEM 时<b>追加</b>信任其中的证书；</li>
+ *   <li>初始 {@code --jwks} URL 与每个重定向目标在发出请求之前做同一组检查（URI-reference 字符、非空 host、端口 1–65535、
+ *       无 userinfo、非方括号 host 中不得有 {@code :}、{@code [ ]} 只用于 IP-literal），失败属 usage 阶段；</li>
  *   <li>v1 不支持代理：显式直连（{@link HttpClient.Builder#NO_PROXY}），忽略 {@code HTTPS_PROXY} 等环境变量与 {@code https.proxyHost}；</li>
  *   <li>任何失败都是 {@link ErrorCode#USAGE}。</li>
  * </ul>
