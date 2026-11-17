@@ -90,12 +90,13 @@ final class AnchorFetcher {
 
     private static byte[] follow(HttpClient client, String url, long deadline) throws Exception {
         String current = url;
+        requireSendable(current);
         for (int hop = 0; ; hop++) {
             // 重定向目标的 scheme 已由 Rfc3986.resolve 归一为小写（scheme 不区分大小写）
             if (!current.startsWith("https://")) {
                 throw usage("重定向到非 https 地址: " + current);
             }
-            HttpRequest request = HttpRequest.newBuilder(URI.create(current)).timeout(remaining(deadline))
+            HttpRequest request = HttpRequest.newBuilder(URI.create(Rfc3986.withoutFragment(current))).timeout(remaining(deadline))
                 .header("Accept-Encoding", "identity").GET().build();
             HttpResponse<InputStream> resp = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
             int status = resp.statusCode();
@@ -112,11 +113,7 @@ final class AnchorFetcher {
                     throw usage("Location 不是合法的 RFC 3986 URI-reference: " + location);
                 }
                 current = Rfc3986.resolve(current, location);
-                // 发出之前检查解析后的目标：非空 host、端口 1–65535、无 userinfo、[ ] 只用于 IP-literal
-                String violation = Rfc3986.targetViolation(current);
-                if (violation != null) {
-                    throw usage("重定向目标不合法（" + violation + "）: " + current);
-                }
+                requireSendable(current);
                 continue;
             }
             try (InputStream body = resp.body()) {
@@ -133,6 +130,17 @@ final class AnchorFetcher {
                 }
                 return bytes;
             }
+        }
+    }
+
+    /** 发出之前检查目标（初始 URL 与每个重定向目标）：非空 host、端口 1–65535、无 userinfo、[ ] 只用于 IP-literal。 */
+    private static void requireSendable(String target) throws CliException {
+        if (!Rfc3986.isReference(target)) {
+            throw usage("请求目标不是合法的 URI: " + target);
+        }
+        String violation = Rfc3986.targetViolation(target);
+        if (violation != null) {
+            throw usage("请求目标不合法（" + violation + "）: " + target);
         }
     }
 

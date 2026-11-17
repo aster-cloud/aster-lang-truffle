@@ -17,7 +17,7 @@ class Rfc3986Test {
         String[][] cases = {
             {"g:h", "g:h"}, {"g", "http://a/b/c/g"}, {"./g", "http://a/b/c/g"}, {"g/", "http://a/b/c/g/"},
             {"/g", "http://a/g"}, {"//g", "http://g"}, {"?y", "http://a/b/c/d;p?y"}, {"g?y", "http://a/b/c/g?y"},
-            {"#s", "http://a/b/c/d;p?q"}, {"g#s", "http://a/b/c/g"}, {"g?y#s", "http://a/b/c/g?y"}, {";x", "http://a/b/c/;x"},
+            {"#s", "http://a/b/c/d;p?q#s"}, {"g#s", "http://a/b/c/g#s"}, {"g?y#s", "http://a/b/c/g?y#s"}, {";x", "http://a/b/c/;x"},
             {"g;x", "http://a/b/c/g;x"}, {"", null}, {".", "http://a/b/c/"}, {"./", "http://a/b/c/"}, {"..", "http://a/b/"},
             {"../", "http://a/b/"}, {"../g", "http://a/b/g"}, {"../..", "http://a/"}, {"../../", "http://a/"},
             {"../../g", "http://a/g"},
@@ -58,6 +58,12 @@ class Rfc3986Test {
     }
 
     @Test
+    void fragmentIsKeptForValidationButDroppedForRequests() {
+        assertEquals("https://h/x?q", Rfc3986.withoutFragment("https://h/x?q#frag"));
+        assertEquals("https://h/x", Rfc3986.withoutFragment("https://h/x"));
+    }
+
+    @Test
     void redirectTargetRules() {
         for (String ok : new String[]{"https://h/x", "https://h:1/x", "https://h:65535/x", "https://[::1]:8443/x",
                 "https://[v1.fe]/x", "https://127.0.0.1/x?q=1"}) {
@@ -66,7 +72,7 @@ class Rfc3986Test {
         for (String bad : new String[]{"https:///x", "https://:443/x", "https://u@h/x", "https://u:p@h/x", "https://@h/x",
                 "https://h:0/x", "https://h:65536/x", "https://h:/x", "https://h:1a/x", "https://h:+1/x",
                 "https://h/a[b]", "https://h/x?a=[1]", "https://h[1]/x", "https://[::1/x", "https://[zz]/x",
-                "https://[::1]x/x", "https:/x"}) {
+                "https://[::1]x/x", "https:/x", "https://h/x#[f]"}) {
             assertTrue(Rfc3986.targetViolation(bad) != null, bad);
         }
     }
