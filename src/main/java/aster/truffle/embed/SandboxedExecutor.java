@@ -17,6 +17,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -52,7 +53,15 @@ public final class SandboxedExecutor implements AutoCloseable {
     /** 求值前阶段（选入口、转换实参、建 Context、加载 IR）的上限；超出为 RESOURCE_EXHAUSTED。 */
     public static final Duration PRE_EVAL_LIMIT = Duration.ofSeconds(60);
 
+    /**
+     * 超时之后的兜底宽限：{@code close(true)} 依赖 guest 代码轮询安全点，长时间不轮询的宿主侧 builtin 可能迟迟不退出；
+     * 到 {@code timeout + 宽限} 仍未结束即按 TIMEOUT 返回，不再等待（求值线程是 daemon，CLI 随即退出）。
+     */
+    public static final Duration BACKSTOP_GRACE = Duration.ofSeconds(5);
+
     private final SandboxPolicy policy;
+    private final Duration backstopGrace;
+    private final Runnable afterStart;
     private final Duration preEvalLimit;
     private final Runnable beforeExecute;
     private final Engine engine;
@@ -73,6 +82,16 @@ public final class SandboxedExecutor implements AutoCloseable {
      * 可注入求值前阶段的上限与一个在执行入口前调用的钩子（测试用：在钩子里人为卡住以验证上限）。
      */
     SandboxedExecutor(SandboxPolicy policy, Duration preEvalLimit, Runnable beforeExecute) {
+        this(policy, preEvalLimit, beforeExecute, BACKSTOP_GRACE, () -> { });
+    }
+
+    /**
+     * 另可注入超时后的兜底宽限与一个在执行开始（看门狗已布防）之后调用的钩子（测试用：模拟不轮询安全点的宿主操作）。
+     */
+    SandboxedExecutor(SandboxPolicy policy, Duration preEvalLimit, Runnable beforeExecute, Duration backstopGrace,
+                      Runnable afterStart) {
+        this.backstopGrace = Objects.requireNonNull(backstopGrace, "backstopGrace");
+        this.afterStart = Objects.requireNonNull(afterStart, "afterStart");
         this.policy = Objects.requireNonNull(policy, "policy");
         this.preEvalLimit = Objects.requireNonNull(preEvalLimit, "preEvalLimit");
         this.beforeExecute = Objects.requireNonNull(beforeExecute, "beforeExecute");
@@ -123,7 +142,13 @@ public final class SandboxedExecutor implements AutoCloseable {
                 return new Outcome.Failed(Outcome.RESOURCE_EXHAUSTED,
                     "求值前阶段（建 Context、加载 IR、选入口、转换实参）超过 " + preEvalLimit.toSeconds() + " s");
             }
-            return task.get();
+            try {
+                return task.get(timeout.plus(backstopGrace).toNanos(), TimeUnit.NANOSECONDS);
+            } catch (TimeoutException e) {
+                cancel(running, cancelled);
+                return new Outcome.Failed(Outcome.TIMEOUT,
+                    "超过 " + timeout.toMillis() + "ms 且取消后 " + backstopGrace.toSeconds() + " s 内未结束");
+            }
         } catch (InterruptedException e) {
             // 调用线程被中断：取消仍在进行的求值，不留下继续运行的 guest 代码
             cancel(running, cancelled);
@@ -197,6 +222,7 @@ public final class SandboxedExecutor implements AutoCloseable {
                 closer.execute(() -> closeQuietly(ctx));
             }, timeout.toNanos(), TimeUnit.NANOSECONDS);
             executing.countDown();
+            afterStart.run();
             return new Outcome.Ok(executeFunction(evalResult, guestArgs));
         } catch (PolyglotException e) {
             return classify(e, fired.get());

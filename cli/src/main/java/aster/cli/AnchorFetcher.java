@@ -32,7 +32,8 @@ import java.util.concurrent.TimeoutException;
  * {@code --jwks https://…} 的取回（README「信任锚」；参照实现 {@code argv.mjs} 的 {@code fetchJwks}）：
  * <ul>
  *   <li>总时限 10 s（连接、TLS、重定向与读完响应体）；只认 2xx；响应体 ≤ 1 MiB；</li>
- *   <li>只有 301 / 302 / 303 / 307 / 308 算重定向，至多 3 跳，每一跳都必须是 https，相对 Location 按当前请求 URI 解析；其他 3xx 失败。
+ *   <li>只有 301 / 302 / 303 / 307 / 308 算重定向，至多 3 跳，每一跳都必须是 https（scheme 不区分大小写）；Location 必须是合法的
+ *       RFC 3986 URI-reference，按 RFC 3986 §5.2 相对当前请求 URI 解析（{@link Rfc3986}，不用 RFC 2396 的 {@code URI.resolve}）；其他 3xx 失败。
  *       手工处理（{@link HttpClient.Redirect#NEVER} + 循环）：{@code NORMAL} 既不能限制次数，也不能拒绝降级到 http；</li>
  *   <li>请求带 {@code Accept-Encoding: identity}，响应的 {@code Content-Encoding} 不是 identity 即失败；</li>
  *   <li>TLS 用运行时缺省信任库（cacerts）；环境变量 {@code ASTER_ANCHOR_CA_FILE}（仅供测试）指向 PEM 时<b>追加</b>信任其中的证书；</li>
@@ -79,12 +80,22 @@ final class AnchorFetcher {
             .sslContext(sslContext(env))
             .proxy(HttpClient.Builder.NO_PROXY)
             .build();
-        URI current = URI.create(url);
+        try {
+            return follow(client, url, deadline);
+        } finally {
+            // 不等在途请求：超时取消时立即释放连接与选择器线程
+            client.shutdownNow();
+        }
+    }
+
+    private static byte[] follow(HttpClient client, String url, long deadline) throws Exception {
+        String current = url;
         for (int hop = 0; ; hop++) {
-            if (!current.toString().startsWith("https://")) {
+            // 重定向目标的 scheme 已由 Rfc3986.resolve 归一为小写（scheme 不区分大小写）
+            if (!current.startsWith("https://")) {
                 throw usage("重定向到非 https 地址: " + current);
             }
-            HttpRequest request = HttpRequest.newBuilder(current).timeout(remaining(deadline))
+            HttpRequest request = HttpRequest.newBuilder(URI.create(current)).timeout(remaining(deadline))
                 .header("Accept-Encoding", "identity").GET().build();
             HttpResponse<InputStream> resp = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
             int status = resp.statusCode();
@@ -97,7 +108,10 @@ final class AnchorFetcher {
                 if (hop + 1 > MAX_REDIRECTS) {
                     throw usage("重定向超过 " + MAX_REDIRECTS + " 次");
                 }
-                current = current.resolve(location);
+                if (!Rfc3986.isReference(location)) {
+                    throw usage("Location 不是合法的 RFC 3986 URI-reference: " + location);
+                }
+                current = Rfc3986.resolve(current, location);
                 continue;
             }
             try (InputStream body = resp.body()) {

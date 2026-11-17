@@ -96,6 +96,28 @@ Maven Local / 已发布制品解析。
 - 本机缺对应版本制品（`cloud.aster-lang:aster-lang-core:<版本>` 等）时，在对应仓库执行 `./gradlew publishToMavenLocal`
   发布到本地 Maven 仓库，不要降级版本。
 
+## JVM aster CLI（运行导出的策略包）
+
+`cli` 子项目是 ADR 0059 的 JVM `aster` CLI，与 Node CLI（`@aster-cloud/aster-lang-ts` 的 `aster`）同一命令契约：
+`compile`、`run`、`verify`、`inspect`、`version`。行为以 aster-lang-test `conformance/package-v1/README.md` 为准。
+
+```bash
+./gradlew :cli:shadowJar                 # → cli/build/libs/aster-cli-<ver>.jar 与 .sha256（Release 资产同名）
+java -jar cli/build/libs/aster-cli-<ver>.jar version
+java -jar aster-cli-<ver>.jar run <包目录或 zip> --input input.json --jwks jwks.json
+```
+
+需要 Java 25。stdout 恒为一行 JSON 信封（`compile` 输出 IR），诊断只写 stderr。
+
+**JDK 25 的 stderr 警告**：求值时 Truffle 的 `TStringUnsafe` 调用 `sun.misc.Unsafe::objectFieldOffset`，JDK 25（JEP 498）会在 stderr
+打四行 `WARNING:`。它们不影响 stdout 与退出码。jar 的 manifest 无法设置这个选项，需要静默时在命令行加 JDK 的标准选项：
+
+```bash
+java --sun-misc-unsafe-memory-access=allow -jar aster-cli-<ver>.jar …
+```
+
+根治要等不再使用 `sun.misc.Unsafe` 的 Truffle 版本，见 aster-cloud/aster-lang-truffle#188。
+
 ## 项目结构
 
 ```
@@ -110,6 +132,7 @@ aster-lang-truffle/
 │   │   └── runtime/               # 运行时工具
 │   └── main/resources/
 │       └── META-INF/native-image/ # Native Image 配置
+├── cli/                           # JVM aster CLI（ADR 0059）
 ├── build.gradle.kts
 ├── settings.gradle.kts
 └── gradle.properties
