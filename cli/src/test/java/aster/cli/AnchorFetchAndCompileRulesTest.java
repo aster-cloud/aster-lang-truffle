@@ -35,7 +35,11 @@ class AnchorFetchAndCompileRulesTest {
              "/r300": {"status": 300, "location": "/jwks.json"},
              "/r307": {"status": 307, "location": "jwks.json"},
              "/gzip": {"status": 200, "file": "keys/test-jwks.json", "contentEncoding": "gzip"},
-             "/created": {"status": 201, "file": "keys/test-jwks.json"}}
+             "/created": {"status": 201, "file": "keys/test-jwks.json"},
+             "/userinfo": {"status": 302, "location": "https://user:pw@localhost:<PORT>/jwks.json"},
+             "/bracket-path": {"status": 302, "location": "/a[b]"},
+             "/no-host": {"status": 302, "location": "https:///jwks.json"},
+             "/bad-port": {"status": 302, "location": "https://localhost:70000/jwks.json"}}
             """);
         server = new HttpsFixtureServer(routes, Files.createTempDirectory(tmp, "srv"));
     }
@@ -66,6 +70,13 @@ class AnchorFetchAndCompileRulesTest {
     @Test
     void nonRedirect3xxIsUsage() {
         assertEquals("USAGE", code(run("/r300", Map.of())));
+    }
+
+    @Test
+    void invalidRedirectTargetsAreUsage() {
+        for (String path : new String[]{"/userinfo", "/bracket-path", "/no-host", "/bad-port"}) {
+            assertEquals("USAGE", code(run(path, Map.of())), path);
+        }
     }
 
     @Test

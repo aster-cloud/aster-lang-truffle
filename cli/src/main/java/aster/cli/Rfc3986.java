@@ -26,14 +26,14 @@ final class Rfc3986 {
 
     private Rfc3986() {}
 
-    private record Parts(String scheme, String authority, String path, String query) {
+    private record Parts(String scheme, String authority, String path, String query, String fragment) {
         static Parts of(String ref) {
             Matcher m = PARTS.matcher(ref);
             if (!m.matches()) {
                 throw new IllegalArgumentException("无法分解 " + ref);
             }
             return new Parts(m.group(2), m.group(3) == null ? null : m.group(4), m.group(5),
-                m.group(6) == null ? null : m.group(7));
+                m.group(6) == null ? null : m.group(7), m.group(8) == null ? null : m.group(9));
         }
 
         String recompose() {
@@ -47,6 +47,9 @@ final class Rfc3986 {
             sb.append(path);
             if (query != null) {
                 sb.append('?').append(query);
+            }
+            if (fragment != null) {
+                sb.append('#').append(fragment);
             }
             return sb.toString();
         }
@@ -62,7 +65,8 @@ final class Rfc3986 {
     }
 
     /**
-     * 以 {@code base}（绝对 URI）解析 {@code ref}，返回不含 fragment 的目标 URI（scheme 小写）。
+     * 以 {@code base}（绝对 URI）解析 {@code ref}，返回目标 URI（scheme 小写；fragment 取自 {@code ref}，§5.2.2）。
+     * 发请求时用 {@link #withoutFragment}。
      *
      * @throws IllegalArgumentException {@code ref} 不是合法的 URI-reference
      */
@@ -98,7 +102,78 @@ final class Rfc3986 {
                 }
             }
         }
-        return new Parts(scheme.toLowerCase(Locale.ROOT), authority, path, query).recompose();
+        return new Parts(scheme.toLowerCase(Locale.ROOT), authority, path, query, r.fragment()).recompose();
+    }
+
+    /** 去掉 fragment（请求目标不带 fragment）。 */
+    static String withoutFragment(String uri) {
+        Parts p = Parts.of(uri);
+        return new Parts(p.scheme(), p.authority(), p.path(), p.query(), null).recompose();
+    }
+
+    /** IP-literal：{@code [IPv6address]} 或 {@code [vX.…]}（IPvFuture）。 */
+    private static final Pattern IP_LITERAL =
+        Pattern.compile("\\[(?:[0-9A-Fa-f:.]+|[vV][0-9A-Fa-f]+\\.[A-Za-z0-9\\-._~!$&'()*+,;=:]+)]");
+
+    /**
+     * 请求目标（初始 URL 与每个解析后的重定向目标）是否可以发送（aster-lang-truffle#189 后续 N-1）：必须有非空 host；不得带 userinfo（Node 会把它变成
+     * {@code Authorization: Basic} 发出，JVM 会静默丢掉——两侧都改为拒绝）；端口若出现须为十进制 1–65535；
+     * {@code [ ]} 只允许出现在 IP-literal host 中。返回违例原因，合法返回 null。
+     */
+    static String targetViolation(String uri) {
+        Parts p = Parts.of(uri);
+        String authority = p.authority();
+        if (authority == null || authority.isEmpty()) {
+            return "缺少 host";
+        }
+        if (authority.indexOf('@') >= 0) {
+            return "不得带 userinfo";
+        }
+        String host;
+        String port;
+        if (authority.startsWith("[")) {
+            int close = authority.indexOf(']');
+            if (close < 0) {
+                return "IP-literal 未闭合";
+            }
+            host = authority.substring(0, close + 1);
+            if (!IP_LITERAL.matcher(host).matches()) {
+                return "不是合法的 IP-literal: " + host;
+            }
+            String rest = authority.substring(close + 1);
+            if (!rest.isEmpty() && !rest.startsWith(":")) {
+                return "IP-literal 之后只能是 :port";
+            }
+            port = rest.isEmpty() ? null : rest.substring(1);
+        } else {
+            int colon = authority.lastIndexOf(':');
+            host = colon < 0 ? authority : authority.substring(0, colon);
+            port = colon < 0 ? null : authority.substring(colon + 1);
+            if (host.indexOf(':') >= 0) {
+                return "host 含 ':'";
+            }
+        }
+        if (host.isEmpty()) {
+            return "缺少 host";
+        }
+        if (port != null && !validPort(port)) {
+            return "端口须为十进制 1–65535: " + port;
+        }
+        String rest = p.path() + (p.query() == null ? "" : "?" + p.query())
+            + (p.fragment() == null ? "" : "#" + p.fragment());
+        if (!authority.startsWith("[") && (authority.indexOf('[') >= 0 || authority.indexOf(']') >= 0)
+                || rest.indexOf('[') >= 0 || rest.indexOf(']') >= 0) {
+            return "[ ] 只允许用于 IP-literal host";
+        }
+        return null;
+    }
+
+    private static boolean validPort(String port) {
+        if (port.isEmpty() || port.length() > 5 || !port.chars().allMatch(c -> c >= '0' && c <= '9')) {
+            return false;
+        }
+        int n = Integer.parseInt(port);
+        return n >= 1 && n <= 65535;
     }
 
     /** §5.2.3。 */
