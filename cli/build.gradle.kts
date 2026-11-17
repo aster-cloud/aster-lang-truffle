@@ -91,19 +91,27 @@ val checkCliJarSize = tasks.register("checkCliJarSize") {
     }
 }
 
-// 以子进程 java -jar 跑 fat jar 冒烟（ShadowJarSmokeTest）；check 依赖它，./gradlew build 即覆盖
+// fat jar 一致性门：以子进程 java -jar 跑 conformance 全部用例（ConformanceCasesTest 的 jar 模式）与 ShadowJarSmokeTest；
+// check 依赖它，./gradlew build 即覆盖。用例彼此独立，按类内并发执行以缩短墙钟。
 val shadowJarSmokeTest = tasks.register<Test>("shadowJarSmokeTest") {
-    description = "以 java -jar 运行 aster-cli fat jar 的冒烟测试"
+    description = "以 java -jar 运行 aster-cli fat jar：conformance 全部用例与冒烟测试"
     group = "verification"
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform()
-    filter { includeTestsMatching("aster.cli.ShadowJarSmokeTest") }
+    filter {
+        includeTestsMatching("aster.cli.ShadowJarSmokeTest")
+        includeTestsMatching("aster.cli.ConformanceCasesTest")
+    }
     dependsOn(checkCliJarSize)
     val jar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar").flatMap { it.archiveFile }
     inputs.file(jar)
     doFirst { systemProperty("aster.cli.jar", jar.get().asFile.absolutePath) }
     systemProperty("aster.root.dir", rootDir.absolutePath)
+    systemProperty("junit.jupiter.execution.parallel.enabled", "true")
+    systemProperty("junit.jupiter.execution.parallel.mode.default", "concurrent")
+    systemProperty("junit.jupiter.execution.parallel.config.strategy", "fixed")
+    systemProperty("junit.jupiter.execution.parallel.config.fixed.parallelism", "4")
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
