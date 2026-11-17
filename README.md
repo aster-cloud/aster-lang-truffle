@@ -117,9 +117,16 @@ java -jar aster-cli-<ver>.jar run <包目录或 zip> --input input.json --jwks j
 等价于 `java --sun-misc-unsafe-memory-access=allow -jar aster-cli-<ver>.jar "$@"`：其余参数、stdin / stdout / stderr 与退出码原样透传。
 
 ```bash
-sha256sum -c aster-cli-<ver>.jar.sha256 aster.sha256
+sha256sum -c aster-cli-<ver>.jar.sha256 aster.sha256  # macOS 无 sha256sum 时用 shasum -a 256 -c
 chmod +x aster                                        # Release 下载的资产不带可执行位；也可以 sh aster …
 ./aster run <包目录或 zip> --input input.json --jwks jwks.json
+```
+
+Windows 下用 `aster.cmd`，校验时把 `Get-FileHash -Algorithm SHA256 aster-cli-<ver>.jar, aster.cmd`（PowerShell）的结果与
+`aster-cli-<ver>.jar.sha256`、`aster.cmd.sha256` 中的十六进制值比对：
+
+```bat
+aster.cmd run <包目录或 zip> --input input.json --jwks jwks.json
 ```
 
 - `JAVA_HOME` 已设置时用 `$JAVA_HOME/bin/java`，否则用 `PATH` 上的 `java`；`ASTER_CLI_JAR` 可指向别处的 jar；`aster` 可软链到 `PATH` 上的目录。

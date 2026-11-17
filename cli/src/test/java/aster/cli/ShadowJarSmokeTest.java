@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,11 +42,21 @@ class ShadowJarSmokeTest {
 
     /** 经启动脚本运行：用 /bin/sh 执行（Release 下载的资产不带可执行位），JAVA_HOME 指向运行测试的 JDK。 */
     private static Proc launcher(Path cwd, String stdin, String... args) throws IOException, InterruptedException {
-        List<String> cmd = new ArrayList<>(List.of("/bin/sh", System.getProperty("aster.cli.launcher")));
-        return exec(cmd, cwd, stdin, args);
+        return launcherAt(Path.of(System.getProperty("aster.cli.launcher")), Map.of(), cwd, stdin, args);
+    }
+
+    private static Proc launcherAt(Path script, Map<String, String> env, Path cwd, String stdin, String... args)
+        throws IOException, InterruptedException {
+        List<String> cmd = new ArrayList<>(List.of("/bin/sh", script.toString()));
+        return exec(cmd, env, cwd, stdin, args);
     }
 
     private static Proc exec(List<String> cmd, Path cwd, String stdin, String... args) throws IOException, InterruptedException {
+        return exec(cmd, Map.of(), cwd, stdin, args);
+    }
+
+    private static Proc exec(List<String> cmd, Map<String, String> env, Path cwd, String stdin, String... args)
+        throws IOException, InterruptedException {
         cmd.addAll(List.of(args));
         Path out = Files.createTempFile("aster-cli", ".out");
         Path err = Files.createTempFile("aster-cli", ".err");
@@ -55,6 +67,7 @@ class ShadowJarSmokeTest {
         pb.environment().remove("JDK_JAVA_OPTIONS");
         pb.environment().remove("JAVA_TOOL_OPTIONS");
         pb.environment().put("JAVA_HOME", System.getProperty("java.home"));
+        pb.environment().putAll(env);
         Process p = pb.start();
         try (var in = p.getOutputStream()) {
             if (stdin != null) {
@@ -159,5 +172,32 @@ class ShadowJarSmokeTest {
         assertEquals(viaJar.exit(), viaLauncher.exit(), viaLauncher.stderr());
         assertEquals(viaJar.stdout(), viaLauncher.stdout());
         assertEquals(viaJar.stderr(), viaLauncher.stderr());
+    }
+
+    /**
+     * 软链与含空格路径：脚本经相对软链（{@code bin/aster → ../real/aster}）从含空格的目录调用时，仍找到真实目录里的
+     * aster-cli-<ver>.jar；ASTER_CLI_JAR 覆盖 jar 路径（脚本旁没有 jar 也能运行）。
+     */
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    void launcherResolvesSymlinkAndHonoursAsterCliJar(@TempDir Path tmp) throws Exception {
+        Path jar = Path.of(System.getProperty("aster.cli.jar"));
+        Path real = Files.createDirectories(tmp.resolve("with space/real"));
+        Path script = Files.copy(Path.of(System.getProperty("aster.cli.launcher")), real.resolve("aster"));
+        Files.createSymbolicLink(real.resolve(jar.getFileName()), jar);
+        Path bin = Files.createDirectories(tmp.resolve("with space/bin"));
+        Path link = Files.createSymbolicLink(bin.resolve("aster"), Path.of("../real/aster"));
+        Proc expected = java(Fixtures.PACKAGE_V1, null, "version");
+
+        Proc viaLink = launcherAt(link, Map.of(), Fixtures.PACKAGE_V1, null, "version");
+        assertEquals(0, viaLink.exit(), viaLink.stderr());
+        assertEquals(expected.stdout(), viaLink.stdout());
+
+        Path lonely = Files.copy(script, Files.createDirectories(tmp.resolve("no jar here")).resolve("aster"));
+        Proc missing = launcherAt(lonely, Map.of(), Fixtures.PACKAGE_V1, null, "version");
+        assertTrue(missing.exit() != 0, "脚本旁没有 jar 时应失败: " + missing.stdout());
+        Proc overridden = launcherAt(lonely, Map.of("ASTER_CLI_JAR", jar.toString()), Fixtures.PACKAGE_V1, null, "version");
+        assertEquals(0, overridden.exit(), overridden.stderr());
+        assertEquals(expected.stdout(), overridden.stdout());
     }
 }

@@ -20,7 +20,7 @@ done
 dir=$(CDPATH= cd -- "$(dirname -- "$self")" && pwd -P) || exit 1
 
 jar=${ASTER_CLI_JAR:-"$dir/aster-cli-@CLI_VERSION@.jar"}
-if [ -n "$JAVA_HOME" ]; then
+if [ -n "${JAVA_HOME:-}" ]; then
   java=$JAVA_HOME/bin/java
 else
   java=java
