@@ -39,12 +39,55 @@ final class Fixtures {
     /** 一次进程内调用的结果。 */
     record Result(int exit, String stdout, String stderr) {}
 
+    /**
+     * 调用一次 CLI。系统属性 {@code aster.cli.jar} 给出时以子进程 {@code java -jar <jar>} 运行（fat jar 一致性门，T9），
+     * 否则进程内调用 {@link AsterCli#run}。{@code env} 是额外设置的环境变量；子进程模式下 ASTER_TRUFFLE_FUNC 一律清除。
+     */
     static Result run(Path cwd, byte[] stdin, Map<String, String> env, String... args) {
+        String jar = System.getProperty("aster.cli.jar");
+        if (jar != null && !jar.isBlank()) {
+            return runJar(jar, cwd, stdin, env, args);
+        }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         int exit = AsterCli.run(args, new ByteArrayInputStream(stdin == null ? new byte[0] : stdin),
             new PrintStream(out, true, StandardCharsets.UTF_8), new PrintStream(err, true, StandardCharsets.UTF_8),
             cwd, env);
         return new Result(exit, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    }
+
+    private static Result runJar(String jar, Path cwd, byte[] stdin, Map<String, String> env, String... args) {
+        java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of(
+            Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-jar", jar));
+        cmd.addAll(java.util.List.of(args));
+        try {
+            Path outFile = Files.createTempFile("aster-cli", ".out");
+            Path errFile = Files.createTempFile("aster-cli", ".err");
+            ProcessBuilder pb = new ProcessBuilder(cmd).directory(cwd.toFile())
+                .redirectOutput(outFile.toFile()).redirectError(errFile.toFile());
+            pb.environment().remove("ASTER_TRUFFLE_FUNC");
+            pb.environment().putAll(env);
+            Process p = pb.start();
+            try (var in = p.getOutputStream()) {
+                if (stdin != null) {
+                    in.write(stdin);
+                }
+            } catch (IOException ignored) {
+                // CLI 可能在读完 stdin 之前就已退出（usage 阶段失败）
+            }
+            if (!p.waitFor(120, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                throw new IllegalStateException("aster-cli 子进程 120 s 未退出: " + cmd);
+            }
+            Result r = new Result(p.exitValue(), Files.readString(outFile), Files.readString(errFile));
+            Files.deleteIfExists(outFile);
+            Files.deleteIfExists(errFile);
+            return r;
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 }

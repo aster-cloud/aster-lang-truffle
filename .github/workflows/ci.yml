@@ -100,3 +100,19 @@ jobs:
       - name: Build & Test
         working-directory: aster-lang-truffle
         run: ./gradlew build -PexcludeBenchmarks=true
+
+      # JVM aster CLI fat jar（ADR 0059 P1 T9）：build 已经过 :cli:checkCliJarSize（18 MiB 门）与 :cli:shadowJarSmokeTest；
+      # 这里再独立核对一次产物存在、体积与 java -jar version，jar 缺失即失败。
+      - name: aster-cli jar gate
+        working-directory: aster-lang-truffle
+        run: |
+          VERSION=$(./gradlew -q properties | sed -n 's/^version: //p' | head -n1)
+          JAR="cli/build/libs/aster-cli-${VERSION}.jar"
+          test -f "$JAR" || { echo "::error::缺少 $JAR"; exit 1; }
+          BYTES=$(stat -c %s "$JAR")
+          echo "aster-cli jar: $BYTES bytes"
+          if [ "$BYTES" -gt $((18 * 1024 * 1024)) ]; then
+            echo "::error::$JAR $BYTES 字节超过 18 MiB（ADR 0059 修订 1 A3）"; exit 1
+          fi
+          (cd cli/build/libs && sha256sum -c "aster-cli-${VERSION}.jar.sha256")
+          java -jar "$JAR" version
