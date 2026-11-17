@@ -4,10 +4,6 @@ import aster.truffle.embed.Outcome;
 import aster.truffle.embed.SandboxedExecutor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import picocli.CommandLine;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -64,52 +60,6 @@ public final class AsterCli {
         }
     }
 
-    // ── 命令行定义（只用于解析；同一选项出现两次、未知选项、缺参数一律 USAGE）──────────────
-
-    @Command(name = "aster", subcommands = {CompileArgs.class, RunArgs.class, VerifyArgs.class, InspectArgs.class,
-        VersionArgs.class})
-    static final class Root {}
-
-    abstract static class AnchorArgs {
-        @Option(names = "--jwks") String jwks;
-        @Option(names = "--pubkey") String pubkey;
-        @Option(names = "--allow-unsigned") boolean allowUnsigned;
-    }
-
-    @Command(name = "run")
-    static final class RunArgs extends AnchorArgs {
-        @Parameters(arity = "1") String pkg;
-        @Option(names = "--entry") String entry;
-        @Option(names = "--input", required = true) String input;
-        @Option(names = "--timeout") String timeout;
-    }
-
-    @Command(name = "verify")
-    static final class VerifyArgs extends AnchorArgs {
-        @Parameters(arity = "1") String pkg;
-        @Option(names = "--recompile") boolean recompile;
-        @Option(names = "--probes") boolean probes;
-        @Option(names = "--timeout") String timeout;
-    }
-
-    @Command(name = "inspect")
-    static final class InspectArgs extends AnchorArgs {
-        @Parameters(arity = "1") String pkg;
-    }
-
-    @Command(name = "compile")
-    static final class CompileArgs extends AnchorArgs {
-        @Parameters(arity = "1") String source;
-        @Option(names = "--locale") String locale;
-        @Option(names = "--alias-set") String aliasSet;
-        @Option(names = "--vocabulary") String vocabulary;
-        @Option(names = "--allow-structural") boolean allowStructural;
-        @Option(names = "--out") String out;
-    }
-
-    @Command(name = "version")
-    static final class VersionArgs {}
-
     // ── 单次调用 ──────────────────────────────────────────────────────
 
     private static final class Invocation {
@@ -126,31 +76,30 @@ public final class AsterCli {
         }
 
         int dispatch(String[] args, Map<String, String> env) throws CliException {
-            CommandLine.ParseResult parsed;
-            try {
-                CommandLine cl = new CommandLine(new Root());
-                cl.setExpandAtFiles(false);
-                cl.setOverwrittenOptionsAllowed(false);
-                cl.setUnmatchedArgumentsAllowed(false);
-                parsed = cl.parseArgs(args);
-            } catch (CommandLine.ParameterException e) {
-                throw new CliException(ErrorCode.USAGE, e.getMessage());
-            }
-            if (!parsed.hasSubcommand()) {
-                throw new CliException(ErrorCode.USAGE, "缺少子命令");
+            // usage 阶段（README「检查顺序」）：命令行语法 → --timeout → compile 的源码 / 配置文件或信任锚 → ASTER_TRUFFLE_FUNC
+            Argv argv = Argv.parse(args);
+            Duration timeout = parseTimeout(argv.value("--timeout"));
+            CompileRequest compile = null;
+            TrustAnchor anchor = null;
+            if (argv.command.equals("compile")) {
+                compile = CompileRequest.check(argv, cwd);
+                if (compile.isPackage()) {
+                    anchor = TrustAnchor.load(argv.value("--pubkey"), argv.value("--jwks"), cwd, env);
+                }
+            } else if (!argv.command.equals("version")) {
+                anchor = TrustAnchor.load(argv.value("--pubkey"), argv.value("--jwks"), cwd, env);
             }
             // ASTER_TRUFFLE_FUNC 在类加载时改写 Truffle 的缺省入口；拒绝它使优先入口集合恒为 {main}（修订 1 A5）
             if (env.containsKey("ASTER_TRUFFLE_FUNC")) {
                 throw new CliException(ErrorCode.USAGE, "不支持环境变量 ASTER_TRUFFLE_FUNC，请取消设置后重试");
             }
-            Object cmd = parsed.subcommand().commandSpec().userObject();
-            return switch (cmd) {
-                case RunArgs a -> runCommand(a);
-                case VerifyArgs a -> verifyCommand(a);
-                case InspectArgs a -> inspectCommand(a);
-                case CompileArgs a -> compileCommand(a);
-                case VersionArgs a -> versionCommand();
-                default -> throw new CliException(ErrorCode.USAGE, "未知子命令");
+            boolean allowUnsigned = argv.flag("--allow-unsigned");
+            return switch (argv.command) {
+                case "run" -> runCommand(argv, anchor, timeout);
+                case "verify" -> verifyCommand(argv, anchor, timeout);
+                case "inspect" -> inspectCommand(argv.positional.get(0), anchor, allowUnsigned);
+                case "compile" -> compileCommand(compile, anchor, allowUnsigned);
+                default -> versionCommand(env);
             };
         }
 
@@ -160,23 +109,17 @@ public final class AsterCli {
             return e.code().exit();
         }
 
-        private TrustAnchor anchor(AnchorArgs a) throws CliException {
-            return TrustAnchor.load(a.pubkey, a.jwks, cwd);
-        }
-
         // ── run ──
 
-        private int runCommand(RunArgs a) throws CliException {
-            Duration timeout = parseTimeout(a.timeout);
-            TrustAnchor anchor = anchor(a);
+        private int runCommand(Argv a, TrustAnchor anchor, Duration timeout) throws CliException {
             PackagePipeline p = new PackagePipeline();
             try {
-                p.trusted(cwd.resolve(a.pkg), anchor, a.allowUnsigned);
+                p.trusted(cwd.resolve(a.positional.get(0)), anchor, a.flag("--allow-unsigned"));
                 warnFacts(p);
-                String entry = a.entry != null ? a.entry : p.defaultEntry();
+                String entry = a.value("--entry") != null ? a.value("--entry") : p.defaultEntry();
                 String coreJson = p.obtainIr(entry);
                 p.checkEntry(coreJson, entry);
-                byte[] input = readInput(a.input);
+                byte[] input = readInput(a.value("--input"));
                 JsonNode ir = irTree(coreJson);
                 Object[] args = InputParser.parse(input, ir, InputParser.func(ir, entry));
                 Evaluated r = evaluate(coreJson, entry, args, timeout);
@@ -207,19 +150,17 @@ public final class AsterCli {
 
         // ── verify ──
 
-        private int verifyCommand(VerifyArgs a) throws CliException {
-            Duration timeout = parseTimeout(a.timeout);
-            TrustAnchor anchor = anchor(a);
+        private int verifyCommand(Argv a, TrustAnchor anchor, Duration timeout) throws CliException {
             PackagePipeline p = new PackagePipeline();
             List<Map<String, Object>> checks = new ArrayList<>();
             String stage = "integrity";
             try {
-                p.read(cwd.resolve(a.pkg));
+                p.read(cwd.resolve(a.positional.get(0)));
                 stage = "schema";
                 p.manifest();
                 checks.add(Envelope.check("schema", null));
                 stage = "signature";
-                p.signature(anchor, a.allowUnsigned);
+                p.signature(anchor, a.flag("--allow-unsigned"));
                 checks.add(Envelope.check("signature", null));
                 stage = "integrity";
                 p.integrity();
@@ -232,7 +173,7 @@ public final class AsterCli {
                     coreJson = p.readCompiledIr();
                     checks.add(Envelope.check("ir", null));
                 }
-                if (a.recompile) {
+                if (a.flag("--recompile")) {
                     stage = "recompile";
                     String local = p.recompile(ErrorCode.PKG_IR_DRIFT, true);
                     checks.add(Envelope.check("recompile", null));
@@ -241,7 +182,7 @@ public final class AsterCli {
                         coreJson = local;
                     }
                 }
-                if (a.probes) {
+                if (a.flag("--probes")) {
                     stage = "probes";
                     if (coreJson == null) {
                         coreJson = p.recompile(ErrorCode.PKG_IR_DRIFT, true);
@@ -310,11 +251,10 @@ public final class AsterCli {
 
         // ── inspect ──
 
-        private int inspectCommand(InspectArgs a) throws CliException {
-            TrustAnchor anchor = anchor(a);
+        private int inspectCommand(String pkg, TrustAnchor anchor, boolean allowUnsigned) {
             PackagePipeline p = new PackagePipeline();
             try {
-                p.trusted(cwd.resolve(a.pkg), anchor, a.allowUnsigned);
+                p.trusted(cwd.resolve(pkg), anchor, allowUnsigned);
                 warnFacts(p);
                 Map<String, Object> inspect = new LinkedHashMap<>();
                 for (String k : new String[]{"effects", "governance", "policy", "runtime", "tests"}) {
@@ -347,70 +287,39 @@ public final class AsterCli {
 
         // ── compile ──
 
-        private int compileCommand(CompileArgs a) throws CliException {
-            Path src = cwd.resolve(a.source);
-            String coreJson;
+        private int compileCommand(CompileRequest c, TrustAnchor anchor, boolean allowUnsigned) {
             PackagePipeline p = new PackagePipeline();
-            boolean isPackage = Files.isDirectory(src) || !a.source.endsWith(".aster");
-            // 包的编译输入一律取自 manifest，编译选项无意义；源码不涉及签名，信任锚选项无意义（与 Node CLI 同一裁决）
-            if (isPackage && (a.locale != null || a.aliasSet != null || a.vocabulary != null || a.allowStructural)) {
-                throw new CliException(ErrorCode.USAGE, "编译包时不接受 --locale / --alias-set / --vocabulary / --allow-structural");
-            }
-            if (!isPackage && (a.jwks != null || a.pubkey != null || a.allowUnsigned)) {
-                throw new CliException(ErrorCode.USAGE, "编译 .aster 源码时不接受 --jwks / --pubkey / --allow-unsigned");
-            }
+            String coreJson;
             try {
-                if (isPackage) {
-                    p.trusted(src, anchor(a), a.allowUnsigned);
+                if (c.isPackage()) {
+                    p.trusted(c.target(), anchor, allowUnsigned);
                     coreJson = p.recompile(ErrorCode.COMPILE_ERROR, false);
                 } else {
-                    coreJson = compileSource(a, src);
+                    coreJson = c.compileSource();
                 }
+                if (c.out() == null) {
+                    // stdout：IR 加一个换行；--out：文件只含 IR 字节，stdout 不输出
+                    byte[] bytes = (coreJson + "\n").getBytes(StandardCharsets.UTF_8);
+                    out.write(bytes, 0, bytes.length);
+                } else {
+                    c.writeOut(coreJson);
+                }
+                return 0;
             } catch (CliException e) {
                 return fail(e, p.meta);
-            }
-            byte[] bytes = coreJson.getBytes(StandardCharsets.UTF_8);
-            if (a.out == null) {
-                // stdout：IR 加一个换行；--out：文件只含 IR 字节，stdout 不输出
-                out.write(bytes, 0, bytes.length);
-                out.print("\n");
-                return 0;
-            }
-            try {
-                Files.write(cwd.resolve(a.out), bytes);
-            } catch (IOException e) {
-                return fail(new CliException(ErrorCode.USAGE, "无法写入 --out: " + e.getMessage()), new Meta());
-            }
-            return 0;
-        }
-
-        private String compileSource(CompileArgs a, Path src) throws CliException {
-            try {
-                String source = Files.readString(src);
-                String aliasSet = a.aliasSet == null ? null : Files.readString(cwd.resolve(a.aliasSet));
-                String vocabulary = a.vocabulary == null ? null : Files.readString(cwd.resolve(a.vocabulary));
-                return aster.core.embed.PolicySourceCompiler.compileCanonical(source,
-                    a.locale == null ? "en-US" : a.locale,
-                    aster.core.embed.PolicySourceCompiler.vocabularyScopesOf(vocabulary),
-                    aster.core.embed.PolicySourceCompiler.parseAliasSetJson(aliasSet),
-                    a.allowStructural);
-            } catch (IOException e) {
-                throw new CliException(ErrorCode.USAGE, "无法读取文件: " + e.getMessage());
-            } catch (RuntimeException | StackOverflowError e) {
-                throw new CliException(ErrorCode.COMPILE_ERROR, e.getMessage());
             }
         }
 
         // ── version ──
 
-        private int versionCommand() throws CliException {
+        private int versionCommand(Map<String, String> env) throws CliException {
             Map<String, Object> v = new LinkedHashMap<>();
             v.put("cliVersion", Version.CLI_VERSION);
             v.put("coreIrVersions", List.of(2));
             v.put("engine", Meta.ENGINE);
             v.put("formatVersions", List.of("1.0"));
             v.put("toolchainId", Version.toolchainId());
-            v.put("trustAnchorKids", TrustAnchor.load(null, null, cwd).kids());
+            v.put("trustAnchorKids", TrustAnchor.load(null, null, cwd, env).kids());
             out.print(ValueJson.write(v) + "\n");
             return 0;
         }

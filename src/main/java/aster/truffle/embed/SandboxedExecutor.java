@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *       （CLI 单次执行，不池化），Context 只经 {@link SandboxPolicy#apply} 构建；</li>
  *   <li>入口由 {@link CoreIrEntrySelector#withEntry} 把目标 Func 挪到最前（与平台 {@code PolicyEvaluationService} /
  *       {@code DynamicCnlExecutor} 相同），{@code ctx.eval} 后执行返回的可执行值，结果经 {@link PolyglotValues#toHost}；</li>
- *   <li>看门狗到点 {@code context.close(true)}，被取消即 {@link Outcome#TIMEOUT}。</li>
+ *   <li>看门狗在 IR 加载、入口选定之后、执行入口之前开始计时，到点 {@code context.close(true)}，被取消即 {@link Outcome#TIMEOUT}。</li>
  * </ul>
  *
  * <p>失败归类（README「检查顺序」eval 阶段）：
@@ -141,12 +141,15 @@ public final class SandboxedExecutor implements AutoCloseable {
             return new Outcome.Failed(Outcome.EVAL_ERROR, "求值被中断");
         }
         AtomicBoolean fired = new AtomicBoolean(false);
-        ScheduledFuture<?> guard = watchdog.schedule(() -> {
-            fired.set(true);
-            closer.execute(() -> closeQuietly(ctx));
-        }, timeout.toNanos(), TimeUnit.NANOSECONDS);
+        ScheduledFuture<?> guard = null;
         try {
+            // 计时起点（README「命令行」）：Context 已创建、IR 已加载、入口已选好之后，紧挨着执行入口之前；
+            // Engine / Context 创建与 IR 加载不计入超时
             Value evalResult = ctx.eval(Source.create("aster", ir));
+            guard = watchdog.schedule(() -> {
+                fired.set(true);
+                closer.execute(() -> closeQuietly(ctx));
+            }, timeout.toNanos(), TimeUnit.NANOSECONDS);
             return new Outcome.Ok(executeFunction(evalResult, guestArgs));
         } catch (PolyglotException e) {
             return classify(e, fired.get());
@@ -160,7 +163,9 @@ public final class SandboxedExecutor implements AutoCloseable {
                 ? new Outcome.Failed(Outcome.TIMEOUT, "超过 " + timeout.toMillis() + "ms")
                 : new Outcome.Failed(Outcome.EVAL_ERROR, String.valueOf(e));
         } finally {
-            guard.cancel(false);
+            if (guard != null) {
+                guard.cancel(false);
+            }
             closeQuietly(ctx);
         }
     }

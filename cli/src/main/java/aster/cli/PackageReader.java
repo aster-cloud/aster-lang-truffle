@@ -35,6 +35,10 @@ import java.util.zip.Inflater;
 public final class PackageReader {
 
     public static final long MAX_PACKAGE_BYTES = 64L * 1024 * 1024;
+    /** 条目数上限：目录形态数普通文件与子目录（不含包根），zip 数 EOCD 记录的条目（含目录条目）。 */
+    public static final int MAX_ENTRIES = 1024;
+    /** 目录形态的子目录嵌套深度上限（包根的直接子目录为第 1 层）。 */
+    public static final int MAX_DIR_DEPTH = 32;
     private static final Pattern PATH = Pattern.compile("[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*");
     private static final int CHUNK = 64 * 1024;
 
@@ -83,20 +87,26 @@ public final class PackageReader {
 
     // ── 目录形态 ─────────────────────────────────────────────────
 
+    /**
+     * 目录形态：每层按名字的 UTF-8 字节序遍历；每个条目依次判符号链接 → 子目录（先判深度、再计数、然后递归）/ 普通文件（先计数、
+     * 再判单个与累计大小）。任一项超出立即失败，两侧报的是同一个条目（README「体积上限」）。
+     */
     private static Map<String, byte[]> readDirectory(Path root) throws CliException {
         Map<String, byte[]> files = new LinkedHashMap<>();
-        long[] total = {0};
-        walk(root, "", files, total);
+        long[] totals = {0, 0};  // 累计字节、条目数
+        walk(root, "", 0, files, totals);
         return files;
     }
 
-    private static void walk(Path dir, String rel, Map<String, byte[]> files, long[] total) throws CliException {
+    private static void walk(Path dir, String rel, int depth, Map<String, byte[]> files, long[] totals)
+            throws CliException {
         List<Path> children;
         try (Stream<Path> s = Files.list(dir)) {
-            children = s.sorted().toList();
+            children = new ArrayList<>(s.toList());
         } catch (IOException e) {
             throw fail("无法列出目录 " + rel);
         }
+        children.sort((x, y) -> ManifestCheck.compareUtf8(x.getFileName().toString(), y.getFileName().toString()));
         for (Path child : children) {
             String name = child.getFileName().toString();
             String r = rel.isEmpty() ? name : rel + "/" + name;
@@ -110,22 +120,33 @@ public final class PackageReader {
                 throw fail("符号链接 " + r);
             }
             if (a.isDirectory()) {
-                walk(child, r, files, total);
+                if (depth + 1 > MAX_DIR_DEPTH) {
+                    throw fail("目录嵌套超过 " + MAX_DIR_DEPTH + " 层");
+                }
+                countEntry(totals);
+                walk(child, r, depth + 1, files, totals);
                 continue;
             }
             if (!a.isRegularFile()) {
                 throw fail("不是普通文件 " + r);
             }
+            countEntry(totals);
             // 先按 stat 的大小判上限，不先读入再判断
-            if (a.size() > MAX_PACKAGE_BYTES || total[0] + a.size() > MAX_PACKAGE_BYTES) {
+            if (a.size() > MAX_PACKAGE_BYTES || totals[0] + a.size() > MAX_PACKAGE_BYTES) {
                 throw fail("目录形态超过 64 MiB");
             }
-            total[0] += a.size();
+            totals[0] += a.size();
             try {
                 files.put(r, Files.readAllBytes(child));
             } catch (IOException e) {
                 throw fail("无法读取 " + r);
             }
+        }
+    }
+
+    private static void countEntry(long[] totals) throws CliException {
+        if (++totals[1] > MAX_ENTRIES) {
+            throw fail("条目数超过 " + MAX_ENTRIES);
         }
     }
 
@@ -158,6 +179,9 @@ public final class PackageReader {
         }
         if (count == 0) {
             throw fail("空 zip");
+        }
+        if (count > MAX_ENTRIES) {
+            throw fail("条目数超过 " + MAX_ENTRIES);
         }
         List<CentralEntry> cds = readCentralDirectory(buf, (int) cdOff, e, count);
         return readEntries(buf, cds, (int) cdOff);

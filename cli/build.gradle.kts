@@ -14,7 +14,6 @@ dependencies {
     implementation(project(":"))
     implementation(asterLibs.core)
     implementation(asterLibs.graalvm.sdk)
-    implementation("info.picocli:picocli:4.7.7")
     // 与 aster-lang-core 的 CoreIrJson 同一版本（core 传递依赖 2.0.1；计划原写 1.5.x，会被冲突解析升到 2.x）
     implementation("com.networknt:json-schema-validator:2.0.1")
     implementation("com.fasterxml.jackson.core:jackson-databind:$jacksonVersion")

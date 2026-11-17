@@ -39,6 +39,7 @@ class ConformanceCasesTest {
         }
         files.add(Fixtures.PACKAGE_V1.resolve("tamper/cases.json"));
         files.add(Fixtures.PACKAGE_V1.resolve("inputs-invalid/cases.json"));
+        files.add(Fixtures.PACKAGE_V1.resolve("compile/cases.json"));
         int total = 0;
         for (Path f : files) {
             for (JsonNode c : Fixtures.MAPPER.readTree(f.toFile()).path("cases")) {
@@ -48,14 +49,25 @@ class ConformanceCasesTest {
                 total++;
                 Path cwd = f.getParent();
                 String name = Fixtures.PACKAGE_V1.relativize(f) + " :: " + c.path("name").asText();
-                tests.add(DynamicTest.dynamicTest(name, () -> assertCase(c, cwd, args(c, null), stdin(c))));
+                tests.add(DynamicTest.dynamicTest(name, () -> assertCase(c, cwd, args(c, null, null), stdin(c), Map.of())));
             }
         }
         for (JsonNode c : Fixtures.json("tamper/test-time.json").path("cases")) {
             total++;
             tests.add(DynamicTest.dynamicTest("tamper/test-time.json :: " + c.path("name").asText(), () -> {
                 Path pkg = buildRecipe(c);
-                assertCase(c, Fixtures.PACKAGE_V1, args(c, pkg), stdinRecipe(c));
+                JsonNode https = c.path("recipe").path("httpsServer");
+                if (https.isMissingNode()) {
+                    assertCase(c, Fixtures.PACKAGE_V1, args(c, pkg, null), stdinRecipe(c), Map.of());
+                    return;
+                }
+                try (HttpsFixtureServer server = new HttpsFixtureServer(https.path("routes"),
+                        Files.createTempDirectory(tmp, "https"))) {
+                    Map<String, String> env = new java.util.HashMap<>();
+                    c.path("recipe").path("env").fields().forEachRemaining(e ->
+                        env.put(e.getKey(), e.getValue().asText().replace("<CA_PEM>", server.caPem().toString())));
+                    assertCase(c, Fixtures.PACKAGE_V1, args(c, pkg, server.port()), stdinRecipe(c), env);
+                }
             }));
         }
         assertTrue(total >= 400, "用例过少（" + total + "），夹具路径可能漂移");
@@ -74,18 +86,50 @@ class ConformanceCasesTest {
         return false;
     }
 
-    private static void assertCase(JsonNode c, Path cwd, String[] args, byte[] stdin) {
-        Fixtures.Result r = Fixtures.run(cwd, stdin, Map.of(), args);
-        String actual = StdoutNormalizer.normalize(r.stdout());
-        assertEquals(c.path("expectedStdout").asText(), actual, "stdout（stderr: " + r.stderr() + "）");
-        assertEquals(c.path("expectedExit").asInt(), r.exit(), "退出码（stderr: " + r.stderr() + "）");
+    private static void assertCase(JsonNode c, Path cwd, String[] args, byte[] stdin, Map<String, String> env)
+            throws Exception {
+        // compile 用例的 <OUT> 换成临时路径（父目录存在、文件尚不存在）
+        Path outDir = Files.createTempDirectory(tmp, "out");
+        Path outFile = outDir.resolve("core.json");
+        for (int k = 0; k < args.length; k++) {
+            args[k] = args[k].replace("<OUT>", outFile.toString());
+        }
+        Fixtures.Result r = Fixtures.run(cwd, stdin, env, args);
+        String diag = "（stderr: " + r.stderr() + "）";
+        assertEquals(c.path("expectedExit").asInt(), r.exit(), "退出码" + diag);
+        if (c.has("expectedPositionFreeSha256")) {
+            // compile 成功：两侧 IR 只差 origin 列，只比较投影哈希（README「compile」）
+            String ir;
+            if (c.has("outFile")) {
+                assertEquals("", r.stdout(), "--out 时 stdout 应为空");
+                ir = Files.readString(outFile);
+            } else {
+                assertTrue(r.stdout().endsWith("\n"), "stdout 应以换行结尾");
+                ir = r.stdout().substring(0, r.stdout().length() - 1);
+            }
+            assertEquals(c.path("expectedPositionFreeSha256").asText(),
+                aster.core.embed.PolicySourceCompiler.positionFreeSha256(ir), diag);
+        } else {
+            assertEquals(c.path("expectedStdout").asText(), StdoutNormalizer.normalize(r.stdout()), "stdout" + diag);
+        }
+        if (c.path("outFileMustNotExist").asBoolean(false)) {
+            try (Stream<Path> left = Files.list(outDir)) {
+                assertEquals(List.of(), left.toList(), "失败时不得创建目标文件或留下临时文件");
+            }
+        }
     }
 
-    private static String[] args(JsonNode c, Path pkg) {
+    private static String[] args(JsonNode c, Path pkg, Integer port) {
         List<String> out = new ArrayList<>();
         for (JsonNode a : c.path("args")) {
             String s = a.asText().replace("<PACKAGE_V1>", Fixtures.PACKAGE_V1.toString());
-            out.add(pkg == null ? s : s.replace("<PKG>", pkg.toString()));
+            if (pkg != null) {
+                s = s.replace("<PKG>", pkg.toString());
+            }
+            if (port != null) {
+                s = s.replace("<PORT>", String.valueOf(port));
+            }
+            out.add(s);
         }
         return out.toArray(String[]::new);
     }
@@ -119,9 +163,14 @@ class ConformanceCasesTest {
                 }
             }
             for (JsonNode add : recipe.path("add")) {
-                try (RandomAccessFile f = new RandomAccessFile(dst.resolve(add.path("path").asText()).toFile(), "rw")) {
+                Path file = dst.resolve(add.path("path").asText());
+                Files.createDirectories(file.getParent());
+                try (RandomAccessFile f = new RandomAccessFile(file.toFile(), "rw")) {
                     f.setLength(add.path("size").asLong());
                 }
+            }
+            for (JsonNode d : recipe.path("addDirs")) {
+                Files.createDirectories(dst.resolve(d.asText()));
             }
             return dst;
         }

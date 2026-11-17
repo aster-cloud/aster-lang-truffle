@@ -2,13 +2,8 @@ package aster.cli;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -20,7 +15,7 @@ import java.util.regex.Pattern;
  * 信任锚（README「信任锚」）。读取与校验属于 usage 阶段：锚文件不可读或不合法一律 {@link ErrorCode#USAGE}。
  *
  * <ul>
- *   <li>JWKS（内置 {@code export-jwks.json} 或 {@code --jwks <file|https url>}）：按签名文件的 kid 查找；</li>
+ *   <li>JWKS（内置 {@code export-jwks.json} 或 {@code --jwks <file|https url>}，https 取回见 {@link AnchorFetcher}）：按签名文件的 kid 查找；</li>
  *   <li>{@code --pubkey <file>} 原始公钥：32 字节的规范 base64url，后面至多一个 {@code \n}；不看 kid；</li>
  *   <li>{@code --pubkey <file>} 单个 JWK：带 kid 时必须等于签名文件的 kid，不带时不看 kid。</li>
  * </ul>
@@ -42,8 +37,11 @@ public final class TrustAnchor {
         this.kid = kid;
     }
 
-    /** 按命令行选项加载；二者都缺省时用内置锚。 */
-    public static TrustAnchor load(String pubkey, String jwks, Path cwd) throws CliException {
+    /** 「是 URL」的判定：{@code scheme://}；只接受字面量小写 {@code https://}，其他 scheme（含大写）为 USAGE 且不发请求。 */
+    private static final Pattern URL_LIKE = Pattern.compile("[A-Za-z][A-Za-z0-9+.-]*://.*", Pattern.DOTALL);
+
+    /** 按命令行选项加载；二者都缺省时用内置锚。{@code env} 供 https 取回读代理与测试 CA。 */
+    public static TrustAnchor load(String pubkey, String jwks, Path cwd, Map<String, String> env) throws CliException {
         if (pubkey != null && jwks != null) {
             throw usage("--jwks 与 --pubkey 不能同时给出");
         }
@@ -51,8 +49,13 @@ public final class TrustAnchor {
             return fromPubkey(readFile(cwd, pubkey));
         }
         if (jwks != null) {
-            byte[] bytes = jwks.startsWith("https://") ? fetch(jwks) : readFile(cwd, jwks);
-            return fromJwks(bytes);
+            if (URL_LIKE.matcher(jwks).matches()) {
+                if (!jwks.startsWith("https://")) {
+                    throw usage("--jwks 只接受 https:// URL");
+                }
+                return fromJwks(AnchorFetcher.fetch(jwks, env));
+            }
+            return fromJwks(readFile(cwd, jwks));
         }
         try (InputStream in = TrustAnchor.class.getResourceAsStream("export-jwks.json")) {
             return fromJwks(in.readAllBytes());
@@ -150,7 +153,7 @@ public final class TrustAnchor {
 
     private static Object parse(byte[] bytes) throws CliException {
         try {
-            return StrictJson.parse(bytes, 64);
+            return StrictJson.parse(bytes, 8);
         } catch (StrictJson.StrictJsonException e) {
             throw usage("信任锚不是严格 JSON: " + e.getMessage());
         }
@@ -174,28 +177,15 @@ public final class TrustAnchor {
 
     private static byte[] readFile(Path cwd, String file) throws CliException {
         try {
+            if (!Files.isRegularFile(cwd.resolve(file))) {
+                throw usage("信任锚文件不存在或不是普通文件 " + file);
+            }
+            if (Files.size(cwd.resolve(file)) > AnchorFetcher.MAX_BYTES) {
+                throw usage("信任锚文件超过 1 MiB " + file);
+            }
             return Files.readAllBytes(cwd.resolve(file));
         } catch (IOException | RuntimeException e) {
             throw usage("无法读取信任锚文件 " + file);
-        }
-    }
-
-    /** {@code --jwks <https url>}：唯一联网的路径，10 s 超时。 */
-    private static byte[] fetch(String url) throws CliException {
-        try {
-            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-            HttpResponse<byte[]> resp = client.send(
-                HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build(),
-                HttpResponse.BodyHandlers.ofByteArray());
-            if (resp.statusCode() != 200) {
-                throw usage("获取 JWKS 失败: HTTP " + resp.statusCode());
-            }
-            return resp.body();
-        } catch (IOException | IllegalArgumentException e) {
-            throw usage("获取 JWKS 失败: " + e.getMessage());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw usage("获取 JWKS 被中断");
         }
     }
 
