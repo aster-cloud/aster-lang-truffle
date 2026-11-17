@@ -56,4 +56,18 @@ class Rfc3986Test {
         }
         assertTrue(Rfc3986.isReference("%E2%82%AC/x?y=1#z"));
     }
+
+    @Test
+    void redirectTargetRules() {
+        for (String ok : new String[]{"https://h/x", "https://h:1/x", "https://h:65535/x", "https://[::1]:8443/x",
+                "https://[v1.fe]/x", "https://127.0.0.1/x?q=1"}) {
+            assertEquals(null, Rfc3986.targetViolation(ok), ok);
+        }
+        for (String bad : new String[]{"https:///x", "https://:443/x", "https://u@h/x", "https://u:p@h/x", "https://@h/x",
+                "https://h:0/x", "https://h:65536/x", "https://h:/x", "https://h:1a/x", "https://h:+1/x",
+                "https://h/a[b]", "https://h/x?a=[1]", "https://h[1]/x", "https://[::1/x", "https://[zz]/x",
+                "https://[::1]x/x", "https:/x"}) {
+            assertTrue(Rfc3986.targetViolation(bad) != null, bad);
+        }
+    }
 }

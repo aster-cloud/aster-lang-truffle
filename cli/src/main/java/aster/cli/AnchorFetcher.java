@@ -112,6 +112,11 @@ final class AnchorFetcher {
                     throw usage("Location 不是合法的 RFC 3986 URI-reference: " + location);
                 }
                 current = Rfc3986.resolve(current, location);
+                // 发出之前检查解析后的目标：非空 host、端口 1–65535、无 userinfo、[ ] 只用于 IP-literal
+                String violation = Rfc3986.targetViolation(current);
+                if (violation != null) {
+                    throw usage("重定向目标不合法（" + violation + "）: " + current);
+                }
                 continue;
             }
             try (InputStream body = resp.body()) {
