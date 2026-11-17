@@ -106,6 +106,9 @@ val shadowJarSmokeTest = tasks.register<Test>("shadowJarSmokeTest") {
     dependsOn(checkCliJarSize)
     val jar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar").flatMap { it.archiveFile }
     inputs.file(jar)
+    if (conformanceDir != null) {
+        inputs.dir(conformanceDir).withPropertyName("conformance").withPathSensitivity(PathSensitivity.RELATIVE)
+    }
     doFirst { systemProperty("aster.cli.jar", jar.get().asFile.absolutePath) }
     systemProperty("aster.root.dir", rootDir.absolutePath)
     systemProperty("junit.jupiter.execution.parallel.enabled", "true")
