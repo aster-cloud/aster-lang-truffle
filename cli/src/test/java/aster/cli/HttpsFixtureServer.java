@@ -51,7 +51,10 @@ final class HttpsFixtureServer implements AutoCloseable {
         server = HttpsServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.setHttpsConfigurator(new HttpsConfigurator(ssl));
         server.createContext("/", ex -> {
-            JsonNode r = routes.get(ex.getRequestURI().getPath());
+            // 与参照测试服务同口径：按原始 path + query 匹配路由（重定向 "?q" 落到 "/a/b?q"）
+            String raw = ex.getRequestURI().getRawPath()
+                + (ex.getRequestURI().getRawQuery() == null ? "" : "?" + ex.getRequestURI().getRawQuery());
+            JsonNode r = routes.get(raw);
             byte[] body = new byte[0];
             int status = 404;
             if (r != null) {
@@ -70,9 +73,10 @@ final class HttpsFixtureServer implements AutoCloseable {
                     body = r.path("body").asText().getBytes(StandardCharsets.UTF_8);
                 }
             }
-            if (r != null && r.has("contentEncoding")) {
-                // 仅本仓单测使用的扩展：声明响应的 Content-Encoding（README 要求非 identity 即 USAGE）
-                ex.getResponseHeaders().add("Content-Encoding", r.path("contentEncoding").asText());
+            for (String key : new String[]{"contentEncoding", "contentEncodingHeader"}) {
+                if (r != null && r.has(key)) {
+                    ex.getResponseHeaders().add("Content-Encoding", r.path(key).asText());
+                }
             }
             ex.sendResponseHeaders(status, body.length == 0 ? -1 : body.length);
             try (OutputStream os = ex.getResponseBody()) {

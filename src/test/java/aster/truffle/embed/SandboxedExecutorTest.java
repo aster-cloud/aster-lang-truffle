@@ -192,6 +192,31 @@ class SandboxedExecutorTest {
     }
 
     @Test
+    void backstopReturnsTimeoutWhenExecutionIgnoresCancellation() throws Exception {
+        String core = ir("""
+            Module demo.
+
+            Rule ident given x as Int, produce Int:
+              Return x.
+            """);
+        // 执行开始后在宿主代码里睡 10 s（不轮询安全点，close(true) 无法中止）：超时 200 ms + 宽限 300 ms 后按 TIMEOUT 返回
+        try (SandboxedExecutor stuck = new SandboxedExecutor(SandboxPolicy.PRODUCTION, Duration.ofSeconds(30), () -> { },
+                Duration.ofMillis(300), () -> {
+                    long end = System.nanoTime() + 10_000_000_000L;
+                    while (System.nanoTime() < end) {
+                        Thread.onSpinWait();
+                    }
+                })) {
+            long start = System.nanoTime();
+            Outcome out = stuck.execute(core, "ident", new Object[]{1}, Duration.ofMillis(200));
+            long ms = (System.nanoTime() - start) / 1_000_000;
+            assertEquals(Outcome.TIMEOUT, ((Outcome.Failed) out).code(), out.toString());
+            assertTrue(ms < 3_000, "应在超时 + 宽限附近返回，实际 " + ms + "ms");
+        }
+        assertEquals(Duration.ofSeconds(5), SandboxedExecutor.BACKSTOP_GRACE);
+    }
+
+    @Test
     void preEvaluationLimitDoesNotCountExecution() throws Exception {
         // 执行本身不受求值前上限约束：上限 1 ms 时正常求值照样成功（只要求值前阶段在上限内完成——这里放宽到 30 s）
         String core = ir("""

@@ -19,6 +19,12 @@ val conformanceDir = listOf(rootDir.resolve("aster-lang-test"), rootDir.resolve(
     .map { it.resolve("conformance/package-v1") }
     .firstOrNull { it.isDirectory }
 
+fun requireConformanceDir() {
+    if (conformanceDir == null) {
+        throw GradleException("缺少兄弟仓 aster-lang-test 的 conformance/package-v1（找过 ${rootDir}/aster-lang-test 与 ${rootDir}/../aster-lang-test）")
+    }
+}
+
 dependencies {
     implementation(project(":"))
     implementation(asterLibs.core)
@@ -114,6 +120,8 @@ val shadowJarSmokeTest = tasks.register<Test>("shadowJarSmokeTest") {
     if (conformanceDir != null) {
         inputs.dir(conformanceDir).withPropertyName("conformance").withPathSensitivity(PathSensitivity.RELATIVE)
     }
+    // 缺兄弟仓即失败，不静默去掉输入声明（否则又会从构建缓存复用旧结果）
+    doFirst { requireConformanceDir() }
     doFirst { systemProperty("aster.cli.jar", jar.get().asFile.absolutePath) }
     systemProperty("aster.root.dir", rootDir.absolutePath)
     systemProperty("junit.jupiter.execution.parallel.enabled", "true")
@@ -146,6 +154,8 @@ tasks.test {
     if (conformanceDir != null) {
         inputs.dir(conformanceDir).withPropertyName("conformance").withPathSensitivity(PathSensitivity.RELATIVE)
     }
+    // 缺兄弟仓即失败，不静默去掉输入声明（否则又会从构建缓存复用旧结果）
+    doFirst { requireConformanceDir() }
     // 兄弟仓 aster-lang-test 的两种布局：CI 检出到工作区内（根项目同级），本地为并列目录
     systemProperty("aster.root.dir", rootDir.absolutePath)
     testLogging {
