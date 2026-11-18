@@ -26,6 +26,6 @@ class AsterTruffleFuncTest {
         Fixtures.Result r = Fixtures.run(Fixtures.PACKAGE_V1, null, Map.of(), "version");
         assertEquals(0, r.exit());
         assertTrue(r.stdout().matches("\\{\"cliVersion\":\"[^\"]+\",\"coreIrVersions\":\\[2],\"engine\":\"aster-lang-truffle\","
-            + "\"formatVersions\":\\[\"1.0\"],\"toolchainId\":\"abi=2.0;[^\"]+\",\"trustAnchorKids\":\\[]}\n"), r.stdout());
+            + "\"formatVersions\":\\[\"1.0\"],\"toolchainId\":\"abi=2.0;[^\"]+\",\"trustAnchorKids\":\\[\"export-2026-11a\"]}\n"), r.stdout());
     }
 }
