@@ -54,16 +54,20 @@ jobs:
           repository: aster-cloud/aster-lang-platform
           path: aster-lang-platform
           token: ${{ secrets.CROSS_REPO_TOKEN }}
-      - uses: actions/setup-java@v5
-        with: { java-version: '25', distribution: 'temurin' }
+      # aster-lang-platform#138：JDK + Gradle 依赖缓存（先恢复再解析；列车 dispatch 跑在 main，本组缓存读写），并把
+      # gradle-retry.sh（Maven Central 429 时退避重试）/ gradle-version.sh 加进 PATH。须在全部 checkout 之后。
+      - uses: aster-cloud/aster-lang-platform/.github/actions/setup-gradle-cached@main
+        with:
+          cache-group: release
       - name: Bootstrap version catalog to Maven Local
-        run: cd aster-lang-platform && ./gradlew publishToMavenLocal
+        run: cd aster-lang-platform && gradle-retry.sh ./gradlew publishToMavenLocal
       - name: Create & push release tag
         env:
           VERSION: ${{ inputs.version }}
           FORCE_TESTS: ${{ inputs.forceTests }}
         run: |
-          RESOLVED=$(./gradlew -q properties | sed -n 's/^version: //p' | head -n1)
+          # Gradle 失败（限流重试用尽也算）或读不到版本时 gradle-version.sh 退出非 0，本步在赋值处终止，不会拿空串去比（#138）。
+          RESOLVED=$(gradle-version.sh)
           if [ "$VERSION" != "$RESOLVED" ]; then
             echo "::error::dispatch version ($VERSION) != Gradle-resolved catalog version ($RESOLVED)"
             exit 1
@@ -159,25 +163,26 @@ jobs:
           path: aster-lang-test
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
-      - uses: actions/setup-java@v5
+      # aster-lang-platform#138：JDK + gradle-retry.sh / gradle-version.sh。缓存仍用 setup-java 的 `cache: gradle`：
+      # 键只由构建文件决定，tag run 精确命中 main CI 写下的完整依赖缓存。
+      - uses: aster-cloud/aster-lang-platform/.github/actions/setup-gradle-cached@main
         with:
-          java-version: '25'
-          distribution: 'temurin'
-          cache: 'gradle'
+          cache: setup-java
 
       - name: Publish dependencies to Maven Local
         run: |
-          cd aster-lang-platform && ./gradlew publishToMavenLocal
-          cd ../aster-lang-core && ./gradlew publishToMavenLocal -x test
-          cd ../aster-lang-runtime && ./gradlew publishToMavenLocal -x test
-          cd ../aster-lang-locales && ./gradlew publishToMavenLocal -x test
-          cd ../aster-lang-hi && ./gradlew publishToMavenLocal -x test
+          cd aster-lang-platform && gradle-retry.sh ./gradlew publishToMavenLocal
+          cd ../aster-lang-core && gradle-retry.sh ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-runtime && gradle-retry.sh ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-locales && gradle-retry.sh ./gradlew publishToMavenLocal -x test
+          cd ../aster-lang-hi && gradle-retry.sh ./gradlew publishToMavenLocal -x test
 
       # tag ↔ 版本守卫（与 core/runtime/locales 同构）：此前本仓的 tag-push 路径没有这一步。
       - name: Verify tag matches catalog-derived version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          RESOLVED=$(./gradlew -q properties | sed -n 's/^version: //p' | head -n1)
+          # Gradle 失败（限流重试用尽也算）或读不到版本时 gradle-version.sh 退出非 0，本步在赋值处终止，不会拿空串去比（#138）。
+          RESOLVED=$(gradle-version.sh)
           if [ "$TAG_VERSION" != "$RESOLVED" ]; then
             echo "::error::Tag version ($TAG_VERSION) != Gradle-resolved catalog version ($RESOLVED)"
             exit 1
