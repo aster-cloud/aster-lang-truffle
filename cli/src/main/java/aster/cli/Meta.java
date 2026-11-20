@@ -15,6 +15,8 @@ final class Meta {
     String entry;
     String coreIrSha256;
     boolean irRecompiled;
+    /** 只在 run --display 且派生程序通过 L8/L9 之后填写（ADR 0059 修订 4 D8）：canonicalSha256、matchesPackage。 */
+    Map<String, Object> display;
 
     Map<String, Object> toTree() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -24,6 +26,9 @@ final class Meta {
         m.put("entry", entry);
         m.put("irRecompiled", irRecompiled);
         m.put("signed", signed);
+        if (display != null) {
+            m.put("display", display);
+        }
         return m;
     }
 }

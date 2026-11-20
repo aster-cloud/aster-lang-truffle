@@ -25,12 +25,14 @@ final class Argv {
     private record Spec(Set<String> valued, Set<String> switches, int positional) {}
 
     private static final Map<String, Spec> SPECS = Map.of(
-        "run", new Spec(Set.of("--entry", "--input", "--timeout", "--jwks", "--pubkey"), Set.of("--allow-unsigned"), 1),
+        "run", new Spec(Set.of("--entry", "--input", "--timeout", "--display", "--jwks", "--pubkey"), Set.of("--allow-unsigned"), 1),
         "verify", new Spec(Set.of("--timeout", "--jwks", "--pubkey"), Set.of("--allow-unsigned", "--recompile", "--probes"), 1),
         "inspect", new Spec(Set.of("--jwks", "--pubkey"), Set.of("--allow-unsigned"), 1),
         "compile", new Spec(Set.of("--locale", "--alias-set", "--vocabulary", "--out", "--jwks", "--pubkey"),
             Set.of("--allow-unsigned", "--allow-structural"), 1),
-        "version", new Spec(Set.of(), Set.of(), 0));
+        "version", new Spec(Set.of(), Set.of(), 0),
+        // ADR 0059 修订 4 D6：show 打印显示文本（--canonical 打印规范源码，--from-display 打印还原出的规范源码）
+        "show", new Spec(Set.of("--from-display", "--jwks", "--pubkey"), Set.of("--allow-unsigned", "--canonical"), 1));
 
     final String command;
     final List<String> positional;
@@ -118,6 +120,9 @@ final class Argv {
         }
         if (command.equals("run") && !options.containsKey("--input")) {
             throw usage("run 缺 --input");
+        }
+        if (command.equals("show") && options.containsKey("--canonical") && options.containsKey("--from-display")) {
+            throw usage("--canonical 与 --from-display 互斥");
         }
         return new Argv(command, positional, options);
     }
