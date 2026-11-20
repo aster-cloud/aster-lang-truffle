@@ -58,10 +58,12 @@ final class ManifestCheck {
         if (fv == null || !fv.matches()) {
             throw invalid("formatVersion 语法");
         }
-        if (Integer.parseInt(fv.group(1)) != 1 || Integer.parseInt(fv.group(2)) > 0) {
+        // 主版本 1、次版本 ≤ 1（ADR 0059 修订 4 D2），再按该次版本自己的 schema 严格校验
+        int minor = Integer.parseInt(fv.group(2));
+        if (Integer.parseInt(fv.group(1)) != 1 || minor > 1) {
             throw new CliException(ErrorCode.PKG_UNSUPPORTED_FORMAT, "formatVersion " + m.get("formatVersion"));
         }
-        String schemaError = JsonSchemas.firstError(JsonSchemas.MANIFEST, m);
+        String schemaError = JsonSchemas.firstError(minor == 1 ? JsonSchemas.MANIFEST_1_1 : JsonSchemas.MANIFEST, m);
         if (schemaError != null) {
             throw invalid("manifest schema: " + schemaError);
         }
@@ -101,6 +103,14 @@ final class ManifestCheck {
         }
         if (!Normalizer.isNormalized((String) Json.at(m, "policy", "moduleName"), Normalizer.Form.NFC)) {
             throw invalid("模块名不是 NFC");
+        }
+        // 1.1：display 存在 ⇒ files[] 同时含两个显示排版路径（不存在时这两个路径只是普通载荷）
+        if (m.containsKey("display")) {
+            Set<String> paths = new HashSet<>();
+            files.forEach(f -> paths.add((String) f.get("path")));
+            if (!paths.contains(DisplayStage.LAYOUT_PATH) || !paths.contains(DisplayStage.DISPLAY_PATH)) {
+                throw invalid("display 存在但 files[] 缺显示排版文件");
+            }
         }
     }
 

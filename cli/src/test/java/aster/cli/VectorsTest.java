@@ -19,7 +19,7 @@ class VectorsTest {
 
     @Test
     void schemaCopiesAreByteIdentical() throws Exception {
-        for (String name : new String[]{"manifest-1.0.schema.json", "sig-1.0.schema.json"}) {
+        for (String name : new String[]{"manifest-1.0.schema.json", "manifest-1.1.schema.json", "sig-1.0.schema.json"}) {
             byte[] truth = Files.readAllBytes(Fixtures.PACKAGE_V1.resolve("schema").resolve(name));
             byte[] copy = AsterCli.class.getResourceAsStream(name).readAllBytes();
             assertArrayEquals(truth, copy, name + " 副本与真相源不一致");
@@ -28,7 +28,9 @@ class VectorsTest {
 
     @Test
     void exitCodesMatchTruthSource() throws Exception {
-        JsonNode codes = Fixtures.json("exit-codes.json").path("codes");
+        // 本 CLI 支持 1.0 与 1.1：完整表 = codes ∪ codesSince["1.1"]（aster-lang-test README「输出」）
+        com.fasterxml.jackson.databind.node.ObjectNode codes = Fixtures.json("exit-codes.json").path("codes").deepCopy();
+        codes.setAll((com.fasterxml.jackson.databind.node.ObjectNode) Fixtures.json("exit-codes.json").path("codesSince").path("1.1"));
         assertEquals(codes.size(), ErrorCode.values().length);
         for (ErrorCode c : ErrorCode.values()) {
             assertEquals(codes.path(c.name()).path("exit").asInt(), c.exit(), c.name());

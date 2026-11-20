@@ -101,17 +101,7 @@ final class PackagePipeline {
         if (CompileRequest.isAsciiBlank(source)) {
             throw new CliException(failure, "policy/policy.aster 为空或只有空白");
         }
-        String coreJson;
-        try {
-            coreJson = PolicySourceCompiler.compileCanonical(
-                source,
-                (String) Json.at(manifest, "source", "locale"),
-                PolicySourceCompiler.vocabularyScopesOf(utf8(files.get("policy/compile/vocabulary.json"))),
-                PolicySourceCompiler.parseAliasSetJson(utf8(files.get("policy/compile/alias-set.json"))),
-                Boolean.TRUE.equals(Json.at(manifest, "source", "allowStructural")));
-        } catch (RuntimeException | StackOverflowError e) {
-            throw new CliException(failure, "本地编译失败: " + e.getMessage(), e);
-        }
+        String coreJson = compileSource(source, failure);
         if (compare) {
             String local;
             try {
@@ -125,6 +115,32 @@ final class PackagePipeline {
             }
         }
         return coreJson;
+    }
+
+    /**
+     * 用 manifest 的编译输入（locale、aliasSet、allowStructural、词汇）编译给定源码，返回规范 Core IR；失败为 {@code failure}。
+     * 本地重编译与显示排版的派生源码 C′、补空格源码 P（ADR 0059 修订 4 L9）共用。
+     */
+    String compileSource(String source, ErrorCode failure) throws CliException {
+        try {
+            return PolicySourceCompiler.compileCanonical(
+                source,
+                (String) Json.at(manifest, "source", "locale"),
+                PolicySourceCompiler.vocabularyScopesOf(utf8(files.get("policy/compile/vocabulary.json"))),
+                PolicySourceCompiler.parseAliasSetJson(utf8(files.get("policy/compile/alias-set.json"))),
+                Boolean.TRUE.equals(Json.at(manifest, "source", "allowStructural")));
+        } catch (RuntimeException | StackOverflowError e) {
+            throw new CliException(failure, "本地编译失败: " + e.getMessage(), e);
+        }
+    }
+
+    /** 本地 IR 的投影哈希；IR 读不回为 {@code failure}。 */
+    static String positionFreeSha256(String coreJson, ErrorCode failure) throws CliException {
+        try {
+            return PolicySourceCompiler.positionFreeSha256(coreJson);
+        } catch (CoreIrFormatException | RuntimeException e) {
+            throw new CliException(failure, "本地 IR 无法严格读入: " + e.getMessage(), e);
+        }
     }
 
     /** ir 阶段：A 读 {@code compiled/core.json}，B 本地编译并比对。成功后填写 meta。 */

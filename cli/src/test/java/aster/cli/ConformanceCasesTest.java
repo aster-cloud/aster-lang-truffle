@@ -40,13 +40,22 @@ class ConformanceCasesTest {
         files.add(Fixtures.PACKAGE_V1.resolve("tamper/cases.json"));
         files.add(Fixtures.PACKAGE_V1.resolve("inputs-invalid/cases.json"));
         files.add(Fixtures.PACKAGE_V1.resolve("compile/cases.json"));
+        // 包格式 1.1（显示排版，ADR 0059 修订 4）：display/ 下的用例带 requiresFormat，本 CLI 支持的格式才运行
+        try (Stream<Path> s = Files.list(Fixtures.PACKAGE_V1.resolve("display/packages"))) {
+            s.filter(p -> p.getFileName().toString().endsWith(".cases.json")).sorted().forEach(files::add);
+        }
+        files.add(Fixtures.PACKAGE_V1.resolve("display/tamper/cases.json"));
         int total = 0;
+        int display = 0;
         for (Path f : files) {
             for (JsonNode c : Fixtures.MAPPER.readTree(f.toFile()).path("cases")) {
-                if (!appliesToJre(c)) {
+                if (!appliesToJre(c) || !supportsFormat(c)) {
                     continue;
                 }
                 total++;
+                if (c.has("requiresFormat")) {
+                    display++;
+                }
                 Path cwd = f.getParent();
                 String name = Fixtures.PACKAGE_V1.relativize(f) + " :: " + c.path("name").asText();
                 tests.add(DynamicTest.dynamicTest(name, () -> assertCase(c, cwd, args(c, null, null), stdin(c), Map.of())));
@@ -71,7 +80,15 @@ class ConformanceCasesTest {
             }));
         }
         assertTrue(total >= 400, "用例过少（" + total + "），夹具路径可能漂移");
+        assertTrue(display >= 80, "1.1 用例过少（" + display + "）");
         return tests.stream();
+    }
+
+    /** 本 CLI {@code version} 输出的 formatVersions（与 AsterCli 同一份）。 */
+    private static final java.util.Set<String> FORMAT_VERSIONS = java.util.Set.of("1.0", "1.1");
+
+    private static boolean supportsFormat(JsonNode c) {
+        return !c.has("requiresFormat") || FORMAT_VERSIONS.contains(c.path("requiresFormat").asText());
     }
 
     private static boolean appliesToJre(JsonNode c) {

@@ -20,6 +20,8 @@ final class JsonSchemas {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     static final Schema MANIFEST = load("manifest-1.0.schema.json");
+    /** formatVersion 1.1（ADR 0059 修订 4 D2）：1.0 + 可选 display。 */
+    static final Schema MANIFEST_1_1 = load("manifest-1.1.schema.json");
     static final Schema SIG = load("sig-1.0.schema.json");
 
     private JsonSchemas() {}

@@ -21,7 +21,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * JVM {@code aster} CLI 入口（ADR 0059 P1 T8）：{@code compile / run / verify / inspect / version}，命令契约与 Node CLI 相同，
+ * JVM {@code aster} CLI 入口（ADR 0059 P1 T8；修订 4 加 {@code show} 与 {@code run --display}）：{@code compile / run / verify / inspect / show / version}，命令契约与 Node CLI 相同，
  * 行为以 aster-lang-test {@code conformance/package-v1/README.md} 为准。stdout 恒为一行值规范 JSON（{@code compile} 输出 IR 字节），
  * 诊断只写 stderr。
  */
@@ -89,13 +89,17 @@ public final class AsterCli {
             } else if (!argv.command.equals("version")) {
                 anchor = TrustAnchor.load(argv.value("--pubkey"), argv.value("--jwks"), cwd, env);
             }
+            // 编辑后的显示文本（run --display / show --from-display）同属 usage 阶段：缺失、非普通文件、非法 UTF-8 为 USAGE
+            String editedArg = argv.value("--display") != null ? argv.value("--display") : argv.value("--from-display");
+            DisplayStage.Edited edited = editedArg == null ? null : DisplayStage.readEdited(cwd.resolve(editedArg));
             // ASTER_TRUFFLE_FUNC 在类加载时改写 Truffle 的缺省入口；拒绝它使优先入口集合恒为 {main}（修订 1 A5）
             if (env.containsKey("ASTER_TRUFFLE_FUNC")) {
                 throw new CliException(ErrorCode.USAGE, "不支持环境变量 ASTER_TRUFFLE_FUNC，请取消设置后重试");
             }
             boolean allowUnsigned = argv.flag("--allow-unsigned");
             return switch (argv.command) {
-                case "run" -> runCommand(argv, anchor, timeout);
+                case "run" -> edited != null ? runDisplayCommand(argv, anchor, timeout, edited) : runCommand(argv, anchor, timeout);
+                case "show" -> showCommand(argv, anchor, edited);
                 case "verify" -> verifyCommand(argv, anchor, timeout);
                 case "inspect" -> inspectCommand(argv.positional.get(0), anchor, allowUnsigned);
                 case "compile" -> compileCommand(compile, anchor, allowUnsigned);
@@ -148,6 +152,99 @@ public final class AsterCli {
             }
         }
 
+        // ── run --display（ADR 0059 修订 4 D7–D8） ──
+
+        /**
+         * 阶段：usage → read → manifest → signature → integrity → display（L1–L7）→ reconstruct → derived → compile →
+         * display-ir（L8/L9）→ entry（须在派生模块中）→ input（按派生 IR）→ eval。coreIrSha256 恒为 null；派生程序通过
+         * L8/L9 之后才填 entry、irRecompiled 与 display。
+         */
+        private int runDisplayCommand(Argv a, TrustAnchor anchor, Duration timeout, DisplayStage.Edited edited) throws CliException {
+            PackagePipeline p = new PackagePipeline();
+            try {
+                p.trusted(cwd.resolve(a.positional.get(0)), anchor, a.flag("--allow-unsigned"));
+                warnFacts(p);
+                DisplayStage display = DisplayStage.of(p);
+                aster.core.layout.PolicyLayout layout = display.checkPackage();
+                DisplayStage.Derived d = display.derive(layout, edited, err);
+                String entry = a.value("--entry") != null ? a.value("--entry") : p.defaultEntry();
+                p.meta.entry = entry;
+                p.meta.irRecompiled = true;
+                p.meta.display = display.metaDisplay(d);
+                checkDerivedEntry(d.coreJson(), entry);
+                err.println("正在运行由显示文本派生的程序，不在包签名覆盖之内；派生的规范源码：");
+                err.println(d.canonical());
+                byte[] input = readInput(a.value("--input"));
+                JsonNode ir = irTree(d.coreJson());
+                Object[] args = InputParser.parse(input, ir, InputParser.func(ir, entry));
+                Evaluated r = evaluate(d.coreJson(), entry, args, timeout);
+                if (r.failure != null) {
+                    throw r.failure;
+                }
+                out.print(Envelope.ok(p.meta, r.valueJson));
+                return 0;
+            } catch (CliException e) {
+                return fail(e, p.meta);
+            }
+        }
+
+        /** 派生模块的入口：必须是派生 IR 中可执行的函数（不要求在 manifest 的 policy.entries 中）。 */
+        private void checkDerivedEntry(String coreJson, String entry) throws CliException {
+            try {
+                aster.truffle.embed.CoreIrEntrySelector.withEntry(coreJson, entry);
+            } catch (aster.truffle.embed.EntryFunctionException e) {
+                throw new CliException(ErrorCode.ENTRY_NOT_FOUND, e.getMessage(), e);
+            } catch (IllegalArgumentException e) {
+                throw new CliException(ErrorCode.EVAL_ERROR, e.getMessage(), e);
+            }
+        }
+
+        // ── show（ADR 0059 修订 4 D6） ──
+
+        /**
+         * stdout 不是 JSON：有排版为 display.aster 的字节 + \n；无排版或 --canonical 为 policy/policy.aster 的字节 + \n；
+         * --from-display 为还原出的规范源码 + \n。失败输出与 run 相同的错误信封（meta 不取 IR）。
+         */
+        private int showCommand(Argv a, TrustAnchor anchor, DisplayStage.Edited edited) {
+            PackagePipeline p = new PackagePipeline();
+            boolean allowUnsigned = a.flag("--allow-unsigned");
+            try {
+                p.trusted(cwd.resolve(a.positional.get(0)), anchor, allowUnsigned);
+                if (!p.meta.signed) {
+                    err.println("包没有签名（--allow-unsigned）：显示排版未经签名核验");
+                }
+                byte[] bytes;
+                if (!DisplayStage.hasDisplay(p)) {
+                    if (edited != null) {
+                        throw new CliException(ErrorCode.PKG_DISPLAY_INVALID, "包没有显示排版，--from-display 无从对照");
+                    }
+                    err.println("包没有显示排版，打印规范源码 policy/policy.aster");
+                    bytes = p.files.get("policy/policy.aster");
+                } else {
+                    DisplayStage display = DisplayStage.of(p);
+                    aster.core.layout.PolicyLayout layout = display.checkPackage();
+                    display.printNotes(layout, err);
+                    if (edited != null) {
+                        bytes = display.derive(layout, edited, err).canonical().getBytes(StandardCharsets.UTF_8);
+                    } else if (a.flag("--canonical")) {
+                        bytes = p.files.get("policy/policy.aster");
+                    } else {
+                        err.println("display.aster 只给人看，不是编译输入；编译与运行的是 policy/policy.aster");
+                        bytes = p.files.get(DisplayStage.DISPLAY_PATH);
+                    }
+                }
+                out.write(bytes, 0, bytes.length);
+                out.write('\n');
+                return 0;
+            } catch (CliException e) {
+                // show 不取 IR：失败信封的 entry / coreIrSha256 / irRecompiled 恒为空
+                p.meta.entry = null;
+                p.meta.coreIrSha256 = null;
+                p.meta.irRecompiled = false;
+                return fail(e, p.meta);
+            }
+        }
+
         // ── verify ──
 
         private int verifyCommand(Argv a, TrustAnchor anchor, Duration timeout) throws CliException {
@@ -173,6 +270,15 @@ public final class AsterCli {
                     coreJson = p.readCompiledIr();
                     checks.add(Envelope.check("ir", null));
                 }
+                // 1.1 且有 display：L1–L7（不编译）；--recompile 时另有 display-ir（L8–L9，ADR 0059 修订 4 D5）
+                DisplayStage display = null;
+                aster.core.layout.PolicyLayout layout = null;
+                if (DisplayStage.hasDisplay(p)) {
+                    stage = "display";
+                    display = DisplayStage.of(p);
+                    layout = display.checkPackage();
+                    checks.add(Envelope.check("display", null));
+                }
                 if (a.flag("--recompile")) {
                     stage = "recompile";
                     String local = p.recompile(ErrorCode.PKG_IR_DRIFT, true);
@@ -180,6 +286,11 @@ public final class AsterCli {
                     p.meta.irRecompiled = true;
                     if (!p.isModeA()) {
                         coreJson = local;
+                    }
+                    if (display != null) {
+                        stage = "display-ir";
+                        display.checkIr(layout, local, ErrorCode.PKG_DISPLAY_INVALID);
+                        checks.add(Envelope.check("display-ir", null));
                     }
                 }
                 if (a.flag("--probes")) {
@@ -264,6 +375,10 @@ public final class AsterCli {
                 schemas.put("input", payloadJson(p, "schema/input.json"));
                 schemas.put("output", payloadJson(p, "schema/output.json"));
                 inspect.put("schemas", schemas);
+                // 1.1：manifest 的 display 原样带出（不检查排版，ADR 0059 修订 4 D6）
+                if (DisplayStage.hasDisplay(p)) {
+                    inspect.put("display", p.manifest.get("display"));
+                }
                 p.meta.entry = p.defaultEntry();
                 p.meta.coreIrSha256 = p.coreIrSha256();
                 out.print(Envelope.inspect(p.meta, inspect));
@@ -317,7 +432,7 @@ public final class AsterCli {
             v.put("cliVersion", Version.CLI_VERSION);
             v.put("coreIrVersions", List.of(2));
             v.put("engine", Meta.ENGINE);
-            v.put("formatVersions", List.of("1.0"));
+            v.put("formatVersions", List.of("1.0", "1.1"));
             v.put("toolchainId", Version.toolchainId());
             v.put("trustAnchorKids", TrustAnchor.load(null, null, cwd, env).kids());
             out.print(ValueJson.write(v) + "\n");
