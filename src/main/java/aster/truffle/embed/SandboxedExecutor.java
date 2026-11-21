@@ -66,6 +66,8 @@ public final class SandboxedExecutor implements AutoCloseable {
      * 求值线程的栈大小：64 MiB。让调用深度上限（10 000）先于真实栈溢出生效，结果才在 jar 与原生可执行文件、各平台之间确定。
      * 实测（macOS arm64，jar）线性递归每层约 0.8–1.6 KiB：缺省 2 MiB 约 1 000 层即溢出，32 MiB 能到 20 000 层以上；
      * 取 64 MiB 给帧更大的函数（调用夹在 List.map 回调、深层表达式里）留余量。只是保留的虚拟地址，按需提交，不占常驻内存。
+     * {@code Thread} 的 stackSize 参数在 HotSpot（Linux / macOS / Windows）与 SubstrateVM 上都生效；
+     * 实测覆盖 macOS 的 jar 与原生可执行文件、Linux x64 的 jar（CI 的 shadowJarSmokeTest）。
      * Node CLI 的 Worker 对应值是 {@code stackSizeMb = 32}（V8 帧更小）。
      */
     public static final long EVAL_THREAD_STACK_BYTES = 64L * 1024 * 1024;

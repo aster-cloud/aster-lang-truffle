@@ -10,7 +10,11 @@ package aster.truffle.runtime;
  *   <li>Polyglot 把宿主侧的栈溢出报告为 {@code PolyglotException#isResourceExhausted()}，{@code SandboxedExecutor}
  *       据此归为 {@code RESOURCE_EXHAUSTED}——与 Node CLI 的 {@code ResourceExhaustedError} 同码；aster-api 的平台求值同理。</li>
  * </ul>
- * 不收集栈轨迹：抛出点位于上万层 guest 帧之下，填栈既慢又无诊断价值。
+ * workflow step 与 {@code start} 异步任务在 executor 线程上运行，各自从 0 计数；它们的边界把任何 {@link Throwable}
+ * 包成 {@code RuntimeException} 跨线程传回（真实栈溢出在那里同样被包装，属既有行为）。导出的策略包不含 workflow / await
+ * （ADR 0059 §5.1，E730–E733 在导出时拒绝），所以 CLI 求值不会经过这两条边界。
+ *
+ * <p>不收集栈轨迹：抛出点位于上万层 guest 帧之下，填栈既慢又无诊断价值。
  */
 public final class CallDepthExceededError extends StackOverflowError {
   private static final long serialVersionUID = 1L;
