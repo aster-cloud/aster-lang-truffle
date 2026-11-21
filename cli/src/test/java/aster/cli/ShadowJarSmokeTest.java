@@ -126,6 +126,23 @@ class ShadowJarSmokeTest {
         assertCase("packages/a-deep-recursion.cases.json", "depth-20000");
     }
 
+    /**
+     * 调用深度上限的两侧边界（与 Node CLI 相同）：deep(9999) 共 10 000 层成功，deep(10000) 为 RESOURCE_EXHAUSTED。
+     * 以缺省 {@code -Xss} 的子进程运行：成功一侧证明求值线程用的是 SandboxedExecutor 显式给的栈，而不是 JVM 缺省线程栈（约 1 000 层）。
+     */
+    @Test
+    void callDepthLimitBoundaryInTheJar() throws Exception {
+        Path dir = Fixtures.PACKAGE_V1.resolve("packages");
+        String[] args = {"run", "a-deep-recursion", "--input", "-", "--jwks", "../keys/test-jwks.json"};
+        Proc ok = java(dir, "{\"n\":9999}", args);
+        assertEquals(0, ok.exit(), "stderr: " + ok.stderr());
+        assertTrue(ok.stdout().endsWith(",\"ok\":true,\"value\":9999}\n"), ok.stdout());
+        Proc over = java(dir, "{\"n\":10000}", args);
+        assertEquals(5, over.exit(), "stderr: " + over.stderr());
+        assertTrue(over.stdout().contains("\"code\":\"RESOURCE_EXHAUSTED\""), over.stdout());
+        assertTrue(over.stderr().contains("Maximum call depth (10000) exceeded"), over.stderr());
+    }
+
     @Test
     void versionOutput() throws Exception {
         Proc r = java(Fixtures.PACKAGE_V1, null, "version");

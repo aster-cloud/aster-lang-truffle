@@ -268,6 +268,77 @@ class SandboxedExecutorTest {
         assertEquals(Outcome.RESOURCE_EXHAUSTED, ((Outcome.Failed) out).code(), out.toString());
     }
 
+    /**
+     * 调用深度上限与 aster-lang-ts 包格式 CLI 逐个边界一致（ts 3.6.0 {@code evaluate(…, {maxCallDepth: 10000})} 在
+     * Worker {@code stackSizeMb=32} 下实测同一组结果）：入口算第 1 层，函数调用与 lambda 调用各加 1 层，经 builtin
+     * （{@code List.map}）回调的调用同样计数，超限为 RESOURCE_EXHAUSTED 且消息与 Node 相同。
+     */
+    private static final String DEPTH_POLICY = """
+        Module demo.depth.
+
+        Rule deep given n as Int, produce Int:
+          If n at most 0:
+            Return 0.
+          Return 1 plus deep(n minus 1).
+
+        Rule viaLambda given n as Int, produce Int:
+          If n at most 0:
+            Return 0.
+          Let f be function with x, produce:
+            Return viaLambda(n minus 1).
+          Return apply f to 0.
+
+        Rule viaMap given n as Int, produce Int:
+          If n at most 0:
+            Return 0.
+          Let g be function with x, produce:
+            Return viaMap(n minus 1).
+          Let xs be List.map(List.range(0, 1), g).
+          Return List.length(xs).
+
+        Rule topUnder, produce Int:
+          Return deep(9998).
+
+        Rule topOver, produce Int:
+          Return deep(9999).
+        """;
+
+    @Test
+    void callDepthLimitMatchesNodeCli() throws Exception {
+        String core = ir(DEPTH_POLICY);
+        assertOk(9999, executor.execute(core, "deep", new Object[]{9999}, Duration.ofSeconds(30)));
+        assertDepthExceeded(executor.execute(core, "deep", new Object[]{10_000}, Duration.ofSeconds(30)));
+        assertOk(0, executor.execute(core, "viaLambda", new Object[]{4999}, Duration.ofSeconds(30)));
+        assertDepthExceeded(executor.execute(core, "viaLambda", new Object[]{5000}, Duration.ofSeconds(30)));
+        assertOk(1, executor.execute(core, "viaMap", new Object[]{4999}, Duration.ofSeconds(30)));
+        assertDepthExceeded(executor.execute(core, "viaMap", new Object[]{5000}, Duration.ofSeconds(30)));
+        // 无参入口自身也算 1 层
+        assertOk(9998, executor.execute(core, "topUnder", new Object[]{}, Duration.ofSeconds(30)));
+        assertDepthExceeded(executor.execute(core, "topOver", new Object[]{}, Duration.ofSeconds(30)));
+    }
+
+    @Test
+    void callDepthCounterIsBalancedAfterExceeding() throws Exception {
+        String core = ir(DEPTH_POLICY);
+        // 超限之后同一执行器（新求值线程）上的下一次求值从零计数，不受上一次残留影响
+        for (int i = 0; i < 3; i++) {
+            assertDepthExceeded(executor.execute(core, "deep", new Object[]{10_000}, Duration.ofSeconds(30)));
+            assertOk(9999, executor.execute(core, "deep", new Object[]{9999}, Duration.ofSeconds(30)));
+        }
+    }
+
+    private static void assertOk(long expected, Outcome out) {
+        assertInstanceOf(Outcome.Ok.class, out, out.toString());
+        assertEquals(expected, ((Number) ((Outcome.Ok) out).hostValue()).longValue(), out.toString());
+    }
+
+    private static void assertDepthExceeded(Outcome out) {
+        assertInstanceOf(Outcome.Failed.class, out, out.toString());
+        Outcome.Failed f = (Outcome.Failed) out;
+        assertEquals(Outcome.RESOURCE_EXHAUSTED, f.code(), out.toString());
+        assertTrue(f.message().contains("Maximum call depth (10000) exceeded"), out.toString());
+    }
+
     @Test
     void missingEntryIsEntryNotFound() throws Exception {
         String core = ir("""
