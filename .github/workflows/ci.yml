@@ -138,12 +138,20 @@ jobs:
           - target: linux-x64
             os: ubuntu-24.04
             march: compatibility
+            distribution: graalvm
           - target: linux-arm64
             os: ubuntu-24.04-arm
             march: ''
+            distribution: graalvm
           - target: macos-arm64
             os: macos-15
             march: ''
+            distribution: graalvm
+          # GraalVM CE 对照（ADR 0063 的发行版决策需要 CE 的体积 / 构建时长 / 一致性数据）
+          - target: linux-x64-ce
+            os: ubuntu-24.04
+            march: compatibility
+            distribution: graalvm-community
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -187,11 +195,11 @@ jobs:
           path: aster-lang-ts
           token: ${{ secrets.CROSS_REPO_TOKEN }}
 
-      # Oracle GraalVM 25（GFTC），与 spike 实测的配置一致；CE 与否由 ADR 0063 的开放决策定，切换只改 distribution
+      # Oracle GraalVM 25（GFTC）与 spike 实测的配置一致；CE（graalvm-community）作对照。发行版由 ADR 0063 的开放决策定
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: '25'
-          distribution: 'graalvm'
+          distribution: ${{ matrix.distribution }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           cache: 'gradle'
       - uses: pnpm/action-setup@v6
