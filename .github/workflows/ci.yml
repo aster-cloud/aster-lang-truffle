@@ -119,3 +119,159 @@ jobs:
           # 启动脚本（#188）与 jar 同目录：version 的 stdout 相同，stderr 为空
           test "$(sh cli/build/libs/aster version 2>/tmp/aster-launcher.err)" = "$(java -jar "$JAR" version)"
           test ! -s /tmp/aster-launcher.err || { cat /tmp/aster-launcher.err; exit 1; }
+
+  # 原生可执行文件（ADR 0063，原生分发只作为安装渠道）：在各平台的原生 runner 上 ./gradlew :cli:nativeCompile（GraalVM 不能交叉编译），
+  # 再用同一个 package-v1 一致性门验证——reachability 元数据缺失只会在原生产物上暴露，只能靠这道门发现：
+  #   1. :cli:nativeSmoke —— 原生 version 与 fat jar 逐字节相同；
+  #   2. :cli:nativeConformanceTest —— ConformanceCasesTest 以子进程跑原生可执行文件，全部用例对期望；
+  #   3. aster-lang-test package-conformance.mjs --strict-formats —— 与 Node CLI（aster-lang-ts main）逐用例跨 CLI 比较。
+  #      脚本的 jre 一侧固定为 `java -jar <jar>`，这里在 PATH 前面放一个 java 垫片把它换成原生可执行文件（脚本支持原生侧之后去掉，见计划）；
+  #   4. test-package-v1.mjs —— 夹具生成器自测（不经 CLI），确认检出的夹具树完好。
+  # 暂不进必需检查（分支保护与 .github/main-ci-gate.json 只有 build）：原生产物还没有发布渠道，依赖升级后的元数据漂移
+  # 不应阻塞 JVM 制品的列车；原生资产进入 release.yml 时把本 job 加入必需检查（计划 T6）。
+  native:
+    name: native (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            os: ubuntu-24.04
+            march: compatibility
+            distribution: graalvm
+          - target: linux-arm64
+            os: ubuntu-24.04-arm
+            march: ''
+            distribution: graalvm
+          - target: macos-arm64
+            os: macos-15
+            march: ''
+            distribution: graalvm
+          # GraalVM CE 对照（ADR 0063 的发行版决策需要 CE 的体积 / 构建时长 / 一致性数据）
+          - target: linux-x64-ce
+            os: ubuntu-24.04
+            march: compatibility
+            distribution: graalvm-community
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: aster-lang-truffle
+
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
+        with:
+          repository: aster-cloud/aster-lang-platform
+          path: aster-lang-platform
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
+        with:
+          repository: aster-cloud/aster-lang-core
+          path: aster-lang-core
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
+        with:
+          repository: aster-cloud/aster-lang-runtime
+          path: aster-lang-runtime
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
+        with:
+          repository: aster-cloud/aster-lang-locales
+          path: aster-lang-locales
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
+        with:
+          repository: aster-cloud/aster-lang-hi
+          path: aster-lang-hi
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
+        with:
+          repository: aster-cloud/aster-lang-test
+          path: aster-lang-test
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+      - uses: aster-cloud/aster-lang-platform/.github/actions/checkout-sibling@main
+        with:
+          repository: aster-cloud/aster-lang-ts
+          path: aster-lang-ts
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+
+      # Oracle GraalVM 25（GFTC）与 spike 实测的配置一致；CE（graalvm-community）作对照。发行版由 ADR 0063 的开放决策定
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: ${{ matrix.distribution }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: 'gradle'
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: aster-lang-ts/pnpm-lock.yaml
+
+      - name: Publish dependencies to Maven Local
+        run: |
+          cd aster-lang-platform && ./gradlew publishToMavenLocal && cd ..
+          cd aster-lang-core && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-runtime && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-locales && ./gradlew publishToMavenLocal -x test && cd ..
+          cd aster-lang-hi && ./gradlew publishToMavenLocal -x test && cd ..
+
+      - name: Build native executable
+        working-directory: aster-lang-truffle
+        run: |
+          start=$(date +%s)
+          ./gradlew :cli:nativeCompile ${{ matrix.march && format('-PnativeMarch={0}', matrix.march) || '' }}
+          echo "nativeCompile: $(( $(date +%s) - start )) s"
+          EXE=cli/build/native/nativeCompile/aster
+          ls -l "$EXE"
+          echo "native size: $(wc -c < "$EXE") bytes"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # 最低 glibc：动态符号里要求的最高 GLIBC_x.y（ADR 0063 平台矩阵）
+            objdump -T "$EXE" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n1
+            ldd "$EXE"
+          fi
+
+      # -x nativeCompile：上一步的产物直接复用（native 插件的任务在第二次调用时不判 up-to-date，会整段重编）
+      - name: Native smoke and conformance (JUnit)
+        working-directory: aster-lang-truffle
+        run: |
+          ./gradlew :cli:nativeSmoke :cli:nativeConformanceTest -x :cli:nativeCompile
+          cat cli/build/test-results/nativeConformanceTest/*.xml | grep -o '<testsuite [^>]*' \
+            | sed -E 's/.* tests="([0-9]+)" skipped="([0-9]+)" failures="([0-9]+)" errors="([0-9]+)".*/native conformance: \1 tests, \3 failures, \4 errors, \2 skipped/'
+
+      - name: Build aster-lang-ts (Node CLI)
+        working-directory: aster-lang-ts
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: Cross-CLI package conformance (Node ↔ native)
+        working-directory: aster-lang-test
+        run: |
+          VERSION=$(cd ../aster-lang-truffle && ./gradlew -q properties | sed -n 's/^version: //p' | head -n1)
+          SHIM="$RUNNER_TEMP/native-shim"
+          mkdir -p "$SHIM"
+          # 把 package-conformance.mjs 的 `java -jar <jar> args…` 换成原生可执行文件
+          printf '#!/bin/sh\n[ "$1" = "-jar" ] && shift 2\nexec "%s" "$@"\n' \
+            "$GITHUB_WORKSPACE/aster-lang-truffle/cli/build/native/nativeCompile/aster" > "$SHIM/java"
+          chmod +x "$SHIM/java"
+          PATH="$SHIM:$PATH" node scripts/package-conformance.mjs \
+            --node ../aster-lang-ts/dist/runner/aster.mjs \
+            --jar "../aster-lang-truffle/cli/build/libs/aster-cli-${VERSION}.jar" \
+            --concurrency 4 --strict-formats --report "$RUNNER_TEMP/native-conformance.md"
+
+      - name: Package format v1 generator self-test
+        working-directory: aster-lang-test
+        run: node scripts/test-package-v1.mjs
+
+      - name: Upload native executable and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aster-native-${{ matrix.target }}
+          path: |
+            aster-lang-truffle/cli/build/native/nativeCompile/aster
+            ${{ runner.temp }}/native-conformance.md
+          retention-days: 7
+          if-no-files-found: ignore
