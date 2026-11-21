@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     application
     `java-library`
@@ -22,6 +24,24 @@ version = extensions.getByType<VersionCatalogsExtension>()
 //   曾出现 api 内部 25.0.3/25.0.4 混用 + 本仓落后到 25.0.1 的跨仓 drift；
 //   而 GraalVM 组件混搭的症状是 NoClassDefFoundError →
 //   ExceptionInInitializerError at Engine.java:559，且**逐个升看起来都绿**。
+// GraalVM SDK 对齐（原生构建前置条件）：aster-lang-runtime 发布的元数据带 enforcedPlatform(quarkus-bom)，
+// 它把 org.graalvm.sdk 组的 graal-sdk / nativeimage / word 强制降到 23.1.2，而 truffle-api / polyglot / collections
+// 仍是 catalog 的 25.x。JVM 上暂未出事，但两代 SDK 混在同一 classpath 是潜在的 API 不匹配，且原生构建直接失败
+// （builder 自带 25.x 的同名模块）。这里在本仓所有项目的所有配置上把 org.graalvm.sdk 组统一到 catalog 的 graalvm 版本；
+// 根因（runtime 泄漏 enforcedPlatform）在 aster-lang-runtime 侧，修好后本规则即成空操作。
+val graalvmVersion: String = extensions.getByType<VersionCatalogsExtension>()
+    .named("asterLibs").findVersion("graalvm").get().requiredVersion
+allprojects {
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.graalvm.sdk") {
+                useVersion(graalvmVersion)
+                because("与 catalog 的 Truffle 版本一致；quarkus-bom 把 SDK 压到 23.1.2")
+            }
+        }
+    }
+}
+
 val quarkusVersion = "3.32.2"
 val junitVersion = "6.0.0"
 val junitPlatformVersion = "6.0.0"  // JUnit Jupiter 6.x 配套 Platform 走同版本
@@ -147,6 +167,85 @@ tasks.register<Test>("benchmark") {
     }
 }
 
+// 原生镜像的 IR 模型反射元数据（生成，不手写）：Jackson 按字段 / 构造器绑定 Core IR 与词汇表 DTO，原生镜像里每个类型都要注册全部成员。
+// tracing agent 只记录一致性门走到的成员，IR 节点类型随 core 版本增减，手写清单必然漂移（旧清单就停在 ADR 0055 之前）。
+// 这里按 classpath 实际内容枚举 aster.truffle.core.CoreModel$*（本仓）与 aster.core.ir.CoreModel$*、
+// aster.core.identifier.VocabularyLoader$*（core jar）的全部嵌套类型，写进 jar 的 META-INF/native-image。
+val nativeModelTypePattern = Regex("""^(aster/truffle/core/CoreModel|aster/core/ir/CoreModel|aster/core/identifier/VocabularyLoader)((\$[A-Za-z_][A-Za-z0-9_]*)+)\.class$""")
+val generateNativeModelMetadata = tasks.register("generateNativeModelMetadata") {
+    description = "按 classpath 生成 IR 模型类的原生镜像反射元数据"
+    group = "native"
+    val classesDirs = sourceSets["main"].output.classesDirs
+    val runtimeCp = configurations.named("runtimeClasspath")
+    val out = layout.buildDirectory.dir("generated/native-image-model")
+    dependsOn(tasks.named("compileJava"))
+    inputs.files(classesDirs).withPropertyName("classes")
+    inputs.files(runtimeCp).withPropertyName("runtimeClasspath").withNormalizer(ClasspathNormalizer::class.java)
+    outputs.dir(out)
+    doLast {
+        val names = sortedSetOf<String>()
+        fun consider(entry: String) {
+            if (nativeModelTypePattern.matches(entry)) {
+                names.add(entry.removeSuffix(".class").replace('/', '.'))
+            }
+        }
+        (classesDirs.files + runtimeCp.get().files).filter { it.exists() }.forEach { f ->
+            if (f.isDirectory) {
+                f.walkTopDown().filter { it.isFile }.forEach { consider(it.relativeTo(f).invariantSeparatorsPath) }
+            } else if (f.name.endsWith(".jar")) {
+                ZipFile(f).use { z -> z.entries().asSequence().forEach { consider(it.name) } }
+            }
+        }
+        listOf("aster.truffle.core.CoreModel$", "aster.core.ir.CoreModel$").forEach { prefix ->
+            if (names.none { it.startsWith(prefix) }) {
+                throw GradleException("classpath 上找不到 ${prefix}* 类型，IR 模型元数据会是空的")
+            }
+        }
+        val flags = listOf("allDeclaredConstructors", "allPublicConstructors", "allDeclaredMethods", "allPublicMethods",
+            "allDeclaredFields", "allPublicFields")
+        val entries = names.joinToString(",\n") { n ->
+            "    {\"type\": \"$n\", " + flags.joinToString(", ") { "\"$it\": true" } + "}"
+        }
+        val f = out.get().file("META-INF/native-image/cloud.aster-lang/aster-lang-truffle-model/reachability-metadata.json").asFile
+        f.parentFile.mkdirs()
+        f.writeText("{\n  \"reflection\": [\n$entries\n  ]\n}\n")
+    }
+}
+sourceSets["main"].resources.srcDir(generateNativeModelMetadata)
+
+// GraalVM 组件版本一致性门：每个项目运行时 classpath 上的 org.graalvm.* 必须全部等于 catalog 的 graalvm 版本
+// （23.1.2 的 SDK 混入曾阻断原生构建，见上方对齐规则）。check 依赖它。
+allprojects {
+    plugins.withId("java") {
+        val checkGraalvmVersions = tasks.register("checkGraalvmVersions") {
+            description = "核对运行时 classpath 上的 org.graalvm.* 版本与 catalog 一致"
+            group = "verification"
+            val root = configurations.named("runtimeClasspath").flatMap { it.incoming.resolutionResult.rootComponent }
+            val expected = graalvmVersion
+            val path = project.path
+            doLast {
+                val bad = sortedSetOf<String>()
+                val seen = mutableSetOf<org.gradle.api.artifacts.result.ResolvedComponentResult>()
+                val queue = ArrayDeque(listOf(root.get()))
+                while (queue.isNotEmpty()) {
+                    val c = queue.removeFirst()
+                    if (!seen.add(c)) continue
+                    val id = c.moduleVersion
+                    if (id != null && id.group.startsWith("org.graalvm") && id.version != expected) {
+                        bad.add("${id.group}:${id.name}:${id.version}")
+                    }
+                    c.dependencies.filterIsInstance<org.gradle.api.artifacts.result.ResolvedDependencyResult>()
+                        .forEach { queue.addLast(it.selected) }
+                }
+                if (bad.isNotEmpty()) {
+                    throw GradleException("$path 的 org.graalvm.* 版本须为 $expected：\n" + bad.joinToString("\n"))
+                }
+            }
+        }
+        tasks.named("check") { dependsOn(checkGraalvmVersions) }
+    }
+}
+
 // Native Image Agent 配置生成任务
 tasks.register<JavaExec>("generateNativeConfig") {
     group = "native"
@@ -154,7 +253,8 @@ tasks.register<JavaExec>("generateNativeConfig") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("aster.truffle.Runner")
 
-    val configOutputDir = "${projectDir}/src/main/resources/META-INF/native-image"
+    // 输出到 build/：agent 的原始结果只作为整理元数据的参考，不直接覆盖手写的 META-INF/native-image 文件
+    val configOutputDir = layout.buildDirectory.dir("native-agent").get().asFile.absolutePath
     jvmArgs = listOf(
         "-agentlib:native-image-agent=config-output-dir=${configOutputDir}"
     )

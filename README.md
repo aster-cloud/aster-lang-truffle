@@ -137,6 +137,32 @@ aster.cmd run <包目录或 zip> --input input.json --jwks jwks.json
 JEP 498 计划在后续 JDK 中把默认值改为 `deny`、最终移除这些方法；届时需要 Truffle 换掉 `sun.misc.Unsafe`，生态升级 GraalVM 版本
 （`aster-lang-platform` catalog 的 `asterLibs.graalvm.*`）后可删去启动脚本里的这个选项。
 
+### 原生可执行文件（ADR 0063）
+
+同一个 CLI 也可以用 GraalVM Native Image 编译成单个原生可执行文件（单次调用约 25 ms，jar 约 640 ms）。它只是安装渠道，行为以同一个
+package-v1 一致性门为准；求值只走 Truffle 解释器（镜像内不带 JIT）。需要 GraalVM 25（`native-image`），由 `GRAALVM_HOME` 指定：
+
+```bash
+GRAALVM_HOME=<graalvm-25> ./gradlew :cli:nativeCompile        # → cli/build/native/nativeCompile/aster（Windows 为 aster.exe）
+GRAALVM_HOME=<graalvm-25> ./gradlew :cli:nativeSmoke          # 原生 version 与 fat jar 逐字节相同
+GRAALVM_HOME=<graalvm-25> ./gradlew :cli:nativeConformanceTest # conformance/package-v1 全部用例以原生可执行文件运行
+# 发布给其他机器的 x64 产物加 -PnativeMarch=compatibility（缺省按构建机 CPU 特性生成）
+```
+
+原生镜像的配置都在 jar 里，`native-image -cp …` 手工构建也会带上：
+
+- `src/main/resources/META-INF/native-image/cloud.aster-lang/aster-lang-truffle/`：类初始化策略（`native-image.properties`）与
+  Truffle / core 资源的元数据；
+- `build/generated/native-image-model/…/aster-lang-truffle-model/`：`generateNativeModelMetadata` 按 classpath 生成的 IR 模型类反射元数据
+  （`aster.truffle.core.CoreModel$*`、`aster.core.ir.CoreModel$*`、`aster.core.identifier.VocabularyLoader$*` 全部成员），不手写；
+- `cli/src/main/resources/META-INF/native-image/cloud.aster-lang/aster-cli/`：CLI 的运行参数（`--enable-url-protocols=https`、
+  `-R:StackSize=2m`）与 tracing agent 采集的其余元数据。
+
+依赖升级后若原生一致性门失败（典型症状是 `this appears to be a native image` 或缺资源），重新采集：以
+`-agentlib:native-image-agent=config-output-dir=<dir>/{pid}` 运行 fat jar 跑一遍 aster-lang-test 的 `package-conformance.mjs`
+（PATH 前放一个把 `java` 换成带 agent 的 java 的垫片），删掉被杀进程留下的 `.lock`，用 `native-image-configure generate` 合并，
+再把新增条目并入上面的 `aster-cli/reachability-metadata.json`（IR 模型类不用手加）。
+
 ## 项目结构
 
 ```
@@ -150,7 +176,7 @@ aster-lang-truffle/
 │   │   ├── nodes/                 # Truffle 节点实现
 │   │   └── runtime/               # 运行时工具
 │   └── main/resources/
-│       └── META-INF/native-image/ # Native Image 配置
+│       └── META-INF/native-image/ # Native Image 配置（cloud.aster-lang/aster-lang-truffle/）
 ├── cli/                           # JVM aster CLI（ADR 0059）
 ├── build.gradle.kts
 ├── settings.gradle.kts
