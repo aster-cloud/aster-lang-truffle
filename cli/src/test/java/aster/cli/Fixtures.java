@@ -40,13 +40,19 @@ final class Fixtures {
     record Result(int exit, String stdout, String stderr) {}
 
     /**
-     * 调用一次 CLI。系统属性 {@code aster.cli.jar} 给出时以子进程 {@code java -jar <jar>} 运行（fat jar 一致性门，T9），
-     * 否则进程内调用 {@link AsterCli#run}。{@code env} 是额外设置的环境变量；子进程模式下 ASTER_TRUFFLE_FUNC 一律清除。
+     * 调用一次 CLI。系统属性 {@code aster.cli.native} 给出时以子进程运行该原生可执行文件（原生一致性门，ADR 0063）；
+     * 否则 {@code aster.cli.jar} 给出时以子进程 {@code java -jar <jar>} 运行（fat jar 一致性门，T9）；
+     * 都没有则进程内调用 {@link AsterCli#run}。{@code env} 是额外设置的环境变量；子进程模式下 ASTER_TRUFFLE_FUNC 一律清除。
      */
     static Result run(Path cwd, byte[] stdin, Map<String, String> env, String... args) {
+        String exe = System.getProperty("aster.cli.native");
+        if (exe != null && !exe.isBlank()) {
+            return runProcess(java.util.List.of(exe), cwd, stdin, env, args);
+        }
         String jar = System.getProperty("aster.cli.jar");
         if (jar != null && !jar.isBlank()) {
-            return runJar(jar, cwd, stdin, env, args);
+            return runProcess(java.util.List.of(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-jar", jar), cwd, stdin, env, args);
         }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
@@ -56,9 +62,9 @@ final class Fixtures {
         return new Result(exit, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
     }
 
-    private static Result runJar(String jar, Path cwd, byte[] stdin, Map<String, String> env, String... args) {
-        java.util.List<String> cmd = new java.util.ArrayList<>(java.util.List.of(
-            Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-jar", jar));
+    private static Result runProcess(java.util.List<String> launcher, Path cwd, byte[] stdin, Map<String, String> env,
+                                     String... args) {
+        java.util.List<String> cmd = new java.util.ArrayList<>(launcher);
         cmd.addAll(java.util.List.of(args));
         try {
             Path outFile = Files.createTempFile("aster-cli", ".out");

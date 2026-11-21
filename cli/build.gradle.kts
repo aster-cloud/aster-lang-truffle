@@ -7,6 +7,8 @@ plugins {
     java
     // fat jar（ADR 0059 P1 T9）：9.2.2 在 Gradle 9.6 下实测可用（P0 结果 §1）
     id("com.gradleup.shadow") version "9.2.2"
+    // 原生可执行文件（ADR 0063 原生分发）：版本由根项目的 plugins 块声明
+    id("org.graalvm.buildtools.native")
 }
 
 group = "cloud.aster-lang"
@@ -53,8 +55,9 @@ application {
 // - io.quarkus：只经 aster-lang-runtime 的两个工作流类引用，CLI 闭包不加载；
 // - org.antlr:antlr4 与 com.ibm.icu：core 的 antlr 插件把 ANTLR 工具链泄漏成运行时依赖（aster-cloud/aster-lang-core#279），
 //   运行时只需 antlr4-runtime。core 侧暂不修：aster-api 的 MessagesValidator 依赖这条泄漏取得 icu4j。
-// 排除作用于 runtimeClasspath，:cli:test 与 fat jar 用同一闭包。
-configurations.named("runtimeClasspath") {
+// 排除作用于 runtimeClasspath 与原生构建的 nativeImageClasspath（后者由 native 插件另建、不继承排除规则），
+// :cli:test、fat jar 与原生可执行文件用同一闭包。
+configurations.matching { it.name == "runtimeClasspath" || it.name == "nativeImageClasspath" }.configureEach {
     exclude(group = "io.quarkus")
     exclude(group = "org.antlr", module = "antlr4")
     exclude(group = "com.ibm.icu")
@@ -194,6 +197,84 @@ tasks.test {
     doFirst { requireConformanceDir() }
     // 兄弟仓 aster-lang-test 的两种布局：CI 检出到工作区内（根项目同级），本地为并列目录
     systemProperty("aster.root.dir", rootDir.absolutePath)
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+
+// 原生可执行文件（ADR 0063）：./gradlew :cli:nativeCompile → cli/build/native/nativeCompile/aster(.exe)。
+// 只是安装渠道，行为以同一个 package-v1 一致性门为准（CI 的 native-conformance job）。构建用 runtimeClasspath 的分开 jar，
+// 不用 fat jar（shadow 合并后 org.graalvm.word 的 ForceOnModulePath 声明失效）。类初始化与运行参数在各 jar 的
+// META-INF/native-image/**/native-image.properties 里；这里只放构建策略。GraalVM 取自 GRAALVM_HOME（CI 用 graalvm/setup-graalvm）。
+graalvmNative {
+    toolchainDetection.set(false)
+    metadataRepository {
+        enabled.set(false)
+    }
+    binaries {
+        named("main") {
+            imageName.set("aster")
+            mainClass.set("aster.cli.AsterCli")
+            buildArgs.add("--no-fallback")
+            buildArgs.add("-H:+ReportExceptionStackTraces")
+            // 发布到其他机器的产物用 -PnativeMarch=compatibility（x64 缺省按构建机 CPU 特性生成，换机可能 SIGILL）
+            providers.gradleProperty("nativeMarch").orNull?.let { buildArgs.add("-march=$it") }
+        }
+    }
+}
+
+// 原生冒烟：version 与 jar 的 stdout 一致（toolchainId 的 build 段相同）
+tasks.register<Exec>("nativeSmoke") {
+    description = "运行原生 aster version 并与 fat jar 比较"
+    group = "verification"
+    dependsOn("nativeCompile", "shadowJar")
+    val exe = layout.buildDirectory.file(
+        "native/nativeCompile/aster" + if (System.getProperty("os.name").startsWith("Windows")) ".exe" else "")
+    val jar = tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar").flatMap { it.archiveFile }
+    val javaLauncher = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(25)) }
+    executable = "true"
+    doFirst {
+        fun run(vararg cmd: String): String {
+            val p = ProcessBuilder(*cmd).redirectErrorStream(false).start()
+            val out = p.inputStream.readBytes().toString(Charsets.UTF_8)
+            if (p.waitFor() != 0) throw GradleException("${cmd.joinToString(" ")} 退出码 ${p.exitValue()}")
+            return out
+        }
+        val native = run(exe.get().asFile.absolutePath, "version")
+        val jvm = run(javaLauncher.get().executablePath.asFile.absolutePath, "-jar", jar.get().asFile.absolutePath, "version")
+        if (native != jvm) {
+            throw GradleException("原生 version 与 jar 不同：\n原生 $native\njar  $jvm")
+        }
+        println("aster native version: ${native.trim()}")
+    }
+}
+
+// 原生一致性门（ADR 0063）：以子进程运行原生可执行文件，跑 conformance/package-v1 的全部用例（与 fat jar 门同一测试类）。
+// 不进 check：原生构建要 GraalVM（native-image）与 3–6 min，CI 由独立的 native job 调用。
+tasks.register<Test>("nativeConformanceTest") {
+    description = "以原生 aster 可执行文件运行 conformance 全部用例"
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform()
+    filter {
+        includeTestsMatching("aster.cli.ConformanceCasesTest")
+    }
+    dependsOn("nativeCompile")
+    val exe = layout.buildDirectory.file(
+        "native/nativeCompile/aster" + if (System.getProperty("os.name").startsWith("Windows")) ".exe" else "")
+    inputs.file(exe).withPropertyName("nativeExecutable")
+    if (conformanceDir != null) {
+        inputs.dir(conformanceDir).withPropertyName("conformance").withPathSensitivity(PathSensitivity.RELATIVE)
+    }
+    doFirst { requireConformanceDir() }
+    doFirst { systemProperty("aster.cli.native", exe.get().asFile.absolutePath) }
+    systemProperty("aster.root.dir", rootDir.absolutePath)
+    systemProperty("junit.jupiter.execution.parallel.enabled", "true")
+    systemProperty("junit.jupiter.execution.parallel.mode.default", "concurrent")
+    systemProperty("junit.jupiter.execution.parallel.config.strategy", "fixed")
+    systemProperty("junit.jupiter.execution.parallel.config.fixed.parallelism", "4")
     testLogging {
         events("failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

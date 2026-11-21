@@ -1,8 +1,0 @@
-{
-  "types": [
-    {
-      "name": "aster.core.lexer.Position"
-    }
-  ],
-  "lambdaCapturingTypes": []
-}
