@@ -142,7 +142,7 @@ jobs:
             os: ubuntu-24.04-arm
             march: ''
           - target: macos-arm64
-            os: macos-14
+            os: macos-15
             march: ''
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -226,9 +226,13 @@ jobs:
             ldd "$EXE"
           fi
 
+      # -x nativeCompile：上一步的产物直接复用（native 插件的任务在第二次调用时不判 up-to-date，会整段重编）
       - name: Native smoke and conformance (JUnit)
         working-directory: aster-lang-truffle
-        run: ./gradlew :cli:nativeSmoke :cli:nativeConformanceTest ${{ matrix.march && format('-PnativeMarch={0}', matrix.march) || '' }}
+        run: |
+          ./gradlew :cli:nativeSmoke :cli:nativeConformanceTest -x :cli:nativeCompile
+          cat cli/build/test-results/nativeConformanceTest/*.xml | grep -o '<testsuite [^>]*' \
+            | sed -E 's/.* tests="([0-9]+)" skipped="([0-9]+)" failures="([0-9]+)" errors="([0-9]+)".*/native conformance: \1 tests, \3 failures, \4 errors, \2 skipped/'
 
       - name: Build aster-lang-ts (Node CLI)
         working-directory: aster-lang-ts
