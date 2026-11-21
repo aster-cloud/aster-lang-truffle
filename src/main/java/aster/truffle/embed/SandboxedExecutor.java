@@ -1,6 +1,7 @@
 package aster.truffle.embed;
 
 import aster.truffle.nodes.LambdaValue;
+import aster.truffle.runtime.CallDepthExceededError;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.PolyglotException;
@@ -43,7 +44,9 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>其余 guest / 宿主异常、结果形态违例 → {@link Outcome#EVAL_ERROR}。</li>
  * </ul>
  *
- * <p>求值在新建的、缺省栈大小的线程上进行（不调 {@code -Xss}，修订 1 A4），与调用线程的栈无关。
+ * <p>求值在新建的线程上进行，向 JVM 请求 {@link #EVAL_THREAD_STACK_BYTES} 的栈（不依赖 {@code -Xss} 或原生镜像的缺省线程栈），
+ * 与调用线程的栈无关。调用深度由 {@link aster.truffle.runtime.AllocationBudget#MAX_CALL_DEPTH}（10 000，与 Node CLI 相同）
+ * 截住，超限为 {@link Outcome#RESOURCE_EXHAUSTED}。
  */
 public final class SandboxedExecutor implements AutoCloseable {
 
@@ -58,6 +61,17 @@ public final class SandboxedExecutor implements AutoCloseable {
      * 到 {@code timeout + 宽限} 仍未结束即按 TIMEOUT 返回，不再等待（求值线程是 daemon，CLI 随即退出）。
      */
     public static final Duration BACKSTOP_GRACE = Duration.ofSeconds(5);
+
+    /**
+     * 求值线程的栈大小：64 MiB。让调用深度上限（10 000）先于真实栈溢出生效，结果才在 jar 与原生可执行文件、各平台之间确定。
+     * 实测（macOS arm64，jar）线性递归每层约 0.8–1.6 KiB：缺省 2 MiB 约 1 000 层即溢出，32 MiB 能到 20 000 层以上；
+     * 取 64 MiB 给帧更大的函数（调用夹在 List.map 回调、深层表达式里）留余量。只是保留的虚拟地址，按需提交，不占常驻内存。
+     * {@code Thread} 的 stackSize 参数按 JDK 规范只是提示（平台可以忽略）。已实测生效的环境：macOS arm64 的 jar 与原生
+     * 可执行文件、Linux x64 的 jar（CI 的 shadowJarSmokeTest 边界用例）；其余平台（Windows、Linux 原生）由原生一致性门与
+     * 共享夹具 depth-9999 / depth-10000 验证（ADR 0063 计划 T7）。若某平台忽略该值，结果退回到真实栈溢出，仍是 RESOURCE_EXHAUSTED。
+     * Node CLI 的 Worker 对应值是 {@code stackSizeMb = 32}（V8 帧更小）。
+     */
+    public static final long EVAL_THREAD_STACK_BYTES = 64L * 1024 * 1024;
 
     private final SandboxPolicy policy;
     private final Duration backstopGrace;
@@ -132,8 +146,7 @@ public final class SandboxedExecutor implements AutoCloseable {
         CountDownLatch executing = new CountDownLatch(1);
         FutureTask<Outcome> task = new FutureTask<>(
             () -> evaluate(coreJson, entry, hostArgs, timeout, running, cancelled, executing));
-        // stackSize 0 = JVM 缺省线程栈
-        Thread worker = new Thread(null, task, "aster-sandbox-eval", 0);
+        Thread worker = new Thread(null, task, "aster-sandbox-eval", EVAL_THREAD_STACK_BYTES);
         worker.setDaemon(true);
         worker.start();
         try {
@@ -156,8 +169,8 @@ public final class SandboxedExecutor implements AutoCloseable {
             return new Outcome.Failed(Outcome.EVAL_ERROR, "求值被中断");
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
-            if (cause instanceof StackOverflowError) {
-                return new Outcome.Failed(Outcome.RESOURCE_EXHAUSTED, "栈溢出");
+            if (cause instanceof StackOverflowError so) {
+                return new Outcome.Failed(Outcome.RESOURCE_EXHAUSTED, stackMessage(so));
             }
             return new Outcome.Failed(Outcome.EVAL_ERROR, String.valueOf(cause));
         }
@@ -227,7 +240,7 @@ public final class SandboxedExecutor implements AutoCloseable {
         } catch (PolyglotException e) {
             return classify(e, fired.get());
         } catch (StackOverflowError e) {
-            return new Outcome.Failed(Outcome.RESOURCE_EXHAUSTED, "栈溢出");
+            return new Outcome.Failed(Outcome.RESOURCE_EXHAUSTED, stackMessage(e));
         } catch (ValueShapeException e) {
             return new Outcome.Failed(Outcome.EVAL_ERROR, e.getMessage());
         } catch (RuntimeException e) {
@@ -241,6 +254,11 @@ public final class SandboxedExecutor implements AutoCloseable {
             }
             closeQuietly(ctx);
         }
+    }
+
+    /** 调用深度超限带自己的消息（与 Node CLI 相同）；真实栈溢出的 JDK 消息为空，统一写「栈溢出」。 */
+    private static String stackMessage(StackOverflowError e) {
+        return e instanceof CallDepthExceededError ? e.getMessage() : "栈溢出";
     }
 
     private static void closeQuietly(Context ctx) {

@@ -112,17 +112,52 @@ public final class AllocationBudget {
    * （{@code List.map} 的回调等），在那里无条件重置会把预算清零、守护彻底失效。
    * 故用深度计数区分「最外层 guest 帧」与「内部调用」：只有 0→1 那一次才重置。
    */
-  private static final ThreadLocal<int[]> DEPTH = ThreadLocal.withInitial(() -> new int[1]);
+  private static final ThreadLocal<int[]> DEPTH = ThreadLocal.withInitial(() -> new int[2]);
+
+  /** {@link #DEPTH} 的两个槽位：全部 guest 根帧，以及其中的调用帧（函数 / lambda 体）。 */
+  private static final int FRAMES = 0;
+  private static final int CALLS = 1;
 
   /**
-   * 进入一个 guest 根帧；若是最外层（深度 0→1）则清零预算。
+   * guest 调用深度上限：同一线程上同时处在执行中的调用帧（函数体、lambda 体，含入口本身）最多这么多层。
+   *
+   * <p>与 aster-lang-ts 包格式 CLI 的 {@code CLI_MAX_CALL_DEPTH}（ADR 0059 修订 1 A4）<b>必须同值</b>，计数口径也相同
+   * （ts {@code invokeFunc} / {@code applyClosure}）：入口本身算第 1 层，每进入一次函数体或 lambda 体（含经
+   * {@code List.map} 等 builtin 回调的）加 1；程序外壳 {@code AsterRootNode}、workflow / start 帧不计入。
+   * 此前 Truffle 没有确定的上限，结果取决于线程栈大小与帧布局（jar 缺省栈约 1 000 层、原生缺省栈约 460 层、
+   * Node 恒为 10 000），同一策略在不同发行上可能一个成功一个失败。确定性铁律同 {@link #MAX_ALLOCATION_BUDGET}：
+   * 固定常量，不跟随栈大小。真实栈仍可能在上限之前耗尽（单帧很大的函数），那仍是栈溢出、同样报资源耗尽；
+   * CLI 的求值线程为此显式给足栈（{@code SandboxedExecutor#EVAL_THREAD_STACK_BYTES}）。
+   */
+  public static final int MAX_CALL_DEPTH = 10_000;
+
+  /**
+   * 进入一个不计调用深度的 guest 根帧（程序外壳、workflow / start 步骤）；若是最外层（深度 0→1）则清零预算。
    *
    * @return 是否为最外层帧——调用方须把该值传给 {@link #exitFrame(boolean)}
    */
   public static boolean enterFrame() {
+    return enter(DEPTH.get());
+  }
+
+  /**
+   * 进入一个调用帧（函数体 / lambda 体），计入 {@link #MAX_CALL_DEPTH}。已达上限时抛 {@link CallDepthExceededError}，
+   * 且两个计数都不变（调用方的 try 尚未进入，不会配对 exit）。
+   *
+   * @return 是否为最外层帧——调用方须把该值传给 {@link #exitCallFrame(boolean)}
+   */
+  public static boolean enterCallFrame() {
     int[] d = DEPTH.get();
-    boolean outermost = d[0] == 0;
-    d[0]++;
+    if (d[CALLS] >= MAX_CALL_DEPTH) {
+      throw new CallDepthExceededError(MAX_CALL_DEPTH);
+    }
+    d[CALLS]++;
+    return enter(d);
+  }
+
+  private static boolean enter(int[] d) {
+    boolean outermost = d[FRAMES] == 0;
+    d[FRAMES]++;
     if (outermost) {
       reset();
     }
@@ -136,19 +171,32 @@ public final class AllocationBudget {
    * 后者不得用被调函数自身的声明放宽调用方已有的 effect 权限（见 {@code LambdaValue#execute}）。
    */
   public static boolean isInsideGuestFrame() {
-    return DEPTH.get()[0] > 0;
+    return DEPTH.get()[FRAMES] > 0;
   }
 
-  /** 退出 guest 根帧；最外层退出时清理 ThreadLocal，避免池线程长期持有。 */
-  public static void exitFrame(boolean outermost) {
+  /** 退出 {@link #enterCallFrame} 进入的调用帧。 */
+  public static void exitCallFrame(boolean outermost) {
     int[] d = DEPTH.get();
-    if (d[0] > 0) {
-      d[0]--;
+    if (d[CALLS] > 0) {
+      d[CALLS]--;
+    }
+    exit(d, outermost);
+  }
+
+  /** 退出 {@link #enterFrame} 进入的 guest 根帧；最外层退出时清理 ThreadLocal，避免池线程长期持有。 */
+  public static void exitFrame(boolean outermost) {
+    exit(DEPTH.get(), outermost);
+  }
+
+  private static void exit(int[] d, boolean outermost) {
+    if (d[FRAMES] > 0) {
+      d[FRAMES]--;
     }
     if (outermost) {
-      // 最外层退出即本次宿主调用结束：清零额度与深度，池线程复用时从干净状态开始。
+      // 最外层退出即本次宿主调用结束：清零额度与两个深度，池线程复用时从干净状态开始。
       reset();
-      d[0] = 0;
+      d[FRAMES] = 0;
+      d[CALLS] = 0;
     }
   }
 }

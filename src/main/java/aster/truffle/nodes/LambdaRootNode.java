@@ -76,7 +76,8 @@ public final class LambdaRootNode extends RootNode {
     // 有参入口经 ctx.eval 只取出 lambda，真正计算走本节点而非 AsterRootNode，
     // 故重置点必须在这里；但本节点同时承担内部 lambda 调用（List.map 回调等），
     // 只有深度 0→1 那一次才清零，否则预算会被内部调用反复清空、守护失效。
-    final boolean outermostFrame = aster.truffle.runtime.AllocationBudget.enterFrame();
+    // 同时计入调用深度上限（AllocationBudget.MAX_CALL_DEPTH，与 Node CLI 同口径）：函数与 lambda 调用都经本节点。
+    final boolean outermostFrame = aster.truffle.runtime.AllocationBudget.enterCallFrame();
     try {
       Object result = Exec.exec(bodyNode, frame);
       if (AsterConfig.DEBUG) {
@@ -91,7 +92,7 @@ public final class LambdaRootNode extends RootNode {
       // 各 Maybe/Result builtins）已统一识别这些包装类型。
       return aster.truffle.runtime.interop.AsterInteropAdapter.adapt(r.value);
     } finally {
-      aster.truffle.runtime.AllocationBudget.exitFrame(outermostFrame);
+      aster.truffle.runtime.AllocationBudget.exitCallFrame(outermostFrame);
     }
   }
 
