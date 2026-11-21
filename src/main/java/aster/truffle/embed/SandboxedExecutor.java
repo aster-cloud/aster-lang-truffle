@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>其余 guest / 宿主异常、结果形态违例 → {@link Outcome#EVAL_ERROR}。</li>
  * </ul>
  *
- * <p>求值在新建的线程上进行，栈大小固定为 {@link #EVAL_THREAD_STACK_BYTES}（不依赖 {@code -Xss} 或原生镜像的缺省线程栈），
+ * <p>求值在新建的线程上进行，向 JVM 请求 {@link #EVAL_THREAD_STACK_BYTES} 的栈（不依赖 {@code -Xss} 或原生镜像的缺省线程栈），
  * 与调用线程的栈无关。调用深度由 {@link aster.truffle.runtime.AllocationBudget#MAX_CALL_DEPTH}（10 000，与 Node CLI 相同）
  * 截住，超限为 {@link Outcome#RESOURCE_EXHAUSTED}。
  */
