@@ -32,6 +32,15 @@ class DisplayCliTest {
     }
 
     @Test
+    void showListsHiddenEscapesOnStderr() {
+        // ADR 0059 修订 5 §4.3：每个被隐藏反引号的名字转义一行，JSON 字符串形式，按出现顺序
+        Fixtures.Result r = Fixtures.run(DIR, null, Map.of(), "show", "b-display-escape", "--jwks", JWKS);
+        assertEquals(0, r.exit(), r.stderr());
+        assertTrue(!r.stdout().contains("`"), r.stdout());
+        assertEquals(2, r.stderr().lines().filter(l -> l.trim().equals("hidden escape: \"`当`\" (name)")).count(), r.stderr());
+    }
+
+    @Test
     void showCanonicalPrintsTheSource() {
         Fixtures.Result r = Fixtures.run(DIR, null, Map.of(), "show", "b-jingyesi", "--canonical", "--jwks", JWKS);
         assertEquals(0, r.exit(), r.stderr());
