@@ -4,6 +4,7 @@ import aster.core.layout.DisplayReconstructor;
 import aster.core.layout.LayoutException;
 import aster.core.layout.LayoutLimits;
 import aster.core.layout.LayoutSpan;
+import aster.core.layout.L10bVerifier;
 import aster.core.layout.PackageLayoutRules;
 import aster.core.layout.PolicyLayout;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -97,8 +98,9 @@ final class DisplayStage {
         Object v = Json.at(p.manifest, "display", "layoutVersion");
         int layoutVersion = v instanceof BigInteger b ? b.intValue() : -1;
         try {
+            // L10a 在这里；L10b 要编译：verify 记在 display-ir（checkIr），show / run --display 由 checkHiddenEscapes 补跑
             return PackageLayoutRules.checkPackage(p.files.get(LAYOUT_PATH), p.files.get(DISPLAY_PATH), p.files.get("policy/policy.aster"),
-                layoutVersion, vocabularyLocalized, literalKeywords, operatorSpellings);
+                layoutVersion, vocabularyLocalized, literalKeywords, operatorSpellings, L10bVerifier.DEFERRED);
         } catch (LayoutException e) {
             throw new CliException(ErrorCode.PKG_DISPLAY_INVALID, "显示排版不合规 " + e.getMessage());
         }
@@ -124,6 +126,30 @@ final class DisplayStage {
         }
         if (!PackagePipeline.positionFreeSha256(paddedIr, failure).equals(PackagePipeline.positionFreeSha256(coreJson, failure))) {
             throw new CliException(failure, "L9: 补空格后投影哈希改变——有值被切进结构 span");
+        }
+        hiddenEscapes(layout, failure);
+    }
+
+    /**
+     * show / run --display 的包排版 L10b（ADR 0059 修订 5 §2.4）：含隐藏转义时编译 policy.aster 与去掉反引号的各个变体，
+     * 失败为 PKG_DISPLAY_INVALID。verify 不调它：verify 的 L10b 在 display-ir（{@link #checkIr}）。
+     */
+    void checkHiddenEscapes(PolicyLayout layout) throws CliException {
+        hiddenEscapes(layout, ErrorCode.PKG_DISPLAY_INVALID);
+    }
+
+    /** L10b：去掉被隐藏的反引号不得得到另一个程序（至多 15 次额外编译，只在排版含三元组时发生）。 */
+    private void hiddenEscapes(PolicyLayout layout, ErrorCode failure) throws CliException {
+        try {
+            PackageLayoutRules.checkHiddenEscapes(layout, source -> {
+                try {
+                    return PackagePipeline.positionFreeSha256(p.compileSource(source, failure), failure);
+                } catch (CliException e) {
+                    return null;
+                }
+            });
+        } catch (LayoutException e) {
+            throw new CliException(failure, "显示排版 " + e.getMessage());
         }
     }
 
@@ -179,6 +205,12 @@ final class DisplayStage {
         if (!lines.isEmpty()) {
             err.println("结构映射（显示 ⇐ 规范；这些文字只是排版，不参与编译）：");
             lines.forEach(l -> err.println("  " + l));
+        }
+        // 被隐藏的转义（ADR 0059 修订 5 §4.3）：显示里看不到反引号，这些词是名字
+        List<PackageLayoutRules.HiddenEscape> hidden = PackageLayoutRules.hiddenEscapeTriples(layout);
+        if (!hidden.isEmpty()) {
+            err.println("显示里隐藏了反引号的名字转义（这些词是名字，不是关键词）：");
+            hidden.forEach(h -> err.println("  hidden escape: " + ValueJson.write("`" + h.name() + "`") + " (name)"));
         }
         List<String> macros = new ArrayList<>();
         if (vocabulary != null) {

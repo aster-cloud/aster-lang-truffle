@@ -166,6 +166,7 @@ public final class AsterCli {
                 warnFacts(p);
                 DisplayStage display = DisplayStage.of(p);
                 aster.core.layout.PolicyLayout layout = display.checkPackage();
+                display.checkHiddenEscapes(layout);
                 DisplayStage.Derived d = display.derive(layout, edited, err);
                 String entry = a.value("--entry") != null ? a.value("--entry") : p.defaultEntry();
                 p.meta.entry = entry;
@@ -223,6 +224,7 @@ public final class AsterCli {
                 } else {
                     DisplayStage display = DisplayStage.of(p);
                     aster.core.layout.PolicyLayout layout = display.checkPackage();
+                    display.checkHiddenEscapes(layout);
                     display.printNotes(layout, err);
                     if (edited != null) {
                         bytes = display.derive(layout, edited, err).canonical().getBytes(StandardCharsets.UTF_8);
