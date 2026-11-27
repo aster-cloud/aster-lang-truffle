@@ -24,21 +24,28 @@ version = extensions.getByType<VersionCatalogsExtension>()
 //   曾出现 api 内部 25.0.3/25.0.4 混用 + 本仓落后到 25.0.1 的跨仓 drift；
 //   而 GraalVM 组件混搭的症状是 NoClassDefFoundError →
 //   ExceptionInInitializerError at Engine.java:559，且**逐个升看起来都绿**。
-// GraalVM SDK 对齐（原生构建前置条件）：aster-lang-runtime 发布的元数据带 enforcedPlatform(quarkus-bom)，
-// 它把 org.graalvm.sdk 组的 graal-sdk / nativeimage / word 强制降到 23.1.2，而 truffle-api / polyglot / collections
-// 仍是 catalog 的 25.x。JVM 上暂未出事，但两代 SDK 混在同一 classpath 是潜在的 API 不匹配，且原生构建直接失败
-// （builder 自带 25.x 的同名模块）。这里在本仓所有项目的所有配置上把 org.graalvm.sdk 组统一到 catalog 的 graalvm 版本；
-// 根因（runtime 泄漏 enforcedPlatform）在 aster-lang-runtime 侧，修好后本规则即成空操作。
 val graalvmVersion: String = extensions.getByType<VersionCatalogsExtension>()
     .named("asterLibs").findVersion("graalvm").get().requiredVersion
+
+// Quarkus 版本对齐（aster-lang-runtime#90）：quarkus-core / jackson / smallrye-common 等传递依赖
+// 用 catalog 的 quarkus-bom（与 aster-lang-runtime 同一版本）对齐。此前靠 runtime 发布元数据泄漏的
+// enforcedPlatform 对齐，它同时把 org.graalvm.sdk 强制降到 23.1.2；runtime 不再泄漏后由本仓自己声明。
+// - 用 platform 而非 enforcedPlatform：BOM 只作推荐版本，graal-sdk 等更高的显式版本（catalog 的 25.x）照常胜出。
+// - 挂在不可消费、不可解析的 quarkusPlatform 上，只由各项目可解析的运行类 *Classpath 继承
+//   （runtime / testRuntime，以及原生插件另建、不继承 runtimeClasspath 的 nativeImage*Classpath），
+//   不进 apiElements / runtimeElements，不会发布给消费方。
+// - 不作用于 compile / testCompile classpath：runtime 是 implementation 依赖，从未出现在本仓编译 classpath 上，
+//   原先的泄漏也只影响运行类 classpath；保持编译 classpath 不变。
+val quarkusBom = extensions.getByType<VersionCatalogsExtension>()
+    .named("asterLibs").findLibrary("quarkus-bom").get()
 allprojects {
-    configurations.configureEach {
-        resolutionStrategy.eachDependency {
-            if (requested.group == "org.graalvm.sdk") {
-                useVersion(graalvmVersion)
-                because("与 catalog 的 Truffle 版本一致；quarkus-bom 把 SDK 压到 23.1.2")
-            }
-        }
+    val quarkusPlatform = configurations.create("quarkusPlatform") {
+        isCanBeConsumed = false
+        isCanBeResolved = false
+    }
+    dependencies.add(quarkusPlatform.name, dependencies.platform(quarkusBom))
+    configurations.matching { it.isCanBeResolved && it.name.endsWith("Classpath") && !it.name.lowercase().contains("compile") }.configureEach {
+        extendsFrom(quarkusPlatform)
     }
 }
 
@@ -214,7 +221,8 @@ val generateNativeModelMetadata = tasks.register("generateNativeModelMetadata") 
 sourceSets["main"].resources.srcDir(generateNativeModelMetadata)
 
 // GraalVM 组件版本一致性门：每个项目运行时 classpath 上的 org.graalvm.* 必须全部等于 catalog 的 graalvm 版本
-// （23.1.2 的 SDK 混入曾阻断原生构建，见上方对齐规则）。check 依赖它。
+// （aster-lang-runtime 曾泄漏 enforcedPlatform(quarkus-bom)，把 23.1.2 的 SDK 混入并阻断原生构建，
+// 见 aster-lang-runtime#90）。check 依赖它。
 allprojects {
     plugins.withId("java") {
         val checkGraalvmVersions = tasks.register("checkGraalvmVersions") {
