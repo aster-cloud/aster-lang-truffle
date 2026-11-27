@@ -128,8 +128,8 @@ jobs:
   # 再用同一个 package-v1 一致性门验证——reachability 元数据缺失只会在原生产物上暴露，只能靠这道门发现：
   #   1. :cli:nativeSmoke —— 原生 version 与 fat jar 逐字节相同；
   #   2. :cli:nativeConformanceTest —— ConformanceCasesTest 以子进程跑原生可执行文件，全部用例对期望；
-  #   3. aster-lang-test package-conformance.mjs --strict-formats —— 与 Node CLI（aster-lang-ts main）逐用例跨 CLI 比较。
-  #      脚本的 jre 一侧固定为 `java -jar <jar>`，这里在 PATH 前面放一个 java 垫片把它换成原生可执行文件（脚本支持原生侧之后去掉，见计划）；
+  #   3. aster-lang-test package-conformance.mjs --native <exe> --strict-formats —— 与 Node CLI（aster-lang-ts main）逐用例跨 CLI 比较
+  #      （Node ↔ 原生两侧；jar ↔ Node 由 aster-lang-test 的 package-conformance job 把关，两侧都须等于同一份期望）；
   #   4. test-package-v1.mjs —— 夹具生成器自测（不经 CLI），确认检出的夹具树完好。
   # 暂不进必需检查（分支保护与 .github/main-ci-gate.json 只有 build）：原生产物还没有发布渠道，依赖升级后的元数据漂移
   # 不应阻塞 JVM 制品的列车；原生资产进入 release.yml 时把本 job 加入必需检查（计划 T6）。
@@ -257,16 +257,9 @@ jobs:
       - name: Cross-CLI package conformance (Node ↔ native)
         working-directory: aster-lang-test
         run: |
-          VERSION=$(cd ../aster-lang-truffle && ./gradlew -q properties | sed -n 's/^version: //p' | head -n1)
-          SHIM="$RUNNER_TEMP/native-shim"
-          mkdir -p "$SHIM"
-          # 把 package-conformance.mjs 的 `java -jar <jar> args…` 换成原生可执行文件
-          printf '#!/bin/sh\n[ "$1" = "-jar" ] && shift 2\nexec "%s" "$@"\n' \
-            "$GITHUB_WORKSPACE/aster-lang-truffle/cli/build/native/nativeCompile/aster" > "$SHIM/java"
-          chmod +x "$SHIM/java"
-          PATH="$SHIM:$PATH" node scripts/package-conformance.mjs \
+          node scripts/package-conformance.mjs \
             --node ../aster-lang-ts/dist/runner/aster.mjs \
-            --jar "../aster-lang-truffle/cli/build/libs/aster-cli-${VERSION}.jar" \
+            --native ../aster-lang-truffle/cli/build/native/nativeCompile/aster \
             --concurrency 4 --strict-formats --report "$RUNNER_TEMP/native-conformance.md"
 
       - name: Package format v1 generator self-test
@@ -281,5 +274,7 @@ jobs:
           path: |
             aster-lang-truffle/cli/build/native/nativeCompile/aster
             ${{ runner.temp }}/native-conformance.md
-          retention-days: 7
+          # aster-lang-test 的原生一致性 job（scripts/fetch-native-cli.mjs）在本仓 main 没有新 push 时回落到这里的旧产物；
+          # 30 天 ≤ 仓库上限 90。cleanup-old-runs.yml 对 main 上的 ci.yml run 同样保留 30 天（删 run 会连带删产物）
+          retention-days: 30
           if-no-files-found: ignore
