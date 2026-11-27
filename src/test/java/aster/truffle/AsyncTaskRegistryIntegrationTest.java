@@ -46,7 +46,7 @@ public class AsyncTaskRegistryIntegrationTest {
   public void testTimeoutWithCompensation() throws Exception {
     AsyncTaskRegistry registry = new AsyncTaskRegistry(2);
     List<String> compensationOrder = Collections.synchronizedList(new ArrayList<>());
-    // 超时任务阻塞在这个 latch 上，只有超时回调的中断能让它退出；finally 中再放行，
+    // 超时任务阻塞在这个 latch 上，直到被超时回调中断或在 finally 中放行；
     // 保证 shutdown 不会因工作线程卡住而等待。
     CountDownLatch release = new CountDownLatch(1);
 
@@ -137,7 +137,7 @@ public class AsyncTaskRegistryIntegrationTest {
   public void testTimeoutPropagation() {
     AsyncTaskRegistry registry = new AsyncTaskRegistry(2);
     AtomicBoolean downstreamExecuted = new AtomicBoolean(false);
-    // slow-mid 阻塞在 latch 上直到被超时回调中断，不再与 25 ms 的超时赛跑
+    // slow-mid 阻塞在 latch 上，直到被超时回调中断或在 finally 中放行，不再与 25 ms 的超时赛跑
     // （原 sleep(80) 在 runner 负载高、超时线程迟迟拿不到 CPU 时会先跑完，aster-lang-truffle#203）。
     // 30 s 上限只为超时机制失效时让测试以「nothing was thrown」失败而非挂死。
     CountDownLatch release = new CountDownLatch(1);

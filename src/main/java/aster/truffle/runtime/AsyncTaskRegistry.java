@@ -85,10 +85,6 @@ public final class AsyncTaskRegistry {
   private final boolean singleThreadMode;
   // graph 同步锁，DependencyGraph 非线程安全
   private final Object graphLock = new Object();
-  // 补偿执行锁：串行化 executeCompensations。超时线程（handleTaskTimeout）与调用线程
-  // （executeUntilComplete 的 catch）会并发排空同一补偿栈；不加锁时调用方可能 poll 到空栈
-  // 就返回并抛出，而另一线程还在执行回调——调用方看到异常时补偿尚未完成。
-  private final Object compensationLock = new Object();
   // 补偿 LIFO 栈（按 workflowId 隔离，避免跨 workflow 误补偿）
   private final Map<String, Deque<String>> compensationStacks = new ConcurrentHashMap<>();
   // 默认超时时间（毫秒），0 表示无限制
@@ -1423,22 +1419,29 @@ public final class AsyncTaskRegistry {
   /**
    * 执行指定 workflow 的补偿栈中的回调（LIFO 顺序）
    *
+   * <p>同一 workflow 的排空按栈对象串行化：超时线程（handleTaskTimeout）与调用线程
+   * （executeUntilComplete 的 catch）会并发排空同一个栈。不串行化时，调用方可能 poll 到空栈
+   * 就返回并抛出，而另一线程还在执行回调，调用方看到异常时补偿尚未完成。
+   * 锁只按 workflow 划分，回调阻塞不会拖住其他 workflow 的补偿。
+   *
    * @param workflowId 要补偿的 workflow ID
    */
   private void executeCompensations(String workflowId) {
     if (workflowId == null) {
       return;
     }
-    synchronized (compensationLock) {
-      drainCompensations(workflowId);
-    }
-  }
-
-  private void drainCompensations(String workflowId) {
     Deque<String> stack = compensationStacks.get(workflowId);
     if (stack == null) {
       return;
     }
+    synchronized (stack) {
+      drainCompensations(stack);
+      // 清理空的补偿栈；只移除本栈，不误删之后新建的同名栈
+      compensationStacks.remove(workflowId, stack);
+    }
+  }
+
+  private void drainCompensations(Deque<String> stack) {
     while (true) {
       String taskId = stack.poll();
       if (taskId == null) {
@@ -1457,8 +1460,6 @@ public final class AsyncTaskRegistry {
             t);
       }
     }
-    // 清理空的补偿栈
-    compensationStacks.remove(workflowId);
   }
 
   /**
