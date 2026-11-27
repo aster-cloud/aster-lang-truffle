@@ -675,6 +675,10 @@ public final class AsyncTaskRegistry {
               || removedState.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.CANCELLED);
       if (transitioned) {
         decrementRemainingTasks();
+        // 先扣减、后发信号（见 decrementRemainingTasks）：被移除的任务不会再有 runTask 替它完成 future
+        if (info != null) {
+          info.future.cancel(false);
+        }
       }
     }
 
@@ -785,7 +789,8 @@ public final class AsyncTaskRegistry {
    *   <li>cancel info.future（最后发信号）</li>
    *   <li>cleanupRetryState</li>
    * </ul>
-   * 若 CAS 失败（任务并发完成 / 已被 cancel），仅做尽力 bump+cancel 不重复扣计数。
+   * 若 CAS 失败（任务并发完成 / 已被 cancel），只 bump generation 与取消 runningFuture，
+   * 不扣计数、也不碰 info.future：future 由赢得终态 CAS 的一方在扣减之后完成。
    */
   private void terminateExternally(String taskId, TaskState state, TaskInfo info) {
     // 先 bump generation，让任何并发的 runTask / timeout 回调
@@ -807,10 +812,10 @@ public final class AsyncTaskRegistry {
       synchronized (graphLock) {
         dependencyGraph.markCompleted(taskId);
       }
+      // 计数与依赖图落定后再取消 future 唤醒等待方（先扣减、后发信号，见 decrementRemainingTasks）。
+      // CAS 失败时不发信号：赢得终态 CAS 的 runTask / 超时路径可能尚未扣减，由它自己扣减后再 complete。
+      info.future.cancel(true);
     }
-    // 计数与依赖图落定后再取消 future 唤醒等待方（先扣减、后发信号，见 decrementRemainingTasks）。
-    // runTask 已完成 future 时这里是 no-op。
-    info.future.cancel(true);
     cleanupRetryState(taskId);
   }
 
@@ -1131,9 +1136,8 @@ public final class AsyncTaskRegistry {
     }
 
     if (!state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.RUNNING)) {
-      if (state.status.get() == TaskStatus.CANCELLED) {
-        info.future.cancel(false);
-      }
+      // 已被其他路径推进到终态：由赢得那次 CAS 的一方扣减并发信号。这里不 cancel future——
+      // 对方可能刚 CAS 完、尚未扣减，此时发信号会让等待方先于扣减醒来（#210）
       return;
     }
 

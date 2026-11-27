@@ -849,6 +849,32 @@ public class AsyncTaskRegistryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  void cancelLosingTerminalCasDoesNotSignal() throws Exception {
+    // 模拟「runTask 已 CAS RUNNING→COMPLETED、尚未扣减并 complete」的窗口：此时 cancelTask 的 CAS 失败，
+    // 不得抢先 cancel future（否则等待方在计数仍为 1 时醒来，runTask 随后的 complete 也成了 no-op）。
+    AsyncTaskRegistry registry = new AsyncTaskRegistry(1);
+    try {
+      registry.registerTaskWithDependencies("won", () -> 1, Set.of());
+      Field tasksField = AsyncTaskRegistry.class.getDeclaredField("tasks");
+      tasksField.setAccessible(true);
+      Object state = ((Map<String, ?>) tasksField.get(registry)).get("won");
+      Field statusField = state.getClass().getDeclaredField("status");
+      statusField.setAccessible(true);
+      ((AtomicReference<TaskStatus>) statusField.get(state)).set(TaskStatus.COMPLETED);
+
+      CompletableFuture<Integer> signal = remainingAtSignal(registry, "won");
+      registry.cancelTask("won");
+
+      assertFalse(signal.isDone(), "CAS 失败的 cancelTask 不得替赢得终态的一方发信号");
+      assertEquals(TaskStatus.COMPLETED, registry.getStatus("won"));
+      assertEquals(1, remainingTasks(registry), "CAS 失败的 cancelTask 不得扣减");
+    } finally {
+      registry.shutdown();
+    }
+  }
+
+  @Test
   void normalSchedulingKeepsRemainingTasksBalanced() throws Exception {
     // 反向护栏：扣减收敛到单一入口后，正常调度路径的 register/execute 计数必须守恒，
     // 既不能多减（上例），也不能漏减（否则后续 executeUntilComplete 撞死锁检测）。
