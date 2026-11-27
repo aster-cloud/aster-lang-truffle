@@ -16,6 +16,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -777,6 +779,70 @@ public class AsyncTaskRegistryTest {
       assertEquals(TaskStatus.COMPLETED, registry.getStatus("fresh"));
       assertEquals(42, registry.getResult("fresh"));
       assertEquals(0, remainingTasks(registry));
+    } finally {
+      registry.shutdown();
+    }
+  }
+
+  /**
+   * 在内部 future 上挂一个同步回调，记录「完成信号发出那一刻」的 remainingTasks。
+   * 回调先于完成挂上，complete / completeExceptionally / cancel 时在发信号的线程里同步执行。
+   * 同一 future 上的其他等待方（executeUntilComplete 的 barrier）可能先于本回调被唤醒，
+   * 所以断言前先等返回的 stage 结束。
+   */
+  private static CompletableFuture<Integer> remainingAtSignal(AsyncTaskRegistry registry, String taskId)
+      throws Exception {
+    Object info = taskInfo(registry, taskId);
+    Field f = info.getClass().getDeclaredField("future");
+    f.setAccessible(true);
+    return ((CompletableFuture<?>) f.get(info)).handle((r, e) -> {
+      try {
+        return remainingTasks(registry);
+      } catch (Exception ex) {
+        throw new IllegalStateException(ex);
+      }
+    });
+  }
+
+  @Test
+  void completionSignalFollowsRemainingTasksDecrement() throws Exception {
+    // #210：executeUntilComplete 在 barrier 上被唤醒、看到全部任务进入终态后直接返回；
+    // 若完成信号先于计数扣减，调用方返回后读到的剩余任务数仍是 1。
+    // 这里不靠时序复现，而是在信号发出的那一刻断言计数已扣减（成功 / 失败 / 级联取消三条路径）。
+    AsyncTaskRegistry registry = new AsyncTaskRegistry(1);
+    try {
+      registry.registerTaskWithDependencies("ok", () -> 1, Set.of());
+      CompletableFuture<Integer> ok = remainingAtSignal(registry, "ok");
+      registry.executeUntilComplete();
+      assertEquals(0, ok.get(10, TimeUnit.SECONDS), "成功路径：complete 之前必须已扣减");
+      assertEquals(0, remainingTasks(registry));
+
+      registry.registerTaskWithDependencies("boom", () -> {
+        throw new IllegalStateException("boom");
+      }, Set.of());
+      registry.registerTaskWithDependencies("downstream", () -> 2, Set.of("boom"));
+      CompletableFuture<Integer> boom = remainingAtSignal(registry, "boom");
+      CompletableFuture<Integer> downstream = remainingAtSignal(registry, "downstream");
+      assertThrows(RuntimeException.class, registry::executeUntilComplete);
+      assertEquals(TaskStatus.FAILED, registry.getStatus("boom"));
+      assertEquals(TaskStatus.CANCELLED, registry.getStatus("downstream"));
+      assertEquals(0, boom.get(10, TimeUnit.SECONDS), "失败路径：completeExceptionally 之前必须已扣减");
+      // 下游先被级联取消（cancelDownstreamTasks 在失败任务扣减之前）：信号时刻只剩 boom 未扣减
+      assertEquals(1, downstream.get(10, TimeUnit.SECONDS), "级联取消路径：cancel 之前必须已扣减自身");
+      assertEquals(0, remainingTasks(registry));
+    } finally {
+      registry.shutdown();
+    }
+  }
+
+  @Test
+  void cancelTaskSignalsAfterDecrement() throws Exception {
+    AsyncTaskRegistry registry = new AsyncTaskRegistry(1);
+    try {
+      registry.registerTaskWithDependencies("c", () -> 1, Set.of());
+      CompletableFuture<Integer> c = remainingAtSignal(registry, "c");
+      registry.cancelTask("c");
+      assertEquals(0, c.get(10, TimeUnit.SECONDS), "取消路径：cancel future 之前必须已扣减");
     } finally {
       registry.shutdown();
     }
