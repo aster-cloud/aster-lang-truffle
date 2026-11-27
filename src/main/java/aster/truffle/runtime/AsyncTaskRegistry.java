@@ -675,6 +675,10 @@ public final class AsyncTaskRegistry {
               || removedState.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.CANCELLED);
       if (transitioned) {
         decrementRemainingTasks();
+        // 先扣减、后发信号（见 decrementRemainingTasks）：被移除的任务不会再有 runTask 替它完成 future
+        if (info != null) {
+          info.future.cancel(false);
+        }
       }
     }
 
@@ -779,16 +783,17 @@ public final class AsyncTaskRegistry {
    *       的 runTask 走 isStaleGeneration 路径直接 abort</li>
    *   <li>清空 timeoutHandle</li>
    *   <li>cancel runningFuture（如有）</li>
-   *   <li>cancel info.future</li>
    *   <li>CAS status → CANCELLED（无论从 PENDING 还是 RUNNING）</li>
    *   <li>decrement remainingTasks（仅在 CAS 成功时，避免双减）</li>
    *   <li>dependencyGraph.markCompleted</li>
+   *   <li>cancel info.future（最后发信号）</li>
    *   <li>cleanupRetryState</li>
    * </ul>
-   * 若 CAS 失败（任务并发完成 / 已被 cancel），仅做尽力 bump+cancel 不重复扣计数。
+   * 若 CAS 失败（任务并发完成 / 已被 cancel），只 bump generation 与取消 runningFuture，
+   * 不扣计数、也不碰 info.future：future 由赢得终态 CAS 的一方在扣减之后完成。
    */
   private void terminateExternally(String taskId, TaskState state, TaskInfo info) {
-    // 先 bump generation + 取消 future，让任何并发的 runTask / timeout 回调
+    // 先 bump generation，让任何并发的 runTask / timeout 回调
     // 在到达 mutation 前看到代次失配并 abort。
     info.generation.incrementAndGet();
     clearTimeoutHandle(info);
@@ -796,7 +801,6 @@ public final class AsyncTaskRegistry {
     if (executorFuture != null) {
       executorFuture.cancel(true);
     }
-    info.future.cancel(true);
 
     // CAS status：把 PENDING/RUNNING 推进到 CANCELLED。只在 CAS 成功时才扣计数，
     // 避免与 runTask 的最终路径或另一次 cancel 双减。
@@ -808,6 +812,9 @@ public final class AsyncTaskRegistry {
       synchronized (graphLock) {
         dependencyGraph.markCompleted(taskId);
       }
+      // 计数与依赖图落定后再取消 future 唤醒等待方（先扣减、后发信号，见 decrementRemainingTasks）。
+      // CAS 失败时不发信号：赢得终态 CAS 的 runTask / 超时路径可能尚未扣减，由它自己扣减后再 complete。
+      info.future.cancel(true);
     }
     cleanupRetryState(taskId);
   }
@@ -916,6 +923,11 @@ public final class AsyncTaskRegistry {
    * 异常只会存进无人 get 的 Future 里被静默吞掉，而 decrementAndGet 早已把负值写入，
    * 症状与没有守卫时完全一样。同一入口在不同线程上「有时响、有时哑」，
    * 不如统一为不毒化计数器 + 日志可见；测试 JVM 以 -da 运行，{@code assert} 同样不可用。
+   *
+   * <p>顺序契约：每条终态路径都**先扣减、再发完成信号**（complete / completeExceptionally /
+   * cancel / obtrudeException）。executeUntilComplete 在 barrier 上被唤醒后会读计数器、
+   * 并在全部任务进入终态时直接返回；若信号先于扣减，调用方返回后仍可能读到未扣减的计数
+   * （aster-lang-truffle#210）。
    */
   private void decrementRemainingTasks() {
     int before = remainingTasks.getAndUpdate(v -> Math.max(0, v - 1));
@@ -1095,8 +1107,8 @@ public final class AsyncTaskRegistry {
     if (state == null) {
       // 仅在仍为当前代次时上报，避免污染重试 future
       if (info.generation.get() == submissionGen) {
-        info.future.completeExceptionally(new IllegalStateException("Unknown task: " + info.taskId));
         decrementRemainingTasks();
+        info.future.completeExceptionally(new IllegalStateException("Unknown task: " + info.taskId));
       }
       return;
     }
@@ -1112,11 +1124,11 @@ public final class AsyncTaskRegistry {
         if (isFailed(dep)) {
           // Dependency failed, mark this task as cancelled
           if (state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.CANCELLED)) {
-            info.future.cancel(false);
             decrementRemainingTasks();
             synchronized (graphLock) {
               dependencyGraph.markCompleted(info.taskId);
             }
+            info.future.cancel(false);
           }
           return;
         }
@@ -1124,13 +1136,14 @@ public final class AsyncTaskRegistry {
     }
 
     if (!state.status.compareAndSet(TaskStatus.PENDING, TaskStatus.RUNNING)) {
-      if (state.status.get() == TaskStatus.CANCELLED) {
-        info.future.cancel(false);
-      }
+      // 已被其他路径推进到终态：由赢得那次 CAS 的一方扣减并发信号。这里不 cancel future——
+      // 对方可能刚 CAS 完、尚未扣减，此时发信号会让等待方先于扣减醒来（#210）
       return;
     }
 
     boolean retryScheduled = false;
+    // 本次执行赢得终态 CAS 并已扣减计数（见 decrementRemainingTasks 的「先扣减、后发信号」）
+    boolean counted = false;
     Throwable failure = null;
     try {
       Object callResult = info.callable.call();
@@ -1143,7 +1156,6 @@ public final class AsyncTaskRegistry {
         state.result = callResult;
       }
       if (state.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.COMPLETED)) {
-        info.future.complete(state.result);
         if (info.compensationCallback != null && info.workflowId != null) {
           compensationStacks
               .computeIfAbsent(info.workflowId, k -> new ConcurrentLinkedDeque<>())
@@ -1153,6 +1165,9 @@ public final class AsyncTaskRegistry {
         synchronized (graphLock) {
           dependencyGraph.markCompleted(info.taskId);
         }
+        decrementRemainingTasks();
+        counted = true;
+        info.future.complete(state.result);
       }
     } catch (Throwable t) {
       // 失败路径也要检查代次：若本次执行已被 timeout/retry 取代，
@@ -1204,11 +1219,11 @@ public final class AsyncTaskRegistry {
       }
 
       if (!retryScheduled) {
-        handleFinalTaskFailure(info, state, failure);
+        counted = handleFinalTaskFailure(info, state, failure);
       }
     } finally {
-      if (!retryScheduled && info.generation.get() == submissionGen) {
-        // 仅在任务真正结束且仍为本代次时递减计数器
+      if (!retryScheduled && !counted && info.generation.get() == submissionGen) {
+        // 未赢得终态 CAS、但任务真正结束且仍为本代次时递减计数器
         // （过期代次的 abort 路径已在 isStaleGeneration 处直接 return，
         //  没有 decrement，新代次结束时会再次落入这里）
         decrementRemainingTasks();
@@ -1216,8 +1231,10 @@ public final class AsyncTaskRegistry {
     }
   }
 
-  private void handleFinalTaskFailure(TaskInfo info, TaskState state, Throwable error) {
-    if (state.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.FAILED)) {
+  /** @return 是否由本次调用把任务推进到 FAILED（并已扣减 remainingTasks） */
+  private boolean handleFinalTaskFailure(TaskInfo info, TaskState state, Throwable error) {
+    boolean failed = state.status.compareAndSet(TaskStatus.RUNNING, TaskStatus.FAILED);
+    if (failed) {
       state.exception = error;
       // 记录最近失败的 workflowId，用于 executeUntilComplete 异常时精准补偿
       if (info.workflowId != null) {
@@ -1232,9 +1249,11 @@ public final class AsyncTaskRegistry {
         dependencyGraph.markCompleted(info.taskId);
       }
       cancelDownstreamTasks(info.taskId);
+      decrementRemainingTasks();
       info.future.completeExceptionally(error);
     }
     cleanupRetryState(info.taskId);
+    return failed;
   }
 
   private void cleanupRetryState(String taskId) {
@@ -1397,7 +1416,14 @@ public final class AsyncTaskRegistry {
 
     cancelDownstreamTasks(taskId);
 
-    // 下游终态已落定，再发失败信号唤醒等待方
+    // 必须在这里递减计数。原实现注释说"runTask 的 finally 块会处理"，
+    // 但本路径在前面 incrementAndGet generation —— stale runTask 会被
+    // isStaleGeneration 提前 return，永远到不了 finally。
+    // 由于此前的 CAS 成功才进入这里（`updated == true`），decrement
+    // 必然唯一对应一次 register，不会双减。先扣减再发信号（见 decrementRemainingTasks）。
+    decrementRemainingTasks();
+
+    // 下游终态与计数都已落定，再发失败信号唤醒等待方
     if (info != null) {
       info.future.obtrudeException(timeoutException);
     }
@@ -1407,13 +1433,6 @@ public final class AsyncTaskRegistry {
     if (info != null && info.workflowId != null) {
       executeCompensations(info.workflowId);
     }
-
-    // 必须在这里递减计数。原实现注释说"runTask 的 finally 块会处理"，
-    // 但本路径在前面 incrementAndGet generation —— stale runTask 会被
-    // isStaleGeneration 提前 return，永远到不了 finally。
-    // 由于此前的 CAS 成功才进入这里（`updated == true`），decrement
-    // 必然唯一对应一次 register，不会双减。
-    decrementRemainingTasks();
   }
 
   /**
