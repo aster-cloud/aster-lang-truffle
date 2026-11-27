@@ -46,7 +46,9 @@ public class AsyncTaskRegistryIntegrationTest {
   public void testTimeoutWithCompensation() throws Exception {
     AsyncTaskRegistry registry = new AsyncTaskRegistry(2);
     List<String> compensationOrder = Collections.synchronizedList(new ArrayList<>());
-    CountDownLatch fastCompleted = new CountDownLatch(1);
+    // 超时任务阻塞在这个 latch 上，只有超时回调的中断能让它退出；finally 中再放行，
+    // 保证 shutdown 不会因工作线程卡住而等待。
+    CountDownLatch release = new CountDownLatch(1);
 
     try {
       // Set workflowId - required for compensation to work
@@ -54,23 +56,21 @@ public class AsyncTaskRegistryIntegrationTest {
 
       registry.registerTaskWithDependencies(
           "fast",
-          () -> {
-            fastCompleted.countDown();
-            return "fast";
-          },
+          () -> "fast",
           Set.of(),
           0L,
           () -> compensationOrder.add("fast"),
           0);
 
+      // 依赖 fast：超时计时从 fast 完成并压入补偿栈之后才开始，
+      // 不再靠「fast 在 20 ms 内跑完」这个时序假设。
       registry.registerTaskWithDependencies(
           "timeout",
           () -> {
-            fastCompleted.await(100, TimeUnit.MILLISECONDS);
-            Thread.sleep(80);
+            release.await(30, TimeUnit.SECONDS);
             return "slow";
           },
-          Set.of(),
+          Set.of("fast"),
           20L,
           () -> compensationOrder.add("timeout"),
           1);
@@ -82,6 +82,7 @@ public class AsyncTaskRegistryIntegrationTest {
       assertEquals(TaskStatus.FAILED, registry.getStatus("timeout"));
       assertEquals(List.of("fast"), compensationOrder);
     } finally {
+      release.countDown();
       registry.shutdown();
     }
   }
@@ -136,6 +137,10 @@ public class AsyncTaskRegistryIntegrationTest {
   public void testTimeoutPropagation() {
     AsyncTaskRegistry registry = new AsyncTaskRegistry(2);
     AtomicBoolean downstreamExecuted = new AtomicBoolean(false);
+    // slow-mid 阻塞在 latch 上直到被超时回调中断，不再与 25 ms 的超时赛跑
+    // （原 sleep(80) 在 runner 负载高、超时线程迟迟拿不到 CPU 时会先跑完，aster-lang-truffle#203）。
+    // 30 s 上限只为超时机制失效时让测试以「nothing was thrown」失败而非挂死。
+    CountDownLatch release = new CountDownLatch(1);
 
     try {
       registry.registerTaskWithDependencies(
@@ -149,7 +154,7 @@ public class AsyncTaskRegistryIntegrationTest {
       registry.registerTaskWithDependencies(
           "slow-mid",
           () -> {
-            Thread.sleep(80);
+            release.await(30, TimeUnit.SECONDS);
             return null;
           },
           Set.of("root"),
@@ -174,6 +179,7 @@ public class AsyncTaskRegistryIntegrationTest {
       assertTrue(registry.isCancelled("leaf"));
       assertFalse(downstreamExecuted.get());
     } finally {
+      release.countDown();
       registry.shutdown();
     }
   }
